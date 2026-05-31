@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\libs\SourceWorker.Scanner\SourceWorker.Scanner.csproj" />
+    <ProjectReference Include="..\..\src\libs\SourceWorker.Context\SourceWorker.Context.csproj" />
+    <ProjectReference Include="..\..\src\libs\SourceWorker.Recipes\SourceWorker.Recipes.csproj" />
   </ItemGroup>
 
 </Project>

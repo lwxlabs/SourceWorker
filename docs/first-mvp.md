@@ -39,3 +39,27 @@ Minimal endpoints:
 - `GET /api/jobs/{id}`
 
 The API uses an in-process queue for scan jobs. It does not expose AI, MCP, cloud, licensing, or desktop UI features yet.
+
+## Generated Context
+
+The scan writes:
+
+- `.ai-context/CONTEXT.md`
+- `.ai-context/index.yaml`
+- `.ai-context/project.md`
+- `.ai-context/architecture.md`
+- `.ai-context/current-state.md`
+- `.ai-context/tasks.md`
+- `.ai-context/ai-handoff.md`
+- `.ai-context/scans/latest-scan.md`
+- `.ai-context/branches/current.md`
+
+It also runs the rule-based `backend-docs-compact` recipe and writes:
+
+- `.ai-context/recipes/backend-docs-compact.yaml`
+- `instructions/Result/Backend/README.md`
+- `instructions/Result/Backend/01-project-structure.md`
+- `instructions/Result/Backend/02-architecture.md`
+- `instructions/Result/Backend/03-workers-and-services.md`
+- `instructions/Result/Backend/04-configuration.md`
+- `instructions/Result/Backend/05-tasks-and-risks.md`

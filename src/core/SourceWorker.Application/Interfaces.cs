@@ -50,6 +50,7 @@ public interface IContextWriter
 public interface IRecipeRunner
 {
     Task<ContextWriteResult> RunBasicHandoffAsync(Project project, CancellationToken cancellationToken);
+    Task<ContextWriteResult> RunBackendDocsCompactAsync(ProjectScanResult scanResult, CancellationToken cancellationToken);
 }
 
 public interface ILocalJobQueue
@@ -58,5 +59,21 @@ public interface ILocalJobQueue
     ValueTask<Guid> DequeueAsync(CancellationToken cancellationToken);
 }
 
-public sealed record ProjectScanResult(Project Project, ScanRun ScanRun, IReadOnlyList<IndexedFile> Files, IReadOnlyList<TodoItem> Todos, IReadOnlyList<DetectedTechnology> Technologies, GitSnapshot Git);
+public sealed record ProjectScanResult(
+    Project Project,
+    ScanRun ScanRun,
+    IReadOnlyList<IndexedFile> Files,
+    IReadOnlyList<TodoItem> Todos,
+    IReadOnlyList<DetectedTechnology> Technologies,
+    GitSnapshot Git,
+    string? SolutionName,
+    string? SolutionPath,
+    IReadOnlyList<SolutionFile> SolutionFiles,
+    IReadOnlyList<ProjectFile> Projects,
+    IReadOnlyList<string> ReadmeFiles,
+    IReadOnlyList<string> ConfigFiles,
+    IReadOnlyList<string> DockerFiles,
+    IReadOnlyList<FolderRole> FolderRoles,
+    IReadOnlyList<string> MainEntrypoints,
+    IReadOnlyList<string> DeletedFiles);
 public sealed record ContextWriteResult(string OutputPath, IReadOnlyList<string> Files);

@@ -1,0 +1,6 @@
+id: backend-docs-compact
+name: Backend Docs Compact
+version: 1
+generatedAt: "2026-05-31T14:30:45.5499454+00:00"
+outputPath: "instructions/Result/Backend"
+source: scanner

@@ -47,7 +47,7 @@ public sealed class GetJobStatusQueryHandler(IJobRepository jobs) : IRequestHand
         => (await jobs.GetAsync(request.JobId, cancellationToken))?.ToDto();
 }
 
-public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IContextWriter contextWriter)
+public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IContextWriter contextWriter, IRecipeRunner recipeRunner)
     : IRequestHandler<GenerateBasicContextCommand, ContextGenerationResponse>
 {
     public async Task<ContextGenerationResponse> Handle(GenerateBasicContextCommand request, CancellationToken cancellationToken)
@@ -56,6 +56,7 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         var scan = await scanner.ScanAsync(project, cancellationToken);
         await fileIndex.ReplaceForScanAsync(scan.ScanRun.Id, scan.Files, scan.Todos, scan.Technologies, cancellationToken);
         var written = await contextWriter.WriteBasicContextAsync(scan, cancellationToken);
+        await recipeRunner.RunBackendDocsCompactAsync(scan, cancellationToken);
         await projects.UpdateAsync(project with { LastScannedAt = scan.ScanRun.CompletedAt }, cancellationToken);
         return new ContextGenerationResponse(written.OutputPath, written.Files);
     }
@@ -64,5 +65,5 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
 public static class ProjectMappings
 {
     public static ProjectDto ToDto(this Project project) => new(project.Id, project.Name, project.RootPath, project.CreatedAt, project.LastScannedAt);
-    public static JobStatusDto ToDto(this WorkerJob job) => new(job.Id, job.ProjectId, job.Type, job.Status, job.ProgressPercent, job.Message);
+    public static JobStatusDto ToDto(this WorkerJob job) => new(job.Id, job.ProjectId, job.Type, job.Status, job.ProgressPercent, job.Message, job.CurrentStep, job.ErrorMessage, job.Logs ?? []);
 }

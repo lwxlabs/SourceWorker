@@ -29,11 +29,17 @@ Scanning writes:
 ```text
 .ai-context/
   CONTEXT.md
+  index.yaml
   project.md
+  architecture.md
   current-state.md
   tasks.md
   ai-handoff.md
-  index.yaml
+  scans/latest-scan.md
+  branches/current.md
+  recipes/backend-docs-compact.yaml
 ```
+
+The first rule-based recipe, `backend-docs-compact`, also writes compact backend documentation to `instructions/Result/Backend/`.
 
 See [docs/first-mvp.md](docs/first-mvp.md) for run commands.

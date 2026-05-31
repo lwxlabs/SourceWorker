@@ -1,142 +1,398 @@
 version: 1
 projectId: 76752664-849e-478a-a90b-60fd40e6769d
-scanRunId: e96129e5-3e8e-4037-a381-5b1d722f1813
+scanRunId: a7139624-c2ce-46c7-a3bf-12d16244f5d7
+solutionName: "SourceWorker"
+solutionPath: "SourceWorker.slnx"
 files:
   - path: ".dockerignore"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\.dockerignore"
     kind: Other
+    extension: ".dockerignore"
     sizeBytes: 422
+    lastModifiedUtc: "2026-04-21T09:02:18.4398629+00:00"
+    sha256: "509b9109868f06848e5529ec30e46b0f446255eb5e6223f6f0506fa1aa7c07aa"
+    changeKind: Unchanged
   - path: ".gitignore"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\.gitignore"
     kind: Other
+    extension: ".gitignore"
     sizeBytes: 7135
+    lastModifiedUtc: "2026-05-31T13:06:01.3513610+00:00"
+    sha256: "6e99d14c474a706d9f11218f397c89a4b517f9792162871aedc1e7eca624f377"
+    changeKind: Unchanged
+  - path: "docs/first-mvp.md"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\docs\\first-mvp.md"
+    kind: Markdown
+    extension: ".md"
+    sizeBytes: 1741
+    lastModifiedUtc: "2026-05-31T14:29:43.5743536+00:00"
+    sha256: "61593e06d90d0b5f81240865aa7b86604dd887e5424c2e50b841baede96c8259"
+    changeKind: New
+  - path: "instructions/Result/Backend/README.md"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\instructions\\Result\\Backend\\README.md"
+    kind: Markdown
+    extension: ".md"
+    sizeBytes: 399
+    lastModifiedUtc: "2026-05-31T14:27:30.6860335+00:00"
+    sha256: "77619ae1dc88a7f168bd5d7eaac343a7e49cd1570639923b991d36561a8e4937"
+    changeKind: New
+  - path: "README.md"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\README.md"
+    kind: Markdown
+    extension: ".md"
+    sizeBytes: 2223
+    lastModifiedUtc: "2026-05-31T14:29:47.7402685+00:00"
+    sha256: "ec5d807268285da8f98a3857c624c9bbd7d9510fbf002de2e0555d8f5642222b"
+    changeKind: New
   - path: "SourceWorker.slnx"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\SourceWorker.slnx"
     kind: Solution
+    extension: ".slnx"
     sizeBytes: 1805
+    lastModifiedUtc: "2026-05-31T13:35:15.7671519+00:00"
+    sha256: "9ccd2741055e3903051bf85a4ccf0412fd624cb3b969182df295f1e7ab761dc5"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Application/DependencyInjection.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Application\\DependencyInjection.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 1058
+    lastModifiedUtc: "2026-05-31T13:41:34.3163846+00:00"
+    sha256: "43c4ecea4205e88c78b870859b0763d21616b75834e78bf19bc77d71934103f5"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Application/Flow/FlowAbstractions.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Application\\Flow\\FlowAbstractions.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 966
+    lastModifiedUtc: "2026-05-31T13:41:34.3152971+00:00"
+    sha256: "e0b360be6cc5c955506eb3f8cc51607e225eeaa16594486f166338f1d35e4313"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Application/Interfaces.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Application\\Interfaces.cs"
     kind: Source
-    sizeBytes: 2517
+    extension: ".cs"
+    sizeBytes: 3049
+    lastModifiedUtc: "2026-05-31T14:21:05.5022961+00:00"
+    sha256: "02d29da08d2dcf7c654a8ba283b0707945786e256a9e70dd3d496b2db7b14803"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Application/Requests.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Application\\Requests.cs"
     kind: Source
-    sizeBytes: 4171
+    extension: ".cs"
+    sizeBytes: 4330
+    lastModifiedUtc: "2026-05-31T14:21:17.0959995+00:00"
+    sha256: "2d08fe929c16e0bfbb065b87f14b752ad509f230b7044c893986f9271ef432ae"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Application/SourceWorker.Application.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Application\\SourceWorker.Application.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 570
+    lastModifiedUtc: "2026-05-31T13:36:51.0387179+00:00"
+    sha256: "4e2b9dc782efba2a38d508079ee367fa31f2aca8498709d742b15ecca38ac1c4"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Contracts/Contracts.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Contracts\\Contracts.cs"
     kind: Source
-    sizeBytes: 614
+    extension: ".cs"
+    sizeBytes: 685
+    lastModifiedUtc: "2026-05-31T14:21:09.4460360+00:00"
+    sha256: "291268646c4a7b211d2fffc89cda29cafd3bea86dedd4e093ec451c05af5c062"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Contracts/SourceWorker.Contracts.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Contracts\\SourceWorker.Contracts.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 338
+    lastModifiedUtc: "2026-05-31T13:44:49.9888431+00:00"
+    sha256: "eba348b08feb2ea6160f764f1b6ad7c3ce1ec65b892e79e313454f143d9f8589"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Domain/Models.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Domain\\Models.cs"
     kind: Source
-    sizeBytes: 1954
+    extension: ".cs"
+    sizeBytes: 2665
+    lastModifiedUtc: "2026-05-31T14:20:57.9481017+00:00"
+    sha256: "ae8b9711e451098bb6acc1678f755d32a7027239661aa5d01ff50a6dba11e284"
+    changeKind: Unchanged
   - path: "src/core/SourceWorker.Domain/SourceWorker.Domain.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SourceWorker.Domain\\SourceWorker.Domain.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 219
+    lastModifiedUtc: "2026-05-31T13:34:36.2248547+00:00"
+    sha256: "61e3f2d043e37f0db4be1d8083dd31bebbfbb8fde2cf027327db2556c16bc385"
+    changeKind: Unchanged
   - path: "src/core/SW.Core/SW.Core.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\core\\SW.Core\\SW.Core.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 219
+    lastModifiedUtc: "2026-05-31T12:59:19.0624488+00:00"
+    sha256: "61e3f2d043e37f0db4be1d8083dd31bebbfbb8fde2cf027327db2556c16bc385"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.FileSystem/Placeholder.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.FileSystem\\Placeholder.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 82
+    lastModifiedUtc: "2026-05-31T13:43:16.1318831+00:00"
+    sha256: "479c40d5e7decbab301686997f8a3a0e7f12b9a4bdcd4ffd3874d28d333cfce6"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.FileSystem/SourceWorker.FileSystem.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.FileSystem\\SourceWorker.FileSystem.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 356
+    lastModifiedUtc: "2026-05-31T13:36:27.9711679+00:00"
+    sha256: "d0a27d12237bcc2d2febf675f0a95cdc9ff03e30f6b09962497eb24aa05b50a0"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Git/BasicGitInspector.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Git\\BasicGitInspector.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 1733
+    lastModifiedUtc: "2026-05-31T13:42:16.2324579+00:00"
+    sha256: "a76a1238bb8a3e9da603108f2b03f6db9ce6b88631306c2fafcc11a448c6d90c"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Git/SourceWorker.Git.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Git\\SourceWorker.Git.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 450
+    lastModifiedUtc: "2026-05-31T13:36:28.9202106+00:00"
+    sha256: "fcaa1bb97ab6384ce7db1b66a622b599a24466484ec55fddbf94a8bb00a74b9f"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Infrastructure/DependencyInjection.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Infrastructure\\DependencyInjection.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 776
+    lastModifiedUtc: "2026-05-31T13:43:16.1306480+00:00"
+    sha256: "c99fa793e1fb9ff07b96a61798306955aa3fb9af317f744d0768094b76ea600e"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Infrastructure/SourceWorker.Infrastructure.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Infrastructure\\SourceWorker.Infrastructure.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 970
+    lastModifiedUtc: "2026-05-31T13:36:58.9695201+00:00"
+    sha256: "1b904e480da0472cc83b849c6257d677779647f08a85dfbed739b927b22bd245"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Markdown/Placeholder.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Markdown\\Placeholder.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 78
+    lastModifiedUtc: "2026-05-31T13:43:16.1331175+00:00"
+    sha256: "5e2d15e9798035e7a4835d739e762723592fa53d582f6fead7aa702953490723"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Markdown/SourceWorker.Markdown.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Markdown\\SourceWorker.Markdown.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 356
+    lastModifiedUtc: "2026-05-31T13:36:29.8609792+00:00"
+    sha256: "d0a27d12237bcc2d2febf675f0a95cdc9ff03e30f6b09962497eb24aa05b50a0"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Storage.Localite/LocaliteRepositories.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Storage.Localite\\LocaliteRepositories.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 6177
+    lastModifiedUtc: "2026-05-31T13:43:16.1296478+00:00"
+    sha256: "3023a2d492c58ef8fbe0255b8ca3b5b8c8d93ddcda3ce44f3b539b859119cd36"
+    changeKind: Unchanged
   - path: "src/infrastructure/SourceWorker.Storage.Localite/SourceWorker.Storage.Localite.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\infrastructure\\SourceWorker.Storage.Localite\\SourceWorker.Storage.Localite.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 651
+    lastModifiedUtc: "2026-05-31T13:37:05.2064135+00:00"
+    sha256: "2901b715c6115732c619fe91db9a03d100d19efbbd4376d701fdd5885ef9d02b"
+    changeKind: Unchanged
   - path: "src/libs/SourceWorker.Context/MarkdownContextWriter.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Context\\MarkdownContextWriter.cs"
     kind: Source
-    sizeBytes: 3612
+    extension: ".cs"
+    sizeBytes: 10956
+    lastModifiedUtc: "2026-05-31T14:23:21.9466113+00:00"
+    sha256: "e653c2dfcfe34974a1b30780de5fc6fd3aa2fdbc724fd4f67fca00acf65b7adc"
+    changeKind: Unchanged
   - path: "src/libs/SourceWorker.Context/SourceWorker.Context.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Context\\SourceWorker.Context.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 450
+    lastModifiedUtc: "2026-05-31T13:36:32.4079989+00:00"
+    sha256: "fcaa1bb97ab6384ce7db1b66a622b599a24466484ec55fddbf94a8bb00a74b9f"
+    changeKind: Unchanged
   - path: "src/libs/SourceWorker.Recipes/BasicRecipeRunner.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Recipes\\BasicRecipeRunner.cs"
     kind: Source
-    sizeBytes: 450
+    extension: ".cs"
+    sizeBytes: 5883
+    lastModifiedUtc: "2026-05-31T14:23:49.6470362+00:00"
+    sha256: "a45d8dcc525de023ccf09f9c96dfad3e8b8bb86ff2f8e9d5b3c6530460a9ca50"
+    changeKind: Unchanged
   - path: "src/libs/SourceWorker.Recipes/SourceWorker.Recipes.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Recipes\\SourceWorker.Recipes.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 356
+    lastModifiedUtc: "2026-05-31T13:36:33.4580513+00:00"
+    sha256: "d0a27d12237bcc2d2febf675f0a95cdc9ff03e30f6b09962497eb24aa05b50a0"
+    changeKind: Unchanged
   - path: "src/libs/SourceWorker.Scanner/BasicProjectScanner.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Scanner\\BasicProjectScanner.cs"
     kind: Source
-    sizeBytes: 7672
+    extension: ".cs"
+    sizeBytes: 16122
+    lastModifiedUtc: "2026-05-31T14:29:35.2240853+00:00"
+    sha256: "9bd5674b243d816336592ee36290e6296353f641b02fd26e64d9d77a26052fc3"
+    changeKind: Changed
   - path: "src/libs/SourceWorker.Scanner/SourceWorker.Scanner.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SourceWorker.Scanner\\SourceWorker.Scanner.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 450
+    lastModifiedUtc: "2026-05-31T13:36:31.0265745+00:00"
+    sha256: "fcaa1bb97ab6384ce7db1b66a622b599a24466484ec55fddbf94a8bb00a74b9f"
+    changeKind: Unchanged
   - path: "src/libs/SW.Local.Scanner/SW.Local.Scanner.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\libs\\SW.Local.Scanner\\SW.Local.Scanner.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 219
+    lastModifiedUtc: "2026-05-31T13:02:27.4945507+00:00"
+    sha256: "61e3f2d043e37f0db4be1d8083dd31bebbfbb8fde2cf027327db2556c16bc385"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.Cli/Program.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.Cli\\Program.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 1701
+    lastModifiedUtc: "2026-05-31T13:44:13.7722032+00:00"
+    sha256: "293f06fe0ef694fd80375d12c20ec4b82db2e7da460b95470beff700c92f77f2"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.Cli/SourceWorker.Cli.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.Cli\\SourceWorker.Cli.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 723
+    lastModifiedUtc: "2026-05-31T13:37:23.6812257+00:00"
+    sha256: "4b6290827951bca395fce6cebdb818f0b04f7e7f9c221787cb1d7015466a77c4"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/appsettings.Development.json"
-    kind: Source
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\appsettings.Development.json"
+    kind: Config
+    extension: ".json"
     sizeBytes: 127
+    lastModifiedUtc: "2026-05-31T13:34:49.0379784+00:00"
+    sha256: "73f95f9e0ceb205fc1c4dc50c07697fcfa29d7087868c2aef1d504cb38c771ec"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/appsettings.json"
-    kind: Source
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\appsettings.json"
+    kind: Config
+    extension: ".json"
     sizeBytes: 151
+    lastModifiedUtc: "2026-05-31T13:34:49.0512576+00:00"
+    sha256: "200332b434757a0054a3d356c91cde01f2c48712be8aa2bcb0f3e973619f06e3"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/Program.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\Program.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 1496
+    lastModifiedUtc: "2026-05-31T13:44:27.0064850+00:00"
+    sha256: "48e3b0976cf5104c7722e9f3460a93dd7f3d81fee34ab6b33728dc13b529e465"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/Properties/launchSettings.json"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\Properties\\launchSettings.json"
     kind: Source
+    extension: ".json"
     sizeBytes: 644
+    lastModifiedUtc: "2026-05-31T13:34:49.0369416+00:00"
+    sha256: "ea6511d901ad59bc117f650b2ff06533f632b5ba3d3f91ab6640b6379ff0f6ea"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/SourceWorker.LocalApi.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\SourceWorker.LocalApi.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 678
+    lastModifiedUtc: "2026-05-31T13:36:36.3723828+00:00"
+    sha256: "71c2bb45d464349fedbe75313cacf0d80165b2c80f4d11c41bde10d7e1cec9bc"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.LocalApi/SourceWorker.LocalApi.http"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.LocalApi\\SourceWorker.LocalApi.http"
     kind: Other
+    extension: ".http"
     sizeBytes: 155
+    lastModifiedUtc: "2026-05-31T13:34:49.0727856+00:00"
+    sha256: "21eef79c418c17c78b42bac515fbfc03ceeded3670532081b479e553f8d7a9d6"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.Worker/InProcessJobs.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.Worker\\InProcessJobs.cs"
     kind: Source
-    sizeBytes: 3573
+    extension: ".cs"
+    sizeBytes: 5290
+    lastModifiedUtc: "2026-05-31T14:24:43.6322845+00:00"
+    sha256: "22c0165612028e45659aa6f654e0871282805b9ba48a4a9eb5a72f47962a82aa"
+    changeKind: Unchanged
   - path: "src/services/SourceWorker.Worker/SourceWorker.Worker.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\src\\services\\SourceWorker.Worker\\SourceWorker.Worker.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 578
+    lastModifiedUtc: "2026-05-31T13:37:12.0227667+00:00"
+    sha256: "a87e59db4f622b0dea901a1258c21488f450dd94592708f4be851a691bb8ea2b"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.Application/ApplicationFlowTests.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.Application\\ApplicationFlowTests.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 1014
+    lastModifiedUtc: "2026-05-31T13:45:51.1717446+00:00"
+    sha256: "bee56adfb96b5295671b33e7ec9ad94d840d29eda03e75ba4963fba7093f4649"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.Application\\SourceWorker.Tests.Application.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 1095
+    lastModifiedUtc: "2026-05-31T13:46:58.8253955+00:00"
+    sha256: "1423d1c18c0c7ddd4cd3e306c3a80fc59045fb713dcf4ce54672e8e257f79542"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.LocalApi/HealthTests.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.LocalApi\\HealthTests.cs"
     kind: Source
+    extension: ".cs"
     sizeBytes: 408
+    lastModifiedUtc: "2026-05-31T13:45:51.1727459+00:00"
+    sha256: "1938540cb6d70d3d780dbabe5be9bb4223f23341d44e50ba7eafdae8a357bf08"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.LocalApi\\SourceWorker.Tests.LocalApi.csproj"
     kind: Project
+    extension: ".csproj"
     sizeBytes: 859
+    lastModifiedUtc: "2026-05-31T13:37:35.3829111+00:00"
+    sha256: "37f96509fa5d83eafb06f54f6a09d578935d071a28497e68150ad9c3cbd12231"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.Scanner/BasicProjectScannerTests.cs"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.Scanner\\BasicProjectScannerTests.cs"
     kind: Source
-    sizeBytes: 2061
+    extension: ".cs"
+    sizeBytes: 5684
+    lastModifiedUtc: "2026-05-31T14:25:30.6216879+00:00"
+    sha256: "9edf45f9a572a243c868143567758f8799fc4238a847f63122d389c79212e718"
+    changeKind: Unchanged
   - path: "tests/SourceWorker.Tests.Scanner/SourceWorker.Tests.Scanner.csproj"
+    absolutePath: "C:\\Users\\louie\\source\\lwxlabs\\projects\\lwxlabs\\SourceWorker\\tests\\SourceWorker.Tests.Scanner\\SourceWorker.Tests.Scanner.csproj"
     kind: Project
-    sizeBytes: 767
+    extension: ".csproj"
+    sizeBytes: 967
+    lastModifiedUtc: "2026-05-31T14:25:06.9875141+00:00"
+    sha256: "7225dd5b3e62244553cb1a262529186aaed5f31ba42b6c5ce369c8a147c34072"
+    changeKind: Unchanged
