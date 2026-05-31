@@ -82,6 +82,9 @@ MVP 2.1 adds dashboard routes for safe AI preview:
 - `/settings/ai`: configure OpenAI, Ollama, or OpenAI-compatible providers and test provider health.
 - `/projects/{projectId}/ai`: select a context pack, preview the generated prompt, see safety warnings and token estimates, then run a preview-only AI request.
 - `/projects/{projectId}/ai/runs`: view AI run history and output previews.
+- `/dogfood`: view the first real-use checklist for daily local dogfooding.
+- `/projects/onboarding` and `/projects/{projectId}/onboarding`: guided project onboarding.
+- `/settings/diagnostics`: secret-safe local diagnostics summary/export preview.
 
 API keys are never written to `.ai-context`, generated docs, diagnostics, or logs. The current `LocalAiSecretStore` stores secrets under AppData for MVP use; OS secret store integration is planned for production hardening.
 
@@ -96,6 +99,47 @@ Supported MVP providers:
 Prompt preview is built from a selected context pack, pack metadata, optional user instruction, safe AI assistant rules, project metadata, freshness warnings, source path warnings, and a max output token budget. Token estimates use a deterministic `characters / 4` rule. Cost is shown only when static model price metadata exists; otherwise it is unknown.
 
 Safety checks warn on obvious API keys, tokens, private keys, connection strings, secret-prone files, low context freshness, missing pack files, stale generated files, and manually modified generated files. Warnings require user confirmation before a run. AI runs persist run metadata, prompt hash, included files, warnings, token estimate, status, error, and output text/hash. They do not write source or generated files.
+
+MVP 2.2 hardens daily use:
+
+- Provider validation for missing keys, missing models, invalid URLs, token limits, and local Ollama setup.
+- Provider diagnostics with suggested next actions.
+- Static model catalog and pricing/context-window metadata for known OpenAI models, plus unknown-cost fallback.
+- Prompt preview sections, included-file token estimates, prompt hash, cost estimate, and context-window usage.
+- Project/global AI usage summaries.
+- Pack readiness/quality scoring before AI runs.
+- AI history/privacy settings.
+- Dogfood readiness and diagnostics endpoints.
+
+## Dogfood Tutorial
+
+Use SourceWorker on SourceWorker:
+
+```powershell
+dotnet run --project src/services/SourceWorker.AppHost -- --open
+```
+
+Then:
+
+1. Register the SourceWorker repo.
+2. Scan.
+3. Open docs.
+4. Open packs.
+5. Configure Ollama or OpenAI.
+6. Preview the `backend-docs` pack.
+7. Ask: “What are the next 5 improvements before using this daily?”
+8. Run AI preview.
+9. Copy output.
+10. Verify no files changed from the AI run.
+
+Use SourceWorker on Insights:
+
+1. Register the Insights path.
+2. Scan.
+3. Run backend docs export.
+4. Preview the `backend-docs` pack.
+5. Ask AI to explain scan/discovery/scoring flows.
+6. Copy useful answers into manual notes.
 
 ## Test Execution Rules For Codex
 

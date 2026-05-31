@@ -48,6 +48,19 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<StartAiRunCommand, SourceWorker.Domain.AiRun>, StartAiRunCommandHandler>();
         services.AddScoped<IRequestHandler<GetAiRunsQuery, IReadOnlyList<SourceWorker.Domain.AiRun>>, GetAiRunsQueryHandler>();
         services.AddScoped<IRequestHandler<GetAiRunQuery, SourceWorker.Domain.AiRun?>, GetAiRunQueryHandler>();
+        services.AddScoped<IRequestHandler<ValidateAiProviderCommand, SourceWorker.Domain.AiProviderValidationResult>, ValidateAiProviderCommandHandler>();
+        services.AddScoped<IRequestHandler<DiagnoseAiProviderCommand, SourceWorker.Domain.AiProviderConnectionDiagnostic>, DiagnoseAiProviderCommandHandler>();
+        services.AddScoped<IRequestHandler<GetAiSettingsQuery, SourceWorker.Domain.AiSettings>, GetAiSettingsQueryHandler>();
+        services.AddScoped<IRequestHandler<UpdateAiSettingsCommand, SourceWorker.Domain.AiSettings>, UpdateAiSettingsCommandHandler>();
+        services.AddScoped<IRequestHandler<DeleteAiRunsCommand, bool>, DeleteAiRunsCommandHandler>();
+        services.AddScoped<IRequestHandler<DeleteAiRunCommand, bool>, DeleteAiRunCommandHandler>();
+        services.AddScoped<IRequestHandler<GetAiUsageQuery, SourceWorker.Domain.AiUsageSummary>, GetAiUsageQueryHandler>();
+        services.AddScoped<IRequestHandler<GetProjectAiUsageQuery, SourceWorker.Domain.AiUsageSummary>, GetProjectAiUsageQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiPackQualityQuery, SourceWorker.Domain.AiContextPackQualityReport>, GetAiPackQualityQueryHandler>();
+        services.AddScoped<IRequestHandler<GetDogfoodStatusQuery, SourceWorker.Domain.DogfoodProjectReadiness>, GetDogfoodStatusQueryHandler>();
+        services.AddScoped<IRequestHandler<GetProjectDogfoodStatusQuery, SourceWorker.Domain.DogfoodProjectReadiness>, GetProjectDogfoodStatusQueryHandler>();
+        services.AddScoped<IRequestHandler<GetDiagnosticsSummaryQuery, SourceWorker.Domain.DiagnosticsSummary>, GetDiagnosticsSummaryQueryHandler>();
+        services.AddScoped<IRequestHandler<ExportDiagnosticsCommand, SourceWorker.Domain.DiagnosticsExport>, ExportDiagnosticsCommandHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

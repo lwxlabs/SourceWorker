@@ -1,0 +1,44 @@
+@page "/dogfood"
+@inject ISourceWorkerApiClient Api
+
+<h1>Dogfood Checklist</h1>
+<p class="lead">A short path for using SourceWorker on real repositories without guessing what to do next.</p>
+
+@if (status is null)
+{
+    <LoadingState />
+}
+else
+{
+    <Cards Title="Readiness">
+        <div class="list-row"><strong>Score</strong><span>@status.Score% - @status.Checklist.Status</span></div>
+        @foreach (var item in status.Checklist.Items)
+        {
+            <div class="list-row">
+                <strong>@(item.IsComplete ? "Done" : "Next")</strong>
+                <span>@item.Label @(string.IsNullOrWhiteSpace(item.Detail) ? "" : $"- {item.Detail}")</span>
+            </div>
+        }
+    </Cards>
+}
+
+<Cards Title="Daily Use Flow">
+    <ol>
+        <li>Start with AppHost.</li>
+        <li>Register a project.</li>
+        <li>Run scan.</li>
+        <li>Check context freshness.</li>
+        <li>Open generated docs.</li>
+        <li>Inspect context pack.</li>
+        <li>Configure AI provider.</li>
+        <li>Preview prompt.</li>
+        <li>Run AI preview.</li>
+        <li>Copy AI result.</li>
+        <li>Verify no files were written by AI.</li>
+    </ol>
+</Cards>
+
+@code {
+    private DogfoodProjectReadinessDto? status;
+    protected override async Task OnInitializedAsync() => status = await Api.GetDogfoodStatusAsync();
+}

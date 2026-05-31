@@ -21,6 +21,22 @@
                 }
             </select>
         </label>
+        <label>Prompt template
+            <select @bind="templateId">
+                <option value="general-project-question">General project question</option>
+                <option value="continue-development">Continue development</option>
+                <option value="explain-architecture">Explain architecture</option>
+                <option value="find-risks">Find risks</option>
+                <option value="improve-docs">Improve docs</option>
+                <option value="create-next-steps">Create next steps</option>
+                <option value="review-branch">Review branch</option>
+                <option value="bug-investigation">Bug investigation</option>
+                <option value="test-planning">Test planning</option>
+            </select>
+        </label>
+        <label>Max output tokens
+            <input type="number" @bind="maxOutputTokens" />
+        </label>
     </div>
     <label>User instruction
         <textarea rows="5" @bind="instruction"></textarea>
@@ -29,13 +45,37 @@
     <button @onclick="RunAsync" disabled="@(preview is null)">Run AI</button>
 </Cards>
 
+<Cards Title="AI Safety">
+    <p>AI output is preview-only. SourceWorker does not apply patches, run terminals, or write files from AI responses.</p>
+    @if (usage is not null)
+    {
+        <div class="list-row"><strong>Project runs</strong><span>@usage.TotalRuns total, @usage.SuccessfulRuns successful, @usage.FailedRuns failed</span></div>
+    }
+    @if (quality is not null)
+    {
+        <div class="list-row"><strong>Pack readiness</strong><span>@quality.ReadinessScore% @(quality.IsRecommended ? "recommended" : "needs review")</span></div>
+    }
+</Cards>
+
 @if (preview is not null)
 {
     <Cards Title="Prompt Preview">
         <div class="grid two">
             <MetricCard Label="Prompt tokens" Value="@preview.TokenEstimate.PromptTokens.ToString()" />
             <MetricCard Label="Total estimate" Value="@preview.TokenEstimate.TotalTokens.ToString()" />
+            <MetricCard Label="Context usage" Value="@($"{preview.ContextWindowUsagePercent}%")" />
+            <MetricCard Label="Cost" Value="@(preview.CostEstimate.TotalCostUsd?.ToString("C") ?? "unknown")" />
         </div>
+        <div class="list-row"><strong>Prompt hash</strong><span>@preview.PromptHash</span></div>
+        @if (preview.IsTooLarge)
+        {
+            <p>Prompt is too large for the selected model context window.</p>
+        }
+        <h3>Included files</h3>
+        @foreach (var file in preview.IncludedFileDetails ?? [])
+        {
+            <div class="list-row"><strong>@(file.Exists ? "Included" : "Missing")</strong><span>@file.RelativePath - @file.TokenEstimate tokens</span></div>
+        }
         @if (preview.SafetyWarnings.Count > 0)
         {
             <h3>Safety warnings</h3>
@@ -43,6 +83,11 @@
             {
                 <div class="list-row"><strong>@warning.Severity</strong><span>@warning.Message</span></div>
             }
+        }
+        <h3>Prompt sections</h3>
+        @foreach (var section in preview.Sections ?? [])
+        {
+            <div class="list-row"><strong>@section.Title</strong><span>@section.TokenEstimate tokens</span></div>
         }
         <pre style="white-space: pre-wrap;">@preview.PromptText</pre>
     </Cards>
@@ -66,9 +111,13 @@
     private IReadOnlyList<ContextPackManifest> packs = [];
     private string providerId = "";
     private string packId = "";
+    private string templateId = "general-project-question";
+    private int maxOutputTokens = 1200;
     private string? instruction;
     private AiPromptPreviewResponse? preview;
     private AiRunDetailDto? run;
+    private AiUsageSummaryDto? usage;
+    private AiContextPackQualityReportDto? quality;
 
     protected override async Task OnInitializedAsync()
     {
@@ -76,11 +125,19 @@
         packs = await Api.GetAiPacksAsync(ProjectId);
         providerId = providers.FirstOrDefault()?.ProviderId ?? "Ollama";
         packId = packs.FirstOrDefault()?.Pack.Id ?? "backend-docs";
+        usage = await Api.GetProjectAiUsageAsync(ProjectId);
+        if (!string.IsNullOrWhiteSpace(packId)) quality = await Api.GetAiPackQualityAsync(ProjectId, packId);
     }
 
     private async Task PreviewAsync()
-        => preview = await Api.PreviewAiPromptAsync(ProjectId, new AiPromptPreviewRequest(providerId, packId, instruction));
+    {
+        quality = await Api.GetAiPackQualityAsync(ProjectId, packId);
+        preview = await Api.PreviewAiPromptAsync(ProjectId, new AiPromptPreviewRequest(providerId, packId, instruction, maxOutputTokens, templateId));
+    }
 
     private async Task RunAsync()
-        => run = await Api.StartAiRunAsync(ProjectId, new AiRunRequest(providerId, packId, instruction, preview?.SafetyWarnings.Count > 0));
+    {
+        run = await Api.StartAiRunAsync(ProjectId, new AiRunRequest(providerId, packId, instruction, preview?.SafetyWarnings.Count > 0, maxOutputTokens));
+        usage = await Api.GetProjectAiUsageAsync(ProjectId);
+    }
 }

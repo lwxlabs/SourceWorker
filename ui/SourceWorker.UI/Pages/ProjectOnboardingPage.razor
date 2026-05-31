@@ -1,0 +1,47 @@
+@page "/projects/onboarding"
+@page "/projects/{ProjectId:guid}/onboarding"
+@inject ISourceWorkerApiClient Api
+
+<h1>Project Onboarding</h1>
+
+<Cards Title="Steps">
+    <div class="list-row"><strong>1</strong><span>Select or enter local project path.</span></div>
+    <div class="list-row"><strong>2</strong><span>Register project.</span></div>
+    <div class="list-row"><strong>3</strong><span>Run first scan.</span></div>
+    <div class="list-row"><strong>4</strong><span>Review detected technologies and generated .ai-context.</span></div>
+    <div class="list-row"><strong>5</strong><span>Review context packs.</span></div>
+    <div class="list-row"><strong>6</strong><span>Optional: configure AI provider and run ai-handoff preview.</span></div>
+</Cards>
+
+@if (ProjectId is null)
+{
+    <ProjectRegistrationForm OnSuccess="Registered" />
+}
+else
+{
+    <Cards Title="Selected Project">
+        @if (readiness is null)
+        {
+            <LoadingState />
+        }
+        else
+        {
+            <div class="list-row"><strong>Readiness</strong><span>@readiness.Score% - @readiness.Checklist.Status</span></div>
+            <a href="/projects/@ProjectId">Open dashboard</a>
+            <a href="/projects/@ProjectId/ai">Optional AI preview</a>
+        }
+    </Cards>
+}
+
+@code {
+    [Parameter] public Guid? ProjectId { get; set; }
+    private DogfoodProjectReadinessDto? readiness;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ProjectId is Guid id) readiness = await Api.GetProjectDogfoodStatusAsync(id);
+    }
+    private Task Registered()
+    {
+        return Task.CompletedTask;
+    }
+}

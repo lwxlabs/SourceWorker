@@ -127,8 +127,18 @@ public sealed class ApiClientTests
             {
                 "/api/ai/providers" => """[{"providerId":"Ollama","kind":1,"status":0,"message":"Provider is not configured.","checkedUtc":"2026-05-31T00:00:00Z","maskedApiKey":null}]""",
                 "/api/ai/providers/configure" => """{"id":"11111111-1111-1111-1111-111111111111","kind":1,"name":"Ollama","model":"llama3.1","baseUrl":"http://localhost:11434","isEnabled":true,"apiKeySecretName":null,"maskedApiKey":null,"updatedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/ai/providers/validate" => """{"providerId":"Ollama","kind":1,"isValid":true,"issues":[],"setupState":{"isConfigured":true,"hasModel":true,"hasSecretWhenRequired":true,"hasValidBaseUrl":true,"isLocalProvider":true,"maskedSecretHint":null}}""",
                 "/api/ai/providers/Ollama/test" => """{"providerId":"Ollama","kind":1,"status":1,"message":"ok","checkedUtc":"2026-05-31T00:00:00Z","maskedApiKey":null}""",
-                var path when path == $"/api/projects/{projectId}/ai/prompt-preview" => $$"""{"projectId":"{{projectId}}","projectName":"Sample","providerId":"Ollama","providerKind":1,"model":"llama3.1","packId":"backend-docs","includedFiles":[],"missingFiles":[],"freshnessWarnings":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"costEstimate":{"promptCostUsd":null,"outputCostUsd":null,"totalCostUsd":null,"currency":"USD"},"promptText":"hello","promptHash":"abc"}""",
+                "/api/ai/providers/Ollama/diagnose" => """{"providerId":"Ollama","kind":1,"status":1,"summary":"ok","suggestedActions":[],"error":null,"checkedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/ai/settings" => """{"storeFullPrompt":false,"storeOutput":true,"maxRunsPerProject":100,"deleteFailedRunsAfterDays":30}""",
+                "/api/ai/usage" => """{"projectId":null,"totalRuns":0,"successfulRuns":0,"failedRuns":0,"lastRunUtc":null,"mostUsedProvider":null,"mostUsedPack":null,"estimatedTokensUsed":0,"estimatedKnownCostUsd":null,"unknownCostCount":0,"providersConfigured":1,"failedProviderChecks":0}""",
+                "/api/dogfood/status" => """{"projectId":null,"projectName":null,"checklist":{"items":[],"status":"Ready","nextActions":[]},"score":100}""",
+                "/api/diagnostics/summary" => """{"appVersion":"2.2","apiVersion":"2.2","storage":{"schema":{"provider":"Localite","mode":"table-backed","storagePath":"local.db","schemaVersion":1,"createdUtc":"2026-05-31T00:00:00Z","lastMigratedUtc":"2026-05-31T00:00:00Z","appStorageFormatVersion":"3"},"projectCount":0,"scanRunCount":0,"indexedFileCount":0,"generatedArtifactCount":0,"jobCount":0,"instructionCount":0,"recipeCount":0,"repositoryHealth":true},"runtime":{"selectedHost":"localhost","selectedPort":5000,"baseUrl":"http://localhost:5000","tokenEnabled":true,"tokenCreatedUtc":null,"allowedOrigins":[],"dashboardOrigin":null,"processId":1,"startupUtc":"2026-05-31T00:00:00Z","environmentName":"Test","appVersion":"2.2","apiVersion":"2.2"},"providerStatuses":[],"projectCount":0,"jobCount":0,"aiRunCount":0,"recentErrors":[],"generatedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/diagnostics/export" => """{"fileName":"diag.json","content":"{}","generatedUtc":"2026-05-31T00:00:00Z"}""",
+                var path when path == $"/api/projects/{projectId}/ai/packs/backend-docs/quality" => $$"""{"projectId":"{{projectId}}","packId":"backend-docs","readinessScore":100,"isRecommended":true,"issues":[]}""",
+                var path when path == $"/api/projects/{projectId}/ai/usage" => $$"""{"projectId":"{{projectId}}","totalRuns":1,"successfulRuns":1,"failedRuns":0,"lastRunUtc":"2026-05-31T00:00:00Z","mostUsedProvider":"Ollama","mostUsedPack":"backend-docs","estimatedTokensUsed":30,"estimatedKnownCostUsd":null,"unknownCostCount":1,"providersConfigured":0,"failedProviderChecks":0}""",
+                var path when path == $"/api/projects/{projectId}/dogfood/status" => $$"""{"projectId":"{{projectId}}","projectName":"Sample","checklist":{"items":[],"status":"Ready","nextActions":[]},"score":100}""",
+                var path when path == $"/api/projects/{projectId}/ai/prompt-preview" => $$"""{"projectId":"{{projectId}}","projectName":"Sample","providerId":"Ollama","providerKind":1,"model":"llama3.1","packId":"backend-docs","includedFiles":[],"missingFiles":[],"freshnessWarnings":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"costEstimate":{"promptCostUsd":null,"outputCostUsd":null,"totalCostUsd":null,"currency":"USD"},"sections":[],"includedFileDetails":[],"templateId":"general-project-question","contextWindowTokens":null,"contextWindowUsagePercent":0,"isTooLarge":false,"promptText":"hello","promptHash":"abc"}""",
                 var path when path == $"/api/projects/{projectId}/ai/runs" && request.Method == HttpMethod.Post => $$"""{"id":"22222222-2222-2222-2222-222222222222","projectId":"{{projectId}}","providerId":"Ollama","providerKind":1,"model":"llama3.1","packId":"backend-docs","userInstruction":null,"promptHash":"abc","storedPromptText":false,"promptPreview":null,"includedFiles":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"status":2,"createdUtc":"2026-05-31T00:00:00Z","completedUtc":"2026-05-31T00:00:01Z","error":null,"outputText":"ok","outputHash":"hash"}""",
                 var path when path == $"/api/projects/{projectId}/ai/runs" => "[]",
                 _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
@@ -139,18 +149,32 @@ public sealed class ApiClientTests
 
         var providers = await client.GetAiProvidersAsync();
         var config = await client.ConfigureAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "llama3.1", "http://localhost:11434", null));
+        var validation = await client.ValidateAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "llama3.1", "http://localhost:11434", null));
         var health = await client.TestAiProviderAsync("Ollama");
+        var diagnostic = await client.DiagnoseAiProviderAsync("Ollama");
         var preview = await client.PreviewAiPromptAsync(projectId, new AiPromptPreviewRequest("Ollama", "backend-docs", "Summarize"));
         var run = await client.StartAiRunAsync(projectId, new AiRunRequest("Ollama", "backend-docs", null, true));
         var runs = await client.GetAiRunsAsync(projectId);
+        var settings = await client.GetAiSettingsAsync();
+        var usage = await client.GetProjectAiUsageAsync(projectId);
+        var quality = await client.GetAiPackQualityAsync(projectId, "backend-docs");
+        var dogfood = await client.GetProjectDogfoodStatusAsync(projectId);
+        var diagnostics = await client.GetDiagnosticsSummaryAsync();
 
         Assert.True(sawAuth);
         Assert.Single(providers);
         Assert.Equal("llama3.1", config.Model);
+        Assert.True(validation.IsValid);
         Assert.Equal(AiProviderStatus.Healthy, health.Status);
+        Assert.Equal(AiProviderStatus.Healthy, diagnostic.Status);
         Assert.Equal("hello", preview.PromptText);
         Assert.Equal("ok", run.OutputText);
         Assert.Empty(runs);
+        Assert.True(settings.StoreOutput);
+        Assert.Equal(1, usage.TotalRuns);
+        Assert.True(quality.IsRecommended);
+        Assert.Equal(100, dogfood.Score);
+        Assert.Equal("2.2", diagnostics.AppVersion);
     }
 
     [Fact]

@@ -261,8 +261,15 @@ public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
 public enum AiModelCapability { Chat, StreamingLater, ToolCallingLater, VisionLater, Local }
 public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
 
-public sealed record AiModelInfo(string Id, string Name, AiProviderKind ProviderKind, IReadOnlyList<AiModelCapability> Capabilities, decimal? InputUsdPerMillionTokens = null, decimal? OutputUsdPerMillionTokens = null);
+public sealed record AiModelInfo(string Id, string Name, AiProviderKind ProviderKind, IReadOnlyList<AiModelCapability> Capabilities, decimal? InputUsdPerMillionTokens = null, decimal? OutputUsdPerMillionTokens = null, int? ContextWindowTokens = null);
+public sealed record AiModelCatalog(AiProviderKind ProviderKind, IReadOnlyList<AiModelCatalogEntry> Models, bool SupportsDiscovery, DateTimeOffset GeneratedUtc);
+public sealed record AiModelCatalogEntry(string Id, string Name, AiModelPricing Pricing, AiModelContextWindow ContextWindow, AiModelFeatureFlags Features);
+public sealed record AiModelPricing(decimal? InputUsdPerMillionTokens, decimal? OutputUsdPerMillionTokens, bool IsKnown);
+public sealed record AiModelContextWindow(int? Tokens, bool IsKnown);
+public sealed record AiModelFeatureFlags(bool SupportsStreaming, bool SupportsToolsLater, bool SupportsJsonModeLater, bool IsLocal);
 public sealed record AiPromptTemplate(string Id, string Name, string Description, string SystemPrefix);
+public sealed record AiPromptSection(string Title, string Content, int TokenEstimate);
+public sealed record AiPromptIncludedFile(string RelativePath, long SizeBytes, int TokenEstimate, string? ContentHash, bool Exists);
 public sealed record AiContextPackSelection(Guid ProjectId, string PackId, IReadOnlyList<string> IncludedFiles, IReadOnlyList<string> MissingFiles);
 public sealed record AiTokenEstimate(int PromptTokens, int MaxOutputTokens, int TotalTokens);
 public sealed record AiCostEstimate(decimal? PromptCostUsd, decimal? OutputCostUsd, decimal? TotalCostUsd, string Currency = "USD");
@@ -284,6 +291,12 @@ public sealed record AiPromptPreview(
     IReadOnlyList<AiSafetyWarning> SafetyWarnings,
     AiTokenEstimate TokenEstimate,
     AiCostEstimate CostEstimate,
+    IReadOnlyList<AiPromptSection> Sections,
+    IReadOnlyList<AiPromptIncludedFile> IncludedFileDetails,
+    string TemplateId,
+    int? ContextWindowTokens,
+    int ContextWindowUsagePercent,
+    bool IsTooLarge,
     string PromptText,
     string PromptHash);
 
@@ -319,3 +332,28 @@ public sealed record AiRun(
     string? Error,
     string? OutputText,
     string? OutputHash);
+
+public sealed record AiProviderValidationResult(string ProviderId, AiProviderKind Kind, bool IsValid, IReadOnlyList<AiProviderValidationIssue> Issues, AiProviderSetupState SetupState);
+public sealed record AiProviderValidationIssue(string Code, string Severity, string Message, string? Field = null);
+public sealed record AiProviderSetupState(bool IsConfigured, bool HasModel, bool HasSecretWhenRequired, bool HasValidBaseUrl, bool IsLocalProvider, string? MaskedSecretHint);
+public sealed record AiProviderConnectionDiagnostic(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Summary, IReadOnlyList<string> SuggestedActions, AiProviderErrorDetails? Error, DateTimeOffset CheckedUtc);
+public enum AiProviderErrorCode { None, Timeout, NetworkError, InvalidApiKey, ModelNotFound, ProviderUnavailable, RateLimited, BadResponseShape, EmptyResponse, Cancelled, Unknown }
+public enum AiProviderErrorCategory { None, Authentication, Network, Provider, Configuration, Response, Cancellation, Unknown }
+public sealed record AiProviderErrorDetails(AiProviderErrorCode Code, AiProviderErrorCategory Category, string Message, string? TechnicalDetail);
+public sealed record AiRetryPolicy(int MaxRetries, bool RetryTransientFailures);
+
+public sealed record SecretMetadata(string Name, bool Exists, DateTimeOffset? CreatedUtc, DateTimeOffset? UpdatedUtc, string MaskedHint, string StorageKind);
+public sealed record SecretStoreHealth(string StorageKind, bool IsAvailable, string Message);
+
+public sealed record AiSettings(bool StoreFullPrompt, bool StoreOutput, int MaxRunsPerProject, int DeleteFailedRunsAfterDays);
+public sealed record AiUsageSummary(Guid? ProjectId, int TotalRuns, int SuccessfulRuns, int FailedRuns, DateTimeOffset? LastRunUtc, string? MostUsedProvider, string? MostUsedPack, int EstimatedTokensUsed, decimal? EstimatedKnownCostUsd, int UnknownCostCount, int ProvidersConfigured = 0, int FailedProviderChecks = 0);
+public sealed record AiContextPackQualityReport(Guid ProjectId, string PackId, int ReadinessScore, bool IsRecommended, IReadOnlyList<AiContextPackQualityIssue> Issues);
+public sealed record AiContextPackQualityIssue(string Code, string Severity, string Message, string? RelativePath = null);
+
+public enum DogfoodReadinessStatus { NotStarted, NeedsAttention, Ready }
+public sealed record DogfoodChecklist(IReadOnlyList<DogfoodChecklistItem> Items, DogfoodReadinessStatus Status, IReadOnlyList<string> NextActions);
+public sealed record DogfoodChecklistItem(string Id, string Label, bool IsComplete, string? Detail = null);
+public sealed record DogfoodProjectReadiness(Guid? ProjectId, string? ProjectName, DogfoodChecklist Checklist, int Score);
+
+public sealed record DiagnosticsSummary(string AppVersion, string ApiVersion, StorageInfo Storage, LocalApiRuntimeState Runtime, IReadOnlyList<AiProviderHealthResult> ProviderStatuses, int ProjectCount, int JobCount, int AiRunCount, IReadOnlyList<string> RecentErrors, DateTimeOffset GeneratedUtc);
+public sealed record DiagnosticsExport(string FileName, string Content, DateTimeOffset GeneratedUtc);

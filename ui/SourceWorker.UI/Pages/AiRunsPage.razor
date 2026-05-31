@@ -3,6 +3,17 @@
 
 <h1>AI Runs</h1>
 
+<Cards Title="Filters">
+    <label>Status
+        <select @bind="statusFilter">
+            <option value="">All</option>
+            <option value="Completed">Successful only</option>
+            <option value="Failed">Failed only</option>
+        </select>
+    </label>
+    <button @onclick="RefreshAsync">Refresh</button>
+</Cards>
+
 @if (runs is null)
 {
     <LoadingState />
@@ -14,12 +25,20 @@ else if (runs.Count == 0)
 else
 {
     <Cards Title="Run History">
-        @foreach (var item in runs)
+        @foreach (var item in FilteredRuns)
         {
             <div class="list-row">
                 <strong>@item.ProviderKind / @item.Model</strong>
-                <span>@item.PackId - @item.Status - @item.CreatedUtc.ToString("g")</span>
+                <span>@item.PackId - @item.Status - @item.CreatedUtc.ToString("g") - @Duration(item)</span>
             </div>
+            @if (!string.IsNullOrWhiteSpace(item.Error))
+            {
+                <p>@item.Error</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(item.OutputText))
+            {
+                <pre style="white-space: pre-wrap;">@item.OutputText</pre>
+            }
         }
     </Cards>
 }
@@ -27,7 +46,11 @@ else
 @code {
     [Parameter] public Guid ProjectId { get; set; }
     private IReadOnlyList<AiRunSummaryDto>? runs;
+    private string statusFilter = "";
+    private IEnumerable<AiRunSummaryDto> FilteredRuns => string.IsNullOrWhiteSpace(statusFilter) ? runs ?? [] : (runs ?? []).Where(r => r.Status.ToString() == statusFilter);
 
     protected override async Task OnInitializedAsync()
-        => runs = await Api.GetAiRunsAsync(ProjectId);
+        => await RefreshAsync();
+    private async Task RefreshAsync() => runs = await Api.GetAiRunsAsync(ProjectId);
+    private static string Duration(AiRunSummaryDto run) => run.CompletedUtc is null ? "running" : (run.CompletedUtc.Value - run.CreatedUtc).ToString(@"hh\:mm\:ss");
 }

@@ -12,28 +12,46 @@ public static class DependencyInjection
     public static IServiceCollection AddSourceWorkerAiCore(this IServiceCollection services)
     {
         services.AddSingleton<IAiModelCatalogService, StaticAiModelCatalogService>();
+        services.AddSingleton<IAiModelCatalogProvider, StaticAiModelCatalogService>();
         services.AddSingleton<IAiTokenEstimator, SimpleAiTokenEstimator>();
         services.AddSingleton<IAiSafetyService, AiSafetyService>();
         services.AddSingleton<IAiRedactionService, AiRedactionService>();
         services.AddSingleton<IAiPromptBuilder, AiContextPackPromptBuilder>();
         services.AddSingleton<IAiPromptPreviewService, AiPromptPreviewService>();
         services.AddSingleton<IAiRunService, AiRunService>();
+        services.AddSingleton<IAiProviderValidationService, AiProviderValidationService>();
+        services.AddSingleton<IAiSettingsRepository, InMemoryAiSettingsRepository>();
+        services.AddSingleton<IAiUsageService, AiUsageService>();
+        services.AddSingleton<IAiContextPackQualityService, AiContextPackQualityService>();
+        services.AddSingleton<IDogfoodReadinessService, DogfoodReadinessService>();
+        services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
         return services;
     }
 }
 
-public sealed class StaticAiModelCatalogService : IAiModelCatalogService
+public sealed class StaticAiModelCatalogService : IAiModelCatalogService, IAiModelCatalogProvider
 {
     public IReadOnlyList<AiModelInfo> GetModels(AiProviderKind providerKind) => providerKind switch
     {
         AiProviderKind.OpenAI =>
         [
-            new("gpt-4.1-mini", "GPT-4.1 mini", providerKind, [AiModelCapability.Chat], 0.40m, 1.60m),
-            new("gpt-4.1", "GPT-4.1", providerKind, [AiModelCapability.Chat], 2.00m, 8.00m)
+            new("gpt-4.1-mini", "GPT-4.1 mini", providerKind, [AiModelCapability.Chat], 0.40m, 1.60m, 1_000_000),
+            new("gpt-4.1", "GPT-4.1", providerKind, [AiModelCapability.Chat], 2.00m, 8.00m, 1_000_000),
+            new("gpt-4o", "GPT-4o", providerKind, [AiModelCapability.Chat], 2.50m, 10.00m, 128_000),
+            new("gpt-4o-mini", "GPT-4o mini", providerKind, [AiModelCapability.Chat], 0.15m, 0.60m, 128_000),
+            new("gpt-5.1", "GPT-5.1", providerKind, [AiModelCapability.Chat], null, null, null)
         ],
         AiProviderKind.Ollama => [new("llama3.1", "llama3.1", providerKind, [AiModelCapability.Chat, AiModelCapability.Local])],
         _ => [new("model", "Configured model", providerKind, [AiModelCapability.Chat])]
     };
+
+    public Task<AiModelCatalog> GetCatalogAsync(AiProviderKind providerKind, CancellationToken cancellationToken)
+        => Task.FromResult(new AiModelCatalog(providerKind, GetModels(providerKind).Select(m => new AiModelCatalogEntry(
+            m.Id,
+            m.Name,
+            new AiModelPricing(m.InputUsdPerMillionTokens, m.OutputUsdPerMillionTokens, m.InputUsdPerMillionTokens is not null && m.OutputUsdPerMillionTokens is not null),
+            new AiModelContextWindow(m.ContextWindowTokens, m.ContextWindowTokens is not null),
+            new AiModelFeatureFlags(m.Capabilities.Contains(AiModelCapability.StreamingLater), m.Capabilities.Contains(AiModelCapability.ToolCallingLater), false, m.Capabilities.Contains(AiModelCapability.Local)))).ToArray(), providerKind == AiProviderKind.Ollama, DateTimeOffset.UtcNow));
 }
 
 public sealed class SimpleAiTokenEstimator : IAiTokenEstimator
@@ -125,24 +143,43 @@ public sealed class AiContextPackPromptBuilder(
     IAiTokenEstimator tokens,
     IAiSafetyService safety) : IAiPromptBuilder
 {
-    public async Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken)
+    public async Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken)
     {
         var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
         var pack = await packs.GetAsync(project, packId, cancellationToken) ?? throw new InvalidOperationException($"Context pack '{packId}' was not found.");
         var configuration = await configurations.GetAsync(providerId, cancellationToken) ?? throw new InvalidOperationException($"AI provider '{providerId}' is not configured.");
         var packContent = await packReader.ReadPackContentAsync(project, packId, cancellationToken);
         var freshnessReport = await freshness.CheckAsync(project, cancellationToken);
-        var prompt = BuildPrompt(project, pack, packContent, userInstruction, freshnessReport);
+        var template = PromptTemplates.FirstOrDefault(t => t.Id.Equals(templateId ?? "", StringComparison.OrdinalIgnoreCase)) ?? PromptTemplates[0];
+        var prompt = BuildPrompt(project, pack, packContent, userInstruction, freshnessReport, template);
         var tokenEstimate = tokens.Estimate(prompt, maxOutputTokens);
         var model = models.GetModels(configuration.Kind).FirstOrDefault(m => m.Id.Equals(configuration.Model, StringComparison.OrdinalIgnoreCase));
         var safetyCheck = safety.Check(prompt, pack, freshnessReport);
-        return new AiPromptPreview(project.Id, project.Name, providerId, configuration.Kind, configuration.Model, packId, pack.Pack.Items.Select(i => i.RelativePath).ToArray(), pack.MissingFiles, freshnessReport.RecommendedActions, safetyCheck.Warnings, tokenEstimate, tokens.EstimateCost(tokenEstimate, model), prompt, Hash(prompt));
+        var sections = new[]
+        {
+            new AiPromptSection("System", template.SystemPrefix, tokens.Estimate(template.SystemPrefix, 0).PromptTokens),
+            new AiPromptSection("User Instruction", userInstruction ?? "", tokens.Estimate(userInstruction ?? "", 0).PromptTokens),
+            new AiPromptSection("Context Pack", packContent, tokens.Estimate(packContent, 0).PromptTokens)
+        };
+        var fileDetails = pack.Pack.Items.Select(item =>
+        {
+            var absolute = Path.Combine(project.RootPath, item.RelativePath);
+            var exists = File.Exists(absolute);
+            var content = exists ? File.ReadAllText(absolute) : "";
+            return new AiPromptIncludedFile(item.RelativePath, exists ? new FileInfo(absolute).Length : 0, tokens.Estimate(content, 0).PromptTokens, exists ? Hash(content) : null, exists);
+        }).ToArray();
+        var contextWindow = model?.ContextWindowTokens;
+        var usage = contextWindow is > 0 ? Math.Min(999, (int)Math.Ceiling(tokenEstimate.TotalTokens * 100.0 / contextWindow.Value)) : 0;
+        var tooLarge = contextWindow is > 0 && tokenEstimate.TotalTokens > contextWindow.Value;
+        var warnings = safetyCheck.Warnings.ToList();
+        if (tooLarge) warnings.Add(new AiSafetyWarning("prompt-too-large", "High", "Prompt estimate exceeds the selected model context window."));
+        return new AiPromptPreview(project.Id, project.Name, providerId, configuration.Kind, configuration.Model, packId, pack.Pack.Items.Select(i => i.RelativePath).ToArray(), pack.MissingFiles, freshnessReport.RecommendedActions, warnings, tokenEstimate, tokens.EstimateCost(tokenEstimate, model), sections, fileDetails, template.Id, contextWindow, usage, tooLarge, prompt, Hash(prompt));
     }
 
-    private static string BuildPrompt(Project project, ContextPackManifest pack, string content, string? userInstruction, ContextFreshnessReport freshness)
+    private static string BuildPrompt(Project project, ContextPackManifest pack, string content, string? userInstruction, ContextFreshnessReport freshness, AiPromptTemplate template)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("You are helping with a SourceWorker local project context pack.");
+        builder.AppendLine(template.SystemPrefix);
         builder.AppendLine("Safe AI assistant rules:");
         builder.AppendLine("- Do not guess. Use detected source file paths.");
         builder.AppendLine("- Do not invent method names.");
@@ -168,12 +205,25 @@ public sealed class AiContextPackPromptBuilder(
     }
 
     internal static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    public static readonly AiPromptTemplate[] PromptTemplates =
+    [
+        new("general-project-question", "General project question", "Ask a focused question using the selected pack.", "You are helping with a SourceWorker local project context pack."),
+        new("continue-development", "Continue development", "Plan the next safe development step.", "You are helping continue development. Be concrete, preserve architecture, and do not write files."),
+        new("explain-architecture", "Explain architecture", "Explain detected architecture and important flows.", "Explain the architecture using only supplied context and detected source paths."),
+        new("find-risks", "Find risks", "Find risks, stale areas, and verification gaps.", "Find risks and verification gaps. Do not invent source details."),
+        new("improve-docs", "Improve docs", "Suggest documentation improvements.", "Suggest compact documentation improvements. Do not write files."),
+        new("create-next-steps", "Create next steps", "Create a prioritized next-step plan.", "Create a concise, prioritized next-step plan."),
+        new("review-branch", "Review branch", "Review current branch context.", "Review the current branch context and identify likely review points."),
+        new("bug-investigation", "Bug investigation", "Investigate a bug using context.", "Investigate the likely bug path using supplied context only."),
+        new("test-planning", "Test planning", "Suggest focused tests.", "Suggest targeted tests and verification commands.")
+    ];
 }
 
 public sealed class AiPromptPreviewService(IAiPromptBuilder builder) : IAiPromptPreviewService
 {
-    public Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken)
-        => builder.BuildPreviewAsync(projectId, providerId, packId, userInstruction, maxOutputTokens, cancellationToken);
+    public Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken)
+        => builder.BuildPreviewAsync(projectId, providerId, packId, userInstruction, maxOutputTokens, templateId, cancellationToken);
 }
 
 public sealed class AiRunService(IAiPromptPreviewService preview, IAiProviderConfigurationRepository configurations, IAiProviderRegistry registry, IAiRunRepository runs) : IAiRunService
@@ -181,7 +231,7 @@ public sealed class AiRunService(IAiPromptPreviewService preview, IAiProviderCon
     public async Task<AiRun> StartAsync(AiRunInput input, CancellationToken cancellationToken)
     {
         var configuration = await configurations.GetAsync(input.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
-        var prompt = await preview.PreviewAsync(input.ProjectId, input.ProviderId, input.PackId, input.UserInstruction, input.MaxOutputTokens, cancellationToken);
+        var prompt = await preview.PreviewAsync(input.ProjectId, input.ProviderId, input.PackId, input.UserInstruction, input.MaxOutputTokens, null, cancellationToken);
         if (prompt.SafetyWarnings.Count > 0 && !input.ConfirmSafetyWarnings)
         {
             var blocked = NewRun(input, configuration, prompt, AiRunStatus.SafetyBlocked, null, "Safety warnings require confirmation.");
@@ -206,4 +256,170 @@ public sealed class AiRunService(IAiPromptPreviewService preview, IAiProviderCon
 
     private static AiRun NewRun(AiRunInput input, AiProviderConfiguration configuration, AiPromptPreview prompt, AiRunStatus status, string? output, string? error)
         => new(Guid.NewGuid(), input.ProjectId, input.ProviderId, configuration.Kind, configuration.Model, input.PackId, input.UserInstruction, prompt.PromptHash, false, null, prompt.IncludedFiles, prompt.SafetyWarnings, prompt.TokenEstimate, status, DateTimeOffset.UtcNow, status is AiRunStatus.Completed or AiRunStatus.Failed or AiRunStatus.SafetyBlocked ? DateTimeOffset.UtcNow : null, error, output, output is null ? null : AiContextPackPromptBuilder.Hash(output));
+}
+
+public sealed class AiProviderValidationService(IAiSecretStore secrets, IAiProviderConfigurationRepository configurations, IAiProviderRegistry registry) : IAiProviderValidationService
+{
+    public async Task<AiProviderValidationResult> ValidateAsync(AiProviderKind kind, string model, string? baseUrl, string? apiKey, int maxOutputTokens, CancellationToken cancellationToken)
+    {
+        var issues = new List<AiProviderValidationIssue>();
+        if (string.IsNullOrWhiteSpace(model)) issues.Add(new("missing-model", "High", "Model name is required.", "model"));
+        if (maxOutputTokens <= 0) issues.Add(new("invalid-max-output-tokens", "High", "Max output tokens must be positive.", "maxOutputTokens"));
+        var requiresKey = kind == AiProviderKind.OpenAI;
+        if (requiresKey && string.IsNullOrWhiteSpace(apiKey))
+        {
+            var existing = await configurations.GetAsync(kind.ToString(), cancellationToken);
+            if (existing?.ApiKeySecretName is null || string.IsNullOrWhiteSpace(await secrets.GetSecretAsync(existing.ApiKeySecretName, cancellationToken)))
+                issues.Add(new("missing-api-key", "High", "API key is required.", "apiKey"));
+        }
+        var needsBaseUrl = kind is AiProviderKind.Ollama or AiProviderKind.OpenAiCompatible;
+        var validUrl = !needsBaseUrl || Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        if (!validUrl) issues.Add(new("invalid-base-url", "High", "Base URL must be an absolute HTTP/HTTPS URL.", "baseUrl"));
+        if (kind == AiProviderKind.Ollama && string.IsNullOrWhiteSpace(baseUrl)) issues.Add(new("missing-ollama-url", "Medium", "Ollama base URL is recommended. Default is http://localhost:11434.", "baseUrl"));
+        return new AiProviderValidationResult(kind.ToString(), kind, issues.Count == 0, issues, new AiProviderSetupState(issues.Count == 0, !string.IsNullOrWhiteSpace(model), !requiresKey || !string.IsNullOrWhiteSpace(apiKey), validUrl, kind == AiProviderKind.Ollama, secrets.Mask(apiKey)));
+    }
+
+    public async Task<AiProviderConnectionDiagnostic> DiagnoseAsync(string providerId, CancellationToken cancellationToken)
+    {
+        var config = await configurations.GetAsync(providerId, cancellationToken);
+        if (config is null)
+        {
+            return new AiProviderConnectionDiagnostic(providerId, AiProviderKind.OpenAiCompatible, AiProviderStatus.NotConfigured, "Provider is not configured.", ["Open AI Settings and save provider configuration."], new AiProviderErrorDetails(AiProviderErrorCode.Unknown, AiProviderErrorCategory.Configuration, "Provider is not configured.", null), DateTimeOffset.UtcNow);
+        }
+        var provider = registry.GetProvider(providerId);
+        if (provider is null)
+        {
+            return new AiProviderConnectionDiagnostic(providerId, config.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", ["Restart SourceWorker.", "Check provider kind."], new AiProviderErrorDetails(AiProviderErrorCode.Unknown, AiProviderErrorCategory.Configuration, "Provider implementation missing.", null), DateTimeOffset.UtcNow);
+        }
+        var health = await provider.CheckHealthAsync(config, cancellationToken);
+        var actions = health.Status switch
+        {
+            AiProviderStatus.Healthy => Array.Empty<string>(),
+            AiProviderStatus.NotConfigured => ["Finish provider setup in AI Settings."],
+            _ when config.Kind == AiProviderKind.Ollama => ["Start Ollama.", $"Run: ollama pull {config.Model}", "Verify the Ollama base URL."],
+            _ => ["Check network connectivity.", "Verify API key and model name.", "Try another model."]
+        };
+        return new AiProviderConnectionDiagnostic(providerId, config.Kind, health.Status, health.Message, actions, health.Status == AiProviderStatus.Healthy ? null : new AiProviderErrorDetails(ToCode(health.Message), ToCategory(health.Message), health.Message, health.Message), DateTimeOffset.UtcNow);
+    }
+
+    private static AiProviderErrorCode ToCode(string message)
+        => message.Contains("key", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCode.InvalidApiKey :
+           message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCode.Timeout :
+           message.Contains("model", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCode.ModelNotFound :
+           message.Contains("shape", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCode.BadResponseShape :
+           AiProviderErrorCode.ProviderUnavailable;
+    private static AiProviderErrorCategory ToCategory(string message)
+        => message.Contains("key", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCategory.Authentication :
+           message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ? AiProviderErrorCategory.Network :
+           AiProviderErrorCategory.Provider;
+}
+
+public sealed class InMemoryAiSettingsRepository : IAiSettingsRepository
+{
+    private AiSettings settings = new(false, true, 100, 30);
+    public Task<AiSettings> GetAsync(CancellationToken cancellationToken) => Task.FromResult(settings);
+    public Task<AiSettings> SaveAsync(AiSettings settings, CancellationToken cancellationToken) { this.settings = settings; return Task.FromResult(settings); }
+}
+
+public sealed class AiUsageService(IAiRunRepository runs, IAiProviderConfigurationRepository providers) : IAiUsageService
+{
+    public async Task<AiUsageSummary> GetProjectAsync(Guid projectId, CancellationToken cancellationToken) => Summarize(projectId, await runs.GetByProjectAsync(projectId, cancellationToken), 0);
+    public async Task<AiUsageSummary> GetGlobalAsync(CancellationToken cancellationToken)
+    {
+        var configs = await providers.ListAsync(cancellationToken);
+        return new AiUsageSummary(null, 0, 0, 0, null, null, null, 0, null, 0, configs.Count, 0);
+    }
+
+    private static AiUsageSummary Summarize(Guid projectId, IReadOnlyList<AiRun> items, int providersConfigured)
+        => new(projectId, items.Count, items.Count(r => r.Status == AiRunStatus.Completed), items.Count(r => r.Status == AiRunStatus.Failed), items.OrderByDescending(r => r.CreatedUtc).FirstOrDefault()?.CreatedUtc, items.GroupBy(r => r.ProviderId).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key, items.GroupBy(r => r.PackId).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key, items.Sum(r => r.TokenEstimate.TotalTokens), null, items.Count, providersConfigured, 0);
+}
+
+public sealed class AiContextPackQualityService(IProjectRepository projects, IContextPackService packs, IContextFreshnessService freshness) : IAiContextPackQualityService
+{
+    public async Task<AiContextPackQualityReport> CheckAsync(Guid projectId, string packId, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var pack = await packs.GetAsync(project, packId, cancellationToken);
+        var issues = new List<AiContextPackQualityIssue>();
+        if (pack is null) issues.Add(new("pack-missing", "High", "Context pack was not found."));
+        else
+        {
+            if (pack.MissingFiles.Count > 0) issues.AddRange(pack.MissingFiles.Select(f => new AiContextPackQualityIssue("missing-file", "High", "Pack file is missing.", f)));
+            if (string.IsNullOrWhiteSpace(pack.Pack.Purpose)) issues.Add(new("missing-purpose", "Medium", "Pack is missing purpose metadata."));
+            if (string.IsNullOrWhiteSpace(pack.Pack.Audience)) issues.Add(new("missing-audience", "Medium", "Pack is missing audience metadata."));
+        }
+        var fresh = await freshness.CheckAsync(project, cancellationToken);
+        if (fresh.FreshnessScore < 70) issues.Add(new("low-freshness", "Medium", $"Context freshness is {fresh.FreshnessScore}."));
+        var score = Math.Max(0, 100 - issues.Count(i => i.Severity == "High") * 30 - issues.Count(i => i.Severity != "High") * 10);
+        return new AiContextPackQualityReport(projectId, packId, score, score >= 80, issues);
+    }
+}
+
+public sealed class DogfoodReadinessService(IProjectRepository projects, IScanRunRepository scans, IContextPackService packs, IAiProviderConfigurationRepository providers, IAiRunRepository runs, ILocalApiRuntimeService runtime) : IDogfoodReadinessService
+{
+    public async Task<DogfoodProjectReadiness> GetGlobalStatusAsync(CancellationToken cancellationToken)
+    {
+        var list = await projects.ListAsync(cancellationToken);
+        var first = list.FirstOrDefault();
+        return first is null ? Build(null, null, [
+            Item("apphost", "AppHost detected", runtime.GetState().EnvironmentName.Length > 0, runtime.GetState().BaseUrl),
+            Item("api", "Local API connected", true),
+            Item("token", "Token configured", runtime.GetState().TokenEnabled),
+            Item("project", "At least one project registered", false)
+        ]) : await GetProjectStatusAsync(first.Id, cancellationToken);
+    }
+
+    public async Task<DogfoodProjectReadiness> GetProjectStatusAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(projectId, cancellationToken);
+        var latest = project is null ? null : await scans.GetLatestAsync(project.Id, cancellationToken);
+        var packList = project is null ? [] : await packs.ListAsync(project, cancellationToken);
+        var providerList = await providers.ListAsync(cancellationToken);
+        var runList = project is null ? [] : await runs.GetByProjectAsync(project.Id, cancellationToken);
+        return Build(project?.Id, project?.Name, [
+            Item("apphost", "AppHost detected", runtime.GetState().EnvironmentName.Length > 0, runtime.GetState().BaseUrl),
+            Item("api", "Local API connected", true),
+            Item("token", "Token configured", runtime.GetState().TokenEnabled),
+            Item("project", "At least one project registered", project is not null),
+            Item("scan", "Latest scan exists", latest is not null, latest?.Status.ToString()),
+            Item("freshness", "Context freshness available", latest is not null),
+            Item("packs", "At least one context pack exists", packList.Count > 0),
+            Item("ai-provider", "AI provider configured", providerList.Count > 0),
+            Item("ai-health", "AI provider health check passed", providerList.Any(p => p.IsEnabled), "Run provider test for live health."),
+            Item("prompt-preview", "At least one prompt preview created", runList.Count > 0, "Prompt previews are currently inferred from AI runs."),
+            Item("ai-run", "At least one AI run completed", runList.Any(r => r.Status == AiRunStatus.Completed)),
+            Item("no-ai-writes", "No AI file writes detected", true)
+        ]);
+    }
+
+    private static DogfoodChecklistItem Item(string id, string label, bool complete, string? detail = null) => new(id, label, complete, detail);
+    private static DogfoodProjectReadiness Build(Guid? projectId, string? name, IReadOnlyList<DogfoodChecklistItem> items)
+    {
+        var score = items.Count == 0 ? 0 : items.Count(i => i.IsComplete) * 100 / items.Count;
+        var status = score >= 80 ? DogfoodReadinessStatus.Ready : score > 20 ? DogfoodReadinessStatus.NeedsAttention : DogfoodReadinessStatus.NotStarted;
+        return new DogfoodProjectReadiness(projectId, name, new DogfoodChecklist(items, status, items.Where(i => !i.IsComplete).Take(3).Select(i => i.Label).ToArray()), score);
+    }
+}
+
+public sealed class DiagnosticsService(IAppVersionService version, IStorageInfoService storage, ILocalApiRuntimeService runtime, IAiProviderConfigurationRepository providers, IAiProviderRegistry registry, IProjectRepository projects, IJobRepository jobs) : IDiagnosticsService
+{
+    public async Task<DiagnosticsSummary> GetSummaryAsync(CancellationToken cancellationToken)
+    {
+        var v = version.GetVersion();
+        var storageInfo = await storage.GetInfoAsync(cancellationToken);
+        var statuses = new List<AiProviderHealthResult>();
+        foreach (var config in await providers.ListAsync(cancellationToken))
+        {
+            var provider = registry.GetProvider(config.Kind.ToString());
+            statuses.Add(provider is null ? new AiProviderHealthResult(config.Kind.ToString(), config.Kind, AiProviderStatus.Unhealthy, "Provider implementation missing.", DateTimeOffset.UtcNow, config.MaskedApiKey) : await provider.CheckHealthAsync(config, cancellationToken));
+        }
+        return new DiagnosticsSummary(v.AppVersion, v.ApiVersion, storageInfo, runtime.GetState(), statuses, (await projects.ListAsync(cancellationToken)).Count, (await jobs.ListAsync(cancellationToken)).Count, storageInfo.AiRunCount, [], DateTimeOffset.UtcNow);
+    }
+
+    public async Task<DiagnosticsExport> ExportAsync(CancellationToken cancellationToken)
+    {
+        var summary = await GetSummaryAsync(cancellationToken);
+        var json = System.Text.Json.JsonSerializer.Serialize(summary, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true });
+        return new DiagnosticsExport($"sourceworker-diagnostics-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.json", json, DateTimeOffset.UtcNow);
+    }
 }

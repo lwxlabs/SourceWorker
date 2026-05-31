@@ -288,14 +288,17 @@ public interface IAiProviderConfigurationRepository
 }
 
 public interface IAiModelCatalogService { IReadOnlyList<AiModelInfo> GetModels(AiProviderKind providerKind); }
-public interface IAiPromptBuilder { Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken); }
-public interface IAiPromptPreviewService { Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken); }
+public interface IAiModelCatalogProvider { Task<AiModelCatalog> GetCatalogAsync(AiProviderKind providerKind, CancellationToken cancellationToken); }
+public interface IAiPromptBuilder { Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken); }
+public interface IAiPromptPreviewService { Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken); }
 public interface IAiTokenEstimator { AiTokenEstimate Estimate(string prompt, int maxOutputTokens); AiCostEstimate EstimateCost(AiTokenEstimate tokens, AiModelInfo? model); }
 public interface IAiRunRepository
 {
     Task<AiRun> SaveAsync(AiRun run, CancellationToken cancellationToken);
     Task<AiRun?> GetAsync(Guid runId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AiRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid runId, CancellationToken cancellationToken);
+    Task DeleteByProjectAsync(Guid projectId, CancellationToken cancellationToken);
 }
 public interface IAiRunService
 {
@@ -311,3 +314,49 @@ public interface IAiSecretStore
     Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken);
     string Mask(string? secretValue);
 }
+
+public interface IAiProviderValidationService
+{
+    Task<AiProviderValidationResult> ValidateAsync(AiProviderKind kind, string model, string? baseUrl, string? apiKey, int maxOutputTokens, CancellationToken cancellationToken);
+    Task<AiProviderConnectionDiagnostic> DiagnoseAsync(string providerId, CancellationToken cancellationToken);
+}
+
+public interface IAiSettingsRepository
+{
+    Task<AiSettings> GetAsync(CancellationToken cancellationToken);
+    Task<AiSettings> SaveAsync(AiSettings settings, CancellationToken cancellationToken);
+}
+
+public interface IAiUsageService
+{
+    Task<AiUsageSummary> GetGlobalAsync(CancellationToken cancellationToken);
+    Task<AiUsageSummary> GetProjectAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public interface IAiContextPackQualityService
+{
+    Task<AiContextPackQualityReport> CheckAsync(Guid projectId, string packId, CancellationToken cancellationToken);
+}
+
+public interface IDogfoodReadinessService
+{
+    Task<DogfoodProjectReadiness> GetGlobalStatusAsync(CancellationToken cancellationToken);
+    Task<DogfoodProjectReadiness> GetProjectStatusAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public interface IDiagnosticsService
+{
+    Task<DiagnosticsSummary> GetSummaryAsync(CancellationToken cancellationToken);
+    Task<DiagnosticsExport> ExportAsync(CancellationToken cancellationToken);
+}
+
+public interface ISecretStore
+{
+    Task SaveAsync(string name, string value, CancellationToken cancellationToken);
+    Task<string?> GetAsync(string name, CancellationToken cancellationToken);
+    Task ClearAsync(string name, CancellationToken cancellationToken);
+}
+
+public interface ISecretStoreProvider { string StorageKind { get; } ISecretStore Store { get; } }
+public interface ISecretStoreHealthService { Task<SecretStoreHealth> CheckAsync(CancellationToken cancellationToken); }
+public interface ISecretMetadataService { Task<SecretMetadata> GetMetadataAsync(string name, CancellationToken cancellationToken); }

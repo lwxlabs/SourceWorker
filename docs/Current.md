@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-SourceWorker is a local-first project context engine with a protected Local API, one-start AppHost, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, and MVP 2.1 safe AI provider preview.
+SourceWorker is a local-first project context engine with a protected Local API, one-start AppHost, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, and MVP 2.2 dogfood readiness hardening.
 
 Still intentionally not included:
 - MCP
@@ -29,6 +29,31 @@ Still intentionally not included:
 - `SourceWorker.UI` contains reusable Razor components/pages.
 - `SourceWorker.Dashboard` is the current Blazor Web App host.
 - `SourceWorker.AppHost` starts Local API and Dashboard together with token/base URL discovery.
+
+## MVP 2.2 Dogfood Readiness
+
+MVP 2.2 focuses on making SourceWorker pleasant enough to start using daily on real repositories such as SourceWorker itself, Insights, Localite, and LwX.Flow.
+
+New read-only dogfood/onboarding surfaces:
+- `/dogfood`
+- `/projects/onboarding`
+- `/projects/{projectId}/onboarding`
+
+Dogfood readiness checks:
+- AppHost detected
+- Local API connected
+- token configured
+- at least one project registered
+- latest scan exists
+- context freshness available
+- at least one context pack exists
+- AI provider configured
+- AI provider health/check readiness
+- at least one prompt preview or AI run
+- at least one AI run completed
+- no AI file writes detected
+
+The dashboard home now shows a next-action dogfood card. Project dashboard now links directly to AI preview, backend docs, packs, and onboarding.
 
 ## One-Start Command
 
@@ -82,9 +107,13 @@ No AI CLI commands were added in MVP 2.1. AI preview is Local API and dashboard 
 - `/projects/{projectId}/artifacts`
 - `/projects/{projectId}/ai`
 - `/projects/{projectId}/ai/runs`
+- `/dogfood`
+- `/projects/onboarding`
+- `/projects/{projectId}/onboarding`
 - `/jobs`
 - `/settings`
 - `/settings/ai`
+- `/settings/diagnostics`
 
 Dashboard behavior:
 - register projects
@@ -97,6 +126,10 @@ Dashboard behavior:
 - build AI prompt previews from packs
 - run preview-only AI requests
 - view AI run history
+- validate provider setup
+- diagnose provider connection issues
+- inspect AI usage and pack readiness
+- view secret-safe diagnostics
 
 ## Localite Storage State
 
@@ -145,6 +178,23 @@ AI runs:
 - persist prompt hash, included files, warnings, token estimate, status, created/completed UTC, error, output text, and output hash
 - do not write files
 - are copy/preview oriented only
+
+MVP 2.2 hardening:
+- `AiProviderValidationResult`, `AiProviderValidationIssue`, `AiProviderSetupState`, and `AiProviderConnectionDiagnostic` model provider setup and failure states.
+- OpenAI validation checks missing key/model and URL/token fields.
+- Ollama validation checks base URL/model and diagnostics give “start Ollama / pull model” guidance.
+- OpenAI-compatible validation checks base URL/model and returns clearer diagnostic shape for bad responses.
+- `ISecretStore`, `ISecretStoreProvider`, `ISecretStoreHealthService`, and `ISecretMetadataService` prepare for OS secret store integration.
+- `AppDataSecretStore` is the current MVP store and exposes only masked metadata publicly.
+- `NoopSecretStore` exists for tests.
+- Static model catalog includes known OpenAI models and pricing/context-window metadata where known.
+- Prompt preview now includes sections, included-file token estimates, missing files, prompt hash, cost estimate, context-window usage, too-large warning, max output token setting, and template selection.
+- Prompt templates include general project question, continue development, explain architecture, find risks, improve docs, create next steps, review branch, bug investigation, and test planning.
+- AI run history shows run duration/error/output and supports simple status filtering.
+- AI settings include history/privacy settings: store prompt, store output, max runs per project, and failed-run retention.
+- AI usage summaries exist globally and per project.
+- Pack quality scoring checks missing files and freshness before AI runs.
+- Diagnostics summary/export excludes secrets, source code, and prompts by default.
 
 ## Generated Context
 
@@ -213,6 +263,21 @@ MVP 2.1 protected AI endpoints:
 - `GET /api/projects/{id}/ai/runs`
 - `GET /api/projects/{id}/ai/runs/{runId}`
 
+MVP 2.2 protected endpoints:
+- `POST /api/ai/providers/validate`
+- `POST /api/ai/providers/{providerId}/diagnose`
+- `GET /api/ai/settings`
+- `PUT /api/ai/settings`
+- `GET /api/ai/usage`
+- `DELETE /api/projects/{id}/ai/runs`
+- `DELETE /api/projects/{id}/ai/runs/{runId}`
+- `GET /api/projects/{id}/ai/usage`
+- `GET /api/projects/{id}/ai/packs/{packId}/quality`
+- `GET /api/dogfood/status`
+- `GET /api/projects/{id}/dogfood/status`
+- `GET /api/diagnostics/summary`
+- `POST /api/diagnostics/export`
+
 All protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
 
 ## Test Coverage
@@ -229,6 +294,15 @@ MVP 2.1 adds targeted coverage for:
 - provider configuration
 - prompt preview endpoint
 - AI run creation endpoint
+
+MVP 2.2 adds targeted coverage for:
+- OpenAI missing key/model validation
+- invalid URL validation
+- masked secret metadata
+- provider diagnostic failure shape
+- known model pricing/context-window metadata
+- expanded ApiClient AI calls and bearer usage
+- expanded Local API AI/dogfood/diagnostics endpoints
 
 ## Test Execution Rules For Codex
 
@@ -267,23 +341,25 @@ Every Codex summary must include:
 
 ## Latest Verification
 
-These commands passed during MVP 2.1:
+These commands passed during MVP 2.2:
 
 ```powershell
 dotnet build SourceWorker.slnx
 dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai
 dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient
 dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Ai
+dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
+dotnet build ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj
 ```
 
-Full solution tests were intentionally not run for MVP 2.1 because the changed surface was AI/application, Local API AI endpoints, ApiClient AI methods, and dashboard AI pages. `CliCommandTests` were intentionally skipped because no CLI command parsing, output, or behavior changed.
+Full solution tests were intentionally not run for MVP 2.2 because the changed surface was AI/application, Local API AI endpoints, ApiClient AI methods, diagnostics/dogfood endpoints, and dashboard AI/dogfood pages. `CliCommandTests` were intentionally skipped because no CLI command parsing, output, or behavior changed.
 
 ## Next Recommended Step
 
-MVP 2.1 establishes safe AI preview without file writes. The next strong step is to harden the AI provider preview:
-- improve provider configuration validation
-- add OS secret store integration
-- add better model catalogs and pricing metadata
-- add UI copy buttons and richer run details
-- add streaming later only after preview mode is stable
-- then consider a controlled “propose patch” workflow that still never writes files automatically
+MVP 2.2 establishes dogfood readiness and a more practical AI preview loop. The next strong step is a real dogfood pass:
+- Run AppHost.
+- Register and scan SourceWorker, Insights, Localite, and LwX.Flow.
+- Use `backend-docs` and `ai-handoff` packs on each repo.
+- Capture friction in onboarding, diagnostics, and provider setup.
+- Improve provider failure messages and pack quality scoring from real failures.
+- Do not add patch application or automatic AI writes yet.

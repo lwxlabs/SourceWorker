@@ -23,7 +23,32 @@
         </label>
     </div>
     <button @onclick="ConfigureAsync">Save provider</button>
+    <button @onclick="ValidateAsync">Validate</button>
     <p class="muted">Secrets are stored locally for preview use and are never written to .ai-context.</p>
+</Cards>
+
+<Cards Title="History & Privacy">
+    @if (settings is null)
+    {
+        <LoadingState />
+    }
+    else
+    {
+        <label><input type="checkbox" @bind="settings.StoreFullPrompt" /> Store full prompt text</label>
+        <label><input type="checkbox" @bind="settings.StoreOutput" /> Store AI output</label>
+        <label>Max runs per project <input type="number" @bind="settings.MaxRunsPerProject" /></label>
+        <label>Delete failed runs after days <input type="number" @bind="settings.DeleteFailedRunsAfterDays" /></label>
+        <button @onclick="SaveSettingsAsync">Save privacy settings</button>
+    }
+</Cards>
+
+<Cards Title="Usage">
+    @if (usage is not null)
+    {
+        <div class="list-row"><strong>Total runs</strong><span>@usage.TotalRuns</span></div>
+        <div class="list-row"><strong>Known cost</strong><span>@(usage.EstimatedKnownCostUsd?.ToString("C") ?? "unknown")</span></div>
+        <div class="list-row"><strong>Providers configured</strong><span>@usage.ProvidersConfigured</span></div>
+    }
 </Cards>
 
 <Cards Title="Providers">
@@ -42,7 +67,9 @@
             <div class="list-row">
                 <strong>@provider.Kind</strong>
                 <span>@provider.Status - @provider.Message @(string.IsNullOrWhiteSpace(provider.MaskedApiKey) ? "" : $"({provider.MaskedApiKey})")</span>
+                <span class="pill">@(provider.Kind == AiProviderKind.Ollama ? "local provider" : "remote provider")</span>
                 <button @onclick="() => TestAsync(provider.ProviderId)">Test</button>
+                <button @onclick="() => DiagnoseAsync(provider.ProviderId)">Diagnose</button>
             </div>
         }
     }
@@ -53,6 +80,29 @@
     <p>@message</p>
 }
 
+@if (validation is not null)
+{
+    <Cards Title="Validation">
+        <div class="list-row"><strong>Valid</strong><span>@validation.IsValid</span></div>
+        @foreach (var issue in validation.Issues)
+        {
+            <div class="list-row"><strong>@issue.Severity</strong><span>@issue.Message</span></div>
+        }
+    </Cards>
+}
+
+@if (diagnostic is not null)
+{
+    <Cards Title="Diagnostic">
+        <div class="list-row"><strong>Status</strong><span>@diagnostic.Status</span></div>
+        <p>@diagnostic.Summary</p>
+        @foreach (var action in diagnostic.SuggestedActions)
+        {
+            <div class="list-row"><strong>Try</strong><span>@action</span></div>
+        }
+    </Cards>
+}
+
 @code {
     private IReadOnlyList<AiProviderStatusDto>? providers;
     private AiProviderKind kind = AiProviderKind.Ollama;
@@ -60,10 +110,19 @@
     private string? baseUrl = "http://localhost:11434";
     private string? apiKey;
     private string? message;
+    private AiProviderValidationResultDto? validation;
+    private AiProviderConnectionDiagnosticDto? diagnostic;
+    private AiSettingsDto? settings;
+    private AiUsageSummaryDto? usage;
 
     protected override async Task OnInitializedAsync() => await RefreshAsync();
 
-    private async Task RefreshAsync() => providers = await Api.GetAiProvidersAsync();
+    private async Task RefreshAsync()
+    {
+        providers = await Api.GetAiProvidersAsync();
+        settings = await Api.GetAiSettingsAsync();
+        usage = await Api.GetAiUsageAsync();
+    }
 
     private async Task ConfigureAsync()
     {
@@ -72,10 +131,25 @@
         await RefreshAsync();
     }
 
+    private async Task ValidateAsync()
+    {
+        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey));
+    }
+
     private async Task TestAsync(string providerId)
     {
         var result = await Api.TestAiProviderAsync(providerId);
         message = $"{result.Kind}: {result.Status} - {result.Message}";
         await RefreshAsync();
+    }
+
+    private async Task DiagnoseAsync(string providerId)
+    {
+        diagnostic = await Api.DiagnoseAiProviderAsync(providerId);
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        if (settings is not null) settings = await Api.UpdateAiSettingsAsync(settings);
     }
 }

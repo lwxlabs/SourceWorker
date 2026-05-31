@@ -130,8 +130,38 @@ public sealed record AiProviderStatusDto(string ProviderId, AiProviderKind Kind,
 public sealed record AiSafetyWarningDto(string Code, string Severity, string Message, string? RelativePath);
 public sealed record AiTokenEstimateDto(int PromptTokens, int MaxOutputTokens, int TotalTokens);
 public sealed record AiCostEstimateDto(decimal? PromptCostUsd, decimal? OutputCostUsd, decimal? TotalCostUsd, string Currency);
-public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200);
-public sealed record AiPromptPreviewResponse(Guid ProjectId, string ProjectName, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, IReadOnlyList<string> IncludedFiles, IReadOnlyList<string> MissingFiles, IReadOnlyList<string> FreshnessWarnings, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiCostEstimateDto CostEstimate, string PromptText, string PromptHash);
+public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null);
+public sealed record AiPromptSectionDto(string Title, string Content, int TokenEstimate);
+public sealed record AiPromptIncludedFileDto(string RelativePath, long SizeBytes, int TokenEstimate, string? ContentHash, bool Exists);
+public sealed record AiPromptPreviewResponse(Guid ProjectId, string ProjectName, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, IReadOnlyList<string> IncludedFiles, IReadOnlyList<string> MissingFiles, IReadOnlyList<string> FreshnessWarnings, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiCostEstimateDto CostEstimate, IReadOnlyList<AiPromptSectionDto>? Sections, IReadOnlyList<AiPromptIncludedFileDto>? IncludedFileDetails, string? TemplateId, int? ContextWindowTokens, int ContextWindowUsagePercent, bool IsTooLarge, string PromptText, string PromptHash);
 public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);
 public sealed record AiRunSummaryDto(Guid Id, Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, string? UserInstruction, string PromptHash, bool StoredPromptText, string? PromptPreview, IReadOnlyList<string> IncludedFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string? Error, string? OutputText, string? OutputHash);
 public sealed record AiRunDetailDto(Guid Id, Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, string? UserInstruction, string PromptHash, bool StoredPromptText, string? PromptPreview, IReadOnlyList<string> IncludedFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string? Error, string? OutputText, string? OutputHash);
+public sealed record AiProviderValidationIssueDto(string Code, string Severity, string Message, string? Field);
+public sealed record AiProviderSetupStateDto(bool IsConfigured, bool HasModel, bool HasSecretWhenRequired, bool HasValidBaseUrl, bool IsLocalProvider, string? MaskedSecretHint);
+public sealed record AiProviderValidationResultDto(string ProviderId, AiProviderKind Kind, bool IsValid, IReadOnlyList<AiProviderValidationIssueDto> Issues, AiProviderSetupStateDto SetupState);
+public sealed record AiProviderErrorDetailsDto(string Code, string Category, string Message, string? TechnicalDetail);
+public sealed record AiProviderConnectionDiagnosticDto(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Summary, IReadOnlyList<string> SuggestedActions, AiProviderErrorDetailsDto? Error, DateTimeOffset CheckedUtc);
+public sealed class AiSettingsDto
+{
+    public bool StoreFullPrompt { get; set; }
+    public bool StoreOutput { get; set; }
+    public int MaxRunsPerProject { get; set; }
+    public int DeleteFailedRunsAfterDays { get; set; }
+    public AiSettingsDto() { }
+    public AiSettingsDto(bool storeFullPrompt, bool storeOutput, int maxRunsPerProject, int deleteFailedRunsAfterDays)
+    {
+        StoreFullPrompt = storeFullPrompt;
+        StoreOutput = storeOutput;
+        MaxRunsPerProject = maxRunsPerProject;
+        DeleteFailedRunsAfterDays = deleteFailedRunsAfterDays;
+    }
+}
+public sealed record AiUsageSummaryDto(Guid? ProjectId, int TotalRuns, int SuccessfulRuns, int FailedRuns, DateTimeOffset? LastRunUtc, string? MostUsedProvider, string? MostUsedPack, int EstimatedTokensUsed, decimal? EstimatedKnownCostUsd, int UnknownCostCount, int ProvidersConfigured, int FailedProviderChecks);
+public sealed record AiContextPackQualityIssueDto(string Code, string Severity, string Message, string? RelativePath);
+public sealed record AiContextPackQualityReportDto(Guid ProjectId, string PackId, int ReadinessScore, bool IsRecommended, IReadOnlyList<AiContextPackQualityIssueDto> Issues);
+public sealed record DogfoodChecklistItemDto(string Id, string Label, bool IsComplete, string? Detail);
+public sealed record DogfoodChecklistDto(IReadOnlyList<DogfoodChecklistItemDto> Items, string Status, IReadOnlyList<string> NextActions);
+public sealed record DogfoodProjectReadinessDto(Guid? ProjectId, string? ProjectName, DogfoodChecklistDto Checklist, int Score);
+public sealed record DiagnosticsSummaryDto(string AppVersion, string ApiVersion, StorageInfo Storage, ApiRuntimeInfoDto Runtime, IReadOnlyList<AiProviderStatusDto> ProviderStatuses, int ProjectCount, int JobCount, int AiRunCount, IReadOnlyList<string> RecentErrors, DateTimeOffset GeneratedUtc);
+public sealed record DiagnosticsExportDto(string FileName, string Content, DateTimeOffset GeneratedUtc);

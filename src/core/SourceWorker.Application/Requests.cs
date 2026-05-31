@@ -40,10 +40,23 @@ public sealed record GetAiProviderStatusesQuery : IRequest<IReadOnlyList<AiProvi
 public sealed record ConfigureAiProviderCommand(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true) : IRequest<AiProviderConfiguration>;
 public sealed record TestAiProviderCommand(string ProviderId) : IRequest<AiProviderHealthResult>;
 public sealed record GetProjectAiPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
-public sealed record PreviewAiPromptCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200) : IRequest<AiPromptPreview>;
+public sealed record PreviewAiPromptCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null) : IRequest<AiPromptPreview>;
 public sealed record StartAiRunCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200) : IRequest<AiRun>;
 public sealed record GetAiRunsQuery(Guid ProjectId) : IRequest<IReadOnlyList<AiRun>>;
 public sealed record GetAiRunQuery(Guid ProjectId, Guid RunId) : IRequest<AiRun?>;
+public sealed record ValidateAiProviderCommand(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, int MaxOutputTokens = 1200) : IRequest<AiProviderValidationResult>;
+public sealed record DiagnoseAiProviderCommand(string ProviderId) : IRequest<AiProviderConnectionDiagnostic>;
+public sealed record GetAiSettingsQuery : IRequest<AiSettings>;
+public sealed record UpdateAiSettingsCommand(AiSettings Settings) : IRequest<AiSettings>;
+public sealed record DeleteAiRunsCommand(Guid ProjectId) : IRequest<bool>;
+public sealed record DeleteAiRunCommand(Guid ProjectId, Guid RunId) : IRequest<bool>;
+public sealed record GetAiUsageQuery : IRequest<AiUsageSummary>;
+public sealed record GetProjectAiUsageQuery(Guid ProjectId) : IRequest<AiUsageSummary>;
+public sealed record GetAiPackQualityQuery(Guid ProjectId, string PackId) : IRequest<AiContextPackQualityReport>;
+public sealed record GetDogfoodStatusQuery : IRequest<DogfoodProjectReadiness>;
+public sealed record GetProjectDogfoodStatusQuery(Guid ProjectId) : IRequest<DogfoodProjectReadiness>;
+public sealed record GetDiagnosticsSummaryQuery : IRequest<DiagnosticsSummary>;
+public sealed record ExportDiagnosticsCommand : IRequest<DiagnosticsExport>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -421,7 +434,7 @@ public sealed class GetProjectAiPacksQueryHandler(IProjectRepository projects, I
 public sealed class PreviewAiPromptCommandHandler(IAiPromptPreviewService preview) : IRequestHandler<PreviewAiPromptCommand, AiPromptPreview>
 {
     public Task<AiPromptPreview> Handle(PreviewAiPromptCommand request, CancellationToken cancellationToken)
-        => preview.PreviewAsync(request.ProjectId, request.ProviderId, request.PackId, request.UserInstruction, request.MaxOutputTokens, cancellationToken);
+        => preview.PreviewAsync(request.ProjectId, request.ProviderId, request.PackId, request.UserInstruction, request.MaxOutputTokens, request.TemplateId, cancellationToken);
 }
 
 public sealed class StartAiRunCommandHandler(IAiRunService runs) : IRequestHandler<StartAiRunCommand, AiRun>
@@ -442,6 +455,63 @@ public sealed class GetAiRunQueryHandler(IAiRunService runs) : IRequestHandler<G
         var run = await runs.GetRunAsync(request.RunId, cancellationToken);
         return run?.ProjectId == request.ProjectId ? run : null;
     }
+}
+
+public sealed class ValidateAiProviderCommandHandler(IAiProviderValidationService validation) : IRequestHandler<ValidateAiProviderCommand, AiProviderValidationResult>
+{
+    public Task<AiProviderValidationResult> Handle(ValidateAiProviderCommand request, CancellationToken cancellationToken)
+        => validation.ValidateAsync(request.Kind, request.Model, request.BaseUrl, request.ApiKey, request.MaxOutputTokens, cancellationToken);
+}
+
+public sealed class DiagnoseAiProviderCommandHandler(IAiProviderValidationService validation) : IRequestHandler<DiagnoseAiProviderCommand, AiProviderConnectionDiagnostic>
+{
+    public Task<AiProviderConnectionDiagnostic> Handle(DiagnoseAiProviderCommand request, CancellationToken cancellationToken)
+        => validation.DiagnoseAsync(request.ProviderId, cancellationToken);
+}
+
+public sealed class GetAiSettingsQueryHandler(IAiSettingsRepository settings) : IRequestHandler<GetAiSettingsQuery, AiSettings>
+{
+    public Task<AiSettings> Handle(GetAiSettingsQuery request, CancellationToken cancellationToken) => settings.GetAsync(cancellationToken);
+}
+public sealed class UpdateAiSettingsCommandHandler(IAiSettingsRepository settings) : IRequestHandler<UpdateAiSettingsCommand, AiSettings>
+{
+    public Task<AiSettings> Handle(UpdateAiSettingsCommand request, CancellationToken cancellationToken) => settings.SaveAsync(request.Settings, cancellationToken);
+}
+public sealed class DeleteAiRunsCommandHandler(IAiRunRepository runs) : IRequestHandler<DeleteAiRunsCommand, bool>
+{
+    public async Task<bool> Handle(DeleteAiRunsCommand request, CancellationToken cancellationToken) { await runs.DeleteByProjectAsync(request.ProjectId, cancellationToken); return true; }
+}
+public sealed class DeleteAiRunCommandHandler(IAiRunRepository runs) : IRequestHandler<DeleteAiRunCommand, bool>
+{
+    public async Task<bool> Handle(DeleteAiRunCommand request, CancellationToken cancellationToken) { var run = await runs.GetAsync(request.RunId, cancellationToken); if (run?.ProjectId != request.ProjectId) return false; await runs.DeleteAsync(request.RunId, cancellationToken); return true; }
+}
+public sealed class GetAiUsageQueryHandler(IAiUsageService usage) : IRequestHandler<GetAiUsageQuery, AiUsageSummary>
+{
+    public Task<AiUsageSummary> Handle(GetAiUsageQuery request, CancellationToken cancellationToken) => usage.GetGlobalAsync(cancellationToken);
+}
+public sealed class GetProjectAiUsageQueryHandler(IAiUsageService usage) : IRequestHandler<GetProjectAiUsageQuery, AiUsageSummary>
+{
+    public Task<AiUsageSummary> Handle(GetProjectAiUsageQuery request, CancellationToken cancellationToken) => usage.GetProjectAsync(request.ProjectId, cancellationToken);
+}
+public sealed class GetAiPackQualityQueryHandler(IAiContextPackQualityService quality) : IRequestHandler<GetAiPackQualityQuery, AiContextPackQualityReport>
+{
+    public Task<AiContextPackQualityReport> Handle(GetAiPackQualityQuery request, CancellationToken cancellationToken) => quality.CheckAsync(request.ProjectId, request.PackId, cancellationToken);
+}
+public sealed class GetDogfoodStatusQueryHandler(IDogfoodReadinessService dogfood) : IRequestHandler<GetDogfoodStatusQuery, DogfoodProjectReadiness>
+{
+    public Task<DogfoodProjectReadiness> Handle(GetDogfoodStatusQuery request, CancellationToken cancellationToken) => dogfood.GetGlobalStatusAsync(cancellationToken);
+}
+public sealed class GetProjectDogfoodStatusQueryHandler(IDogfoodReadinessService dogfood) : IRequestHandler<GetProjectDogfoodStatusQuery, DogfoodProjectReadiness>
+{
+    public Task<DogfoodProjectReadiness> Handle(GetProjectDogfoodStatusQuery request, CancellationToken cancellationToken) => dogfood.GetProjectStatusAsync(request.ProjectId, cancellationToken);
+}
+public sealed class GetDiagnosticsSummaryQueryHandler(IDiagnosticsService diagnostics) : IRequestHandler<GetDiagnosticsSummaryQuery, DiagnosticsSummary>
+{
+    public Task<DiagnosticsSummary> Handle(GetDiagnosticsSummaryQuery request, CancellationToken cancellationToken) => diagnostics.GetSummaryAsync(cancellationToken);
+}
+public sealed class ExportDiagnosticsCommandHandler(IDiagnosticsService diagnostics) : IRequestHandler<ExportDiagnosticsCommand, DiagnosticsExport>
+{
+    public Task<DiagnosticsExport> Handle(ExportDiagnosticsCommand request, CancellationToken cancellationToken) => diagnostics.ExportAsync(cancellationToken);
 }
 
 public static class ProjectMappings

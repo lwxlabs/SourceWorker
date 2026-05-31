@@ -1,0 +1,41 @@
+@page "/settings/diagnostics"
+@inject ISourceWorkerApiClient Api
+
+<h1>Diagnostics</h1>
+<p class="lead">Secret-safe local diagnostics for dogfooding.</p>
+
+@if (summary is null)
+{
+    <LoadingState />
+}
+else
+{
+    <Cards Title="Summary">
+        <div class="list-row"><strong>App</strong><span>@summary.AppVersion / API @summary.ApiVersion</span></div>
+        <div class="list-row"><strong>Projects</strong><span>@summary.ProjectCount</span></div>
+        <div class="list-row"><strong>Jobs</strong><span>@summary.JobCount</span></div>
+        <div class="list-row"><strong>AI runs</strong><span>@summary.AiRunCount</span></div>
+        <div class="list-row"><strong>Storage</strong><span>@summary.Storage.Schema.Provider @summary.Storage.Schema.Mode</span></div>
+    </Cards>
+    <Cards Title="Provider Status">
+        @foreach (var provider in summary.ProviderStatuses)
+        {
+            <div class="list-row"><strong>@provider.Kind</strong><span>@provider.Status - @provider.Message</span></div>
+        }
+    </Cards>
+    <button @onclick="ExportAsync">Export diagnostics preview</button>
+}
+
+@if (export is not null)
+{
+    <Cards Title="@export.FileName">
+        <pre style="white-space: pre-wrap;">@export.Content</pre>
+    </Cards>
+}
+
+@code {
+    private DiagnosticsSummaryDto? summary;
+    private DiagnosticsExportDto? export;
+    protected override async Task OnInitializedAsync() => summary = await Api.GetDiagnosticsSummaryAsync();
+    private async Task ExportAsync() => export = await Api.ExportDiagnosticsAsync();
+}

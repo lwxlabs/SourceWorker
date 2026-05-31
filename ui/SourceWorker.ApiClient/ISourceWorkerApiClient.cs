@@ -41,12 +41,25 @@ public interface ISourceWorkerApiClient
     Task<IReadOnlyList<AiProviderStatusDto>> GetAiProvidersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AiProviderStatusDto>> GetAiProviderStatusesAsync(CancellationToken cancellationToken = default);
     Task<AiProviderConfigurationResultDto> ConfigureAiProviderAsync(AiProviderConfigurationDto configuration, CancellationToken cancellationToken = default);
+    Task<AiProviderValidationResultDto> ValidateAiProviderAsync(AiProviderConfigurationDto configuration, int maxOutputTokens = 1200, CancellationToken cancellationToken = default);
     Task<AiProviderStatusDto> TestAiProviderAsync(string providerId, CancellationToken cancellationToken = default);
+    Task<AiProviderConnectionDiagnosticDto> DiagnoseAiProviderAsync(string providerId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContextPackManifest>> GetAiPacksAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<AiPromptPreviewResponse> PreviewAiPromptAsync(Guid projectId, AiPromptPreviewRequest request, CancellationToken cancellationToken = default);
     Task<AiRunDetailDto> StartAiRunAsync(Guid projectId, AiRunRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AiRunSummaryDto>> GetAiRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<AiRunDetailDto?> GetAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
+    Task<AiSettingsDto> GetAiSettingsAsync(CancellationToken cancellationToken = default);
+    Task<AiSettingsDto> UpdateAiSettingsAsync(AiSettingsDto settings, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAiRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
+    Task<AiUsageSummaryDto> GetAiUsageAsync(CancellationToken cancellationToken = default);
+    Task<AiUsageSummaryDto> GetProjectAiUsageAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<AiContextPackQualityReportDto> GetAiPackQualityAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
+    Task<DogfoodProjectReadinessDto> GetDogfoodStatusAsync(CancellationToken cancellationToken = default);
+    Task<DogfoodProjectReadinessDto> GetProjectDogfoodStatusAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<DiagnosticsSummaryDto> GetDiagnosticsSummaryAsync(CancellationToken cancellationToken = default);
+    Task<DiagnosticsExportDto> ExportDiagnosticsAsync(CancellationToken cancellationToken = default);
 }
 
 public interface ITokenProvider

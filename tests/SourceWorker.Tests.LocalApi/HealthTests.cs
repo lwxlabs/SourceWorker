@@ -79,12 +79,23 @@ public sealed class HealthTests
         (await client.GetAsync("/api/ai/providers")).EnsureSuccessStatusCode();
         var configure = await client.PostAsJsonAsync("/api/ai/providers/configure", new { kind = 1, model = "llama3.1", baseUrl = "http://localhost:11434", apiKey = (string?)null, isEnabled = true });
         configure.EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync("/api/ai/providers/validate", new { kind = 1, model = "llama3.1", baseUrl = "http://localhost:11434", apiKey = (string?)null, maxOutputTokens = 100 })).EnsureSuccessStatusCode();
         (await client.PostAsync("/api/ai/providers/Ollama/test", null)).EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/ai/providers/Ollama/diagnose", null)).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/ai/settings")).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync("/api/ai/settings", new { storeFullPrompt = false, storeOutput = true, maxRunsPerProject = 50, deleteFailedRunsAfterDays = 14 })).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/ai/usage")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created!.Project.Id}/ai/packs")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/ai/packs/ai-handoff/quality")).EnsureSuccessStatusCode();
         var preview = await client.PostAsJsonAsync($"/api/projects/{created.Project.Id}/ai/prompt-preview", new { providerId = "Ollama", packId = "ai-handoff", userInstruction = "Summarize", maxOutputTokens = 100 });
         preview.EnsureSuccessStatusCode();
         var run = await client.PostAsJsonAsync($"/api/projects/{created.Project.Id}/ai/runs", new { providerId = "Ollama", packId = "ai-handoff", userInstruction = "Summarize", confirmSafetyWarnings = true, maxOutputTokens = 10 });
         run.EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/ai/runs")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/ai/usage")).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/dogfood/status")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/dogfood/status")).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/diagnostics/summary")).EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/diagnostics/export", null)).EnsureSuccessStatusCode();
     }
 }

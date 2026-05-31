@@ -181,12 +181,28 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await response.Content.ReadFromJsonAsync<AiProviderConfigurationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider configuration response was empty.");
     }
 
+    public async Task<AiProviderValidationResultDto> ValidateAiProviderAsync(AiProviderConfigurationDto configuration, int maxOutputTokens = 1200, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/ai/providers/validate", new { configuration.Kind, configuration.Model, configuration.BaseUrl, configuration.ApiKey, MaxOutputTokens = maxOutputTokens }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiProviderValidationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider validation response was empty.");
+    }
+
     public async Task<AiProviderStatusDto> TestAiProviderAsync(string providerId, CancellationToken cancellationToken = default)
     {
         await ApplyTokenAsync();
         using var response = await httpClient.PostAsync($"/api/ai/providers/{Uri.EscapeDataString(providerId)}/test", null, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<AiProviderStatusDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider test response was empty.");
+    }
+
+    public async Task<AiProviderConnectionDiagnosticDto> DiagnoseAiProviderAsync(string providerId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/ai/providers/{Uri.EscapeDataString(providerId)}/diagnose", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiProviderConnectionDiagnosticDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider diagnostic response was empty.");
     }
 
     public async Task<IReadOnlyList<ContextPackManifest>> GetAiPacksAsync(Guid projectId, CancellationToken cancellationToken = default)
@@ -213,6 +229,57 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     public Task<AiRunDetailDto?> GetAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
         => GetAsync<AiRunDetailDto>($"/api/projects/{projectId}/ai/runs/{runId}", cancellationToken);
+
+    public Task<AiSettingsDto> GetAiSettingsAsync(CancellationToken cancellationToken = default)
+        => Required<AiSettingsDto>("/api/ai/settings", cancellationToken);
+
+    public async Task<AiSettingsDto> UpdateAiSettingsAsync(AiSettingsDto settings, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync("/api/ai/settings", settings, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiSettingsDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI settings response was empty.");
+    }
+
+    public async Task<bool> DeleteAiRunsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}/ai/runs", cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> DeleteAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}/ai/runs/{runId}", cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    public Task<AiUsageSummaryDto> GetAiUsageAsync(CancellationToken cancellationToken = default)
+        => Required<AiUsageSummaryDto>("/api/ai/usage", cancellationToken);
+
+    public Task<AiUsageSummaryDto> GetProjectAiUsageAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<AiUsageSummaryDto>($"/api/projects/{projectId}/ai/usage", cancellationToken);
+
+    public Task<AiContextPackQualityReportDto> GetAiPackQualityAsync(Guid projectId, string packId, CancellationToken cancellationToken = default)
+        => Required<AiContextPackQualityReportDto>($"/api/projects/{projectId}/ai/packs/{Uri.EscapeDataString(packId)}/quality", cancellationToken);
+
+    public Task<DogfoodProjectReadinessDto> GetDogfoodStatusAsync(CancellationToken cancellationToken = default)
+        => Required<DogfoodProjectReadinessDto>("/api/dogfood/status", cancellationToken);
+
+    public Task<DogfoodProjectReadinessDto> GetProjectDogfoodStatusAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<DogfoodProjectReadinessDto>($"/api/projects/{projectId}/dogfood/status", cancellationToken);
+
+    public Task<DiagnosticsSummaryDto> GetDiagnosticsSummaryAsync(CancellationToken cancellationToken = default)
+        => Required<DiagnosticsSummaryDto>("/api/diagnostics/summary", cancellationToken);
+
+    public async Task<DiagnosticsExportDto> ExportDiagnosticsAsync(CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync("/api/diagnostics/export", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DiagnosticsExportDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Diagnostics export response was empty.");
+    }
 
     private async Task<T> Required<T>(string path, CancellationToken cancellationToken)
         => await GetAsync<T>(path, cancellationToken) ?? throw new InvalidOperationException($"Local API returned an empty response for '{path}'.");

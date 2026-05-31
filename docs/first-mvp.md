@@ -151,12 +151,25 @@ MVP 2.1 adds protected AI preview endpoints:
 - `GET /api/ai/providers`
 - `GET /api/ai/providers/status`
 - `POST /api/ai/providers/configure`
+- `POST /api/ai/providers/validate`
 - `POST /api/ai/providers/{providerId}/test`
+- `POST /api/ai/providers/{providerId}/diagnose`
+- `GET /api/ai/settings`
+- `PUT /api/ai/settings`
+- `GET /api/ai/usage`
 - `GET /api/projects/{id}/ai/packs`
+- `GET /api/projects/{id}/ai/packs/{packId}/quality`
 - `POST /api/projects/{id}/ai/prompt-preview`
 - `POST /api/projects/{id}/ai/runs`
 - `GET /api/projects/{id}/ai/runs`
 - `GET /api/projects/{id}/ai/runs/{runId}`
+- `DELETE /api/projects/{id}/ai/runs`
+- `DELETE /api/projects/{id}/ai/runs/{runId}`
+- `GET /api/projects/{id}/ai/usage`
+- `GET /api/dogfood/status`
+- `GET /api/projects/{id}/dogfood/status`
+- `GET /api/diagnostics/summary`
+- `POST /api/diagnostics/export`
 
 AI endpoints are preview-only. They do not write files. API keys are masked in responses and are not written to `.ai-context`.
 
@@ -189,10 +202,16 @@ Routes:
 - `/settings/ai`
 - `/projects/{projectId}/ai`
 - `/projects/{projectId}/ai/runs`
+- `/dogfood`
+- `/projects/onboarding`
+- `/projects/{projectId}/onboarding`
+- `/settings/diagnostics`
 
 The UI is interactive for MVP 1.9. It supports project registration, scanning with job progress, doc/pack exports, and safe cleanup with confirmation. It is Local API-driven and does not access Localite, scanner, infrastructure, application services, or project files directly.
 
 MVP 2.1 adds AI preview UI. Users can configure OpenAI, Ollama, or OpenAI-compatible providers, choose a context pack, preview the final prompt, see safety warnings and rough token/cost estimates, run an AI request, and view/copy the output. AI results are preview-only and are not applied to files.
+
+MVP 2.2 adds dogfood readiness and AI hardening for daily use: provider validation, provider diagnostics, model catalog/pricing metadata, prompt sections, included-file token estimates, pack quality scoring, AI usage summaries, diagnostics summary/export preview, and onboarding/dogfood dashboard routes.
 
 ## AI Provider Preview
 

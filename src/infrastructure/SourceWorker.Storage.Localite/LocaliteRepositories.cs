@@ -104,6 +104,15 @@ public sealed class LocaliteTableStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task DeleteAsync(string table, Guid id, CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {table} WHERE Id = $id";
+        command.Parameters.AddWithValue("$id", id.ToString());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<int> CountAsync(string table, CancellationToken cancellationToken)
     {
         await using var connection = Open();
@@ -190,7 +199,8 @@ internal static class Tables
     public const string Tests = "TestInfoRecord";
     public const string AiProviderConfigurations = "AiProviderConfigurationRecord";
     public const string AiRuns = "AiRunRecord";
-    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns];
+    public const string AiSettings = "AiSettingsRecord";
+    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns, AiSettings];
 }
 
 internal sealed record ProjectRecord(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
@@ -339,4 +349,7 @@ public sealed class LocaliteAiRunRepository(LocaliteTableStore store) : IAiRunRe
 
     public async Task<IReadOnlyList<AiRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
         => (await store.ListAsync<AiRunRecord>(Tables.AiRuns, projectId, cancellationToken)).Select(AiRunRecordMapper.ToDomain).OrderByDescending(r => r.CreatedUtc).ToArray();
+
+    public Task DeleteAsync(Guid runId, CancellationToken cancellationToken) => store.DeleteAsync(Tables.AiRuns, runId, cancellationToken);
+    public Task DeleteByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.DeleteByProjectAsync(Tables.AiRuns, projectId, cancellationToken);
 }

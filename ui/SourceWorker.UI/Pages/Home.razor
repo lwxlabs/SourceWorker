@@ -9,6 +9,22 @@
     <StorageInfoCard Info="@storage" />
 </div>
 
+<Cards Title="Next Recommended Action">
+    @if (dogfood is null)
+    {
+        <LoadingState />
+    }
+    else
+    {
+        <div class="list-row"><strong>Dogfood readiness</strong><span>@dogfood.Score% - @dogfood.Checklist.Status</span></div>
+        @foreach (var action in dogfood.Checklist.NextActions)
+        {
+            <div class="list-row"><strong>Next</strong><span>@action</span></div>
+        }
+        <a href="/dogfood">Open dogfood checklist</a>
+    }
+</Cards>
+
 <Cards Title="Projects">
     <ProjectPicker Projects="@projects" />
 </Cards>
@@ -16,6 +32,7 @@
 @code {
     private HealthResponse? health;
     private StorageInfo? storage;
+    private DogfoodProjectReadinessDto? dogfood;
     private IReadOnlyList<ProjectSummaryDto> projects = [];
 
     protected override async Task OnInitializedAsync()
@@ -25,6 +42,7 @@
             health = await Api.GetHealthAsync();
             storage = await Api.GetStorageInfoAsync();
             projects = await Api.GetProjectsSummaryAsync(limit: 5);
+            dogfood = await Api.GetDogfoodStatusAsync();
         }
         catch
         {

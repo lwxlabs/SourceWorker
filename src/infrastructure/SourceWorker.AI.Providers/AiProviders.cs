@@ -13,7 +13,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddSourceWorkerAiProviders(this IServiceCollection services)
     {
-        services.AddSingleton<IAiSecretStore, LocalAiSecretStore>();
+        services.AddSingleton<AppDataSecretStore>();
+        services.AddSingleton<ISecretStore>(sp => sp.GetRequiredService<AppDataSecretStore>());
+        services.AddSingleton<ISecretStoreProvider>(sp => sp.GetRequiredService<AppDataSecretStore>());
+        services.AddSingleton<ISecretStoreHealthService>(sp => sp.GetRequiredService<AppDataSecretStore>());
+        services.AddSingleton<ISecretMetadataService>(sp => sp.GetRequiredService<AppDataSecretStore>());
+        services.AddSingleton<IAiSecretStore>(sp => sp.GetRequiredService<AppDataSecretStore>());
         services.AddSingleton<OpenAiProvider>();
         services.AddSingleton<OllamaProvider>();
         services.AddSingleton<OpenAiCompatibleProvider>();
@@ -36,21 +41,26 @@ public sealed class AiProviderRegistry : IAiProviderRegistry
         => providers.FirstOrDefault(p => p.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase) || p.Kind.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase));
 }
 
-public sealed class LocalAiSecretStore : IAiSecretStore
+public sealed class AppDataSecretStore : IAiSecretStore, ISecretStore, ISecretStoreProvider, ISecretStoreHealthService, ISecretMetadataService
 {
     private readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SourceWorker", "secrets", "ai");
+    public string StorageKind => "AppData MVP";
+    public ISecretStore Store => this;
 
-    public async Task SaveSecretAsync(string secretName, string secretValue, CancellationToken cancellationToken)
+    public Task SaveSecretAsync(string secretName, string secretValue, CancellationToken cancellationToken) => SaveAsync(secretName, secretValue, cancellationToken);
+    public Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken) => GetAsync(secretName, cancellationToken);
+
+    public async Task SaveAsync(string name, string value, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(root);
-        var path = GetPath(secretName);
-        var text = Convert.ToBase64String(Encoding.UTF8.GetBytes(secretValue));
+        var path = GetPath(name);
+        var text = Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
         await File.WriteAllTextAsync(path, text, cancellationToken);
     }
 
-    public async Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken)
+    public async Task<string?> GetAsync(string name, CancellationToken cancellationToken)
     {
-        var path = GetPath(secretName);
+        var path = GetPath(name);
         if (!File.Exists(path)) return null;
         var text = await File.ReadAllTextAsync(path, cancellationToken);
         try
@@ -61,6 +71,27 @@ public sealed class LocalAiSecretStore : IAiSecretStore
         {
             return text;
         }
+    }
+
+    public Task ClearAsync(string name, CancellationToken cancellationToken)
+    {
+        var path = GetPath(name);
+        if (File.Exists(path)) File.Delete(path);
+        return Task.CompletedTask;
+    }
+
+    public Task<SecretStoreHealth> CheckAsync(CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(root);
+        return Task.FromResult(new SecretStoreHealth(StorageKind, Directory.Exists(root), "AppData secret store is available. OS credential store hardening is planned."));
+    }
+
+    public async Task<SecretMetadata> GetMetadataAsync(string name, CancellationToken cancellationToken)
+    {
+        var path = GetPath(name);
+        var exists = File.Exists(path);
+        var value = exists ? await GetAsync(name, cancellationToken) : null;
+        return new SecretMetadata(name, exists, exists ? File.GetCreationTimeUtc(path) : null, exists ? File.GetLastWriteTimeUtc(path) : null, Mask(value), StorageKind);
     }
 
     public string Mask(string? secretValue)
@@ -74,6 +105,17 @@ public sealed class LocalAiSecretStore : IAiSecretStore
         var safe = string.Concat(secretName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-'));
         return Path.Combine(root, safe + ".secret");
     }
+}
+
+public sealed class NoopSecretStore : IAiSecretStore, ISecretStore
+{
+    private readonly Dictionary<string, string> values = [];
+    public Task SaveSecretAsync(string secretName, string secretValue, CancellationToken cancellationToken) => SaveAsync(secretName, secretValue, cancellationToken);
+    public Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken) => GetAsync(secretName, cancellationToken);
+    public string Mask(string? secretValue) => string.IsNullOrWhiteSpace(secretValue) ? "" : "****";
+    public Task SaveAsync(string name, string value, CancellationToken cancellationToken) { values[name] = value; return Task.CompletedTask; }
+    public Task<string?> GetAsync(string name, CancellationToken cancellationToken) => Task.FromResult(values.TryGetValue(name, out var value) ? value : null);
+    public Task ClearAsync(string name, CancellationToken cancellationToken) { values.Remove(name); return Task.CompletedTask; }
 }
 
 public sealed class OpenAiProvider(IAiSecretStore secrets) : OpenAiStyleProvider(secrets)

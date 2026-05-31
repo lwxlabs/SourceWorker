@@ -37,6 +37,8 @@ The current roadmap intentionally adds safe AI provider preview before the full 
 
 MVP 2.1 still does not add autonomous code editing, terminal execution, MCP, cloud sync, licensing, or automatic AI file writes.
 
+MVP 2.2 adds dogfood readiness, provider validation, diagnostics, and AI preview polish in the reusable Blazor UI. These pages remain reusable by a future MAUI Blazor Hybrid host.
+
 ## Test Execution Rules For Codex
 
 Codex must not run the full solution test suite by default and must not run `CliCommandTests` unless CLI command parsing, output, or behavior changed. MAUI/AppHost/dashboard-only changes should use targeted project builds and relevant ApiClient/LocalApi tests instead.
