@@ -120,9 +120,9 @@ public sealed class AppVersionService : IAppVersionService
     {
         return new VersionInfoDto(
             "SourceWorker",
-            "1.8.0",
-            "1.8",
-            "1.8",
+            "2.0.0",
+            "2.0",
+            "2.0",
             1, // Storage schema version
             5, // Context format version
             "Release"

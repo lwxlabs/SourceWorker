@@ -12,6 +12,7 @@
 <Cards Title="Local API Runtime">
     @if (runtime != null)
     {
+        <div class="list-row"><strong>Running Mode</strong><span class="pill @(Options.LaunchMode.ToLower())">@Options.LaunchMode</span></div>
         <div class="list-row"><strong>Base URL</strong><code>@runtime.BaseUrl</code></div>
         <div class="list-row"><strong>Host / Port</strong><span>@runtime.SelectedHost : @runtime.SelectedPort</span></div>
         <div class="list-row"><strong>Auth Enabled</strong><span>@(runtime.TokenEnabled ? "Yes" : "No")</span></div>

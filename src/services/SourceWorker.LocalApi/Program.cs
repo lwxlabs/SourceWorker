@@ -68,8 +68,9 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "SourceWor
 
 app.MapGet("/api/version", (IAppVersionService versionService) => Results.Ok(versionService.GetVersion()));
 
-app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService) => {
+app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService, IAppVersionService versionService) => {
     var state = runtimeService.GetState();
+    var version = versionService.GetVersion();
     return Results.Ok(new ApiRuntimeInfoDto(
         state.SelectedHost,
         state.SelectedPort,
@@ -80,7 +81,9 @@ app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService) => {
         state.DashboardOrigin,
         state.ProcessId,
         state.StartupUtc,
-        state.EnvironmentName
+        state.EnvironmentName,
+        version.AppVersion,
+        version.ApiVersion
     ));
 });
 

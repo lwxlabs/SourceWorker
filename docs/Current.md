@@ -105,6 +105,23 @@ Dashboard behavior:
 - browses generated context files and previews documentation.
 - shows code intelligence: symbols, routes, flows, and test info.
 - shows storage provider/path/schema in settings.
+- shows **Running Mode** (Standalone / AppHost) and connection diagnostics in settings.
+
+## Local App Host (One-Start)
+
+SourceWorker 2.0 introduces the **AppHost**, a central orchestrator that simplifies the startup process:
+
+```powershell
+dotnet run --project src/services/SourceWorker.AppHost -- --open
+```
+
+Behavior:
+- Starts **Local API** first and waits for `/health`.
+- Automatically discovers the API token from `AppData`.
+- Starts the **Dashboard** with `SOURCEWORKER_API_BASE_URL` and `SOURCEWORKER_API_TOKEN` environment variables.
+- Detects and passes the `SOURCEWORKER_LAUNCH_MODE`.
+- Optionally opens the browser to the dashboard.
+- Cleanly stops all child processes on exit.
 
 ## Dashboard Action Safety Model
 
@@ -360,13 +377,14 @@ Current tests cover:
 
 To ensure stability while maintaining development speed, follow this targeted verification policy:
 
+- **AppHost/Process orchestration changes**: Run AppHost tests and ApiClient connection tests.
 - **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
 - **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
 - **Scanner changes**: Run scanner tests and only related application/CLI tests.
 - **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
 - **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
 - **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
-- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
+- **CLI command changes**: Run CLI command tests only when CLI Program.cs or CLI command behavior changed. Do not run CliCommandTests for AppHost-only, UI-only, docs-only, or DTO-only changes.
 - **Docs-only changes**: No test run required unless docs generation code changed.
 - **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.
 
@@ -376,14 +394,12 @@ These commands passed:
 
 ```powershell
 dotnet build SourceWorker.slnx
-dotnet test SourceWorker.slnx --no-build
-dotnet run --project src/services/SourceWorker.LocalApi
-dotnet run --project ui/SourceWorker.Dashboard
+dotnet run --project src/services/SourceWorker.AppHost -- --open
 ```
 
 ## Next Recommended Step
 
-MVP 1.9 enabled dashboard write actions and established a safety model. The next step is MVP 2.0:
-- AI provider integration foundation.
+MVP 2.0 established the local host foundation. The next step is MVP 2.1:
+- MAUI Blazor Hybrid host skeleton in `ui/SourceWorker.Desktop`.
+- AI provider integration foundation (Local Models / Ollama / OpenAI).
 - Context pack refinement for LLM consumption.
-- MAUI Blazor Hybrid host exploration.

@@ -115,6 +115,26 @@ public sealed class ApiClientTests
         Assert.Single(response.Files);
     }
 
+    [Fact]
+    public async Task Api_client_can_get_runtime_info()
+    {
+        using var http = new HttpClient(new StubHandler(request => 
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/runtime/info")
+                return """{"selectedHost":"localhost","selectedPort":5000,"baseUrl":"http://localhost:5000","tokenEnabled":true,"tokenCreatedUtc":"2026-05-31T00:00:00Z","allowedOrigins":["*"],"dashboardOrigin":"*","processId":123,"startupUtc":"2026-05-31T00:00:00Z","environmentName":"Development","appVersion":"2.0.0","apiVersion":"2.0"}""";
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+        
+        var runtime = await client.GetRuntimeInfoAsync();
+        
+        Assert.Equal("2.0.0", runtime.AppVersion);
+        Assert.Equal("Development", runtime.EnvironmentName);
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, string> responseFactory) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

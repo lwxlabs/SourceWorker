@@ -48,14 +48,30 @@ dotnet run --project src/services/SourceWorker.Cli -- recipes C:\path\to\project
 dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
 ```
 
-## Dashboard
+## Startup
 
-Start the Local API and dashboard:
+The easiest way to start everything is using the **AppHost**:
+
+```powershell
+dotnet run --project src/services/SourceWorker.AppHost -- --open
+```
+
+This will:
+1. Start the **Local API**.
+2. Wait for it to become healthy.
+3. Start the **Dashboard** with auto-discovery.
+4. Open your browser to the dashboard.
+
+### Manual Startup (Alternative)
+
+If you need to run components separately:
 
 ```powershell
 dotnet run --project src/services/SourceWorker.LocalApi
 dotnet run --project ui/SourceWorker.Dashboard
 ```
+
+## Dashboard
 
 The UI is interactive for MVP 1.9. It allows registering projects, scanning projects with real-time job progress, exporting docs and packs, previewing context cleanup, and performing safe cleanup with confirmation. It uses a safety-level model to protect destructive actions. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
 

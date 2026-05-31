@@ -55,7 +55,9 @@ public sealed record ApiRuntimeInfoDto(
     string? DashboardOrigin,
     int ProcessId,
     DateTimeOffset StartupUtc,
-    string EnvironmentName
+    string EnvironmentName,
+    string AppVersion,
+    string ApiVersion
 );
 
 public sealed record ApiSecurityInfoDto(

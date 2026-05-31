@@ -23,7 +23,9 @@ public sealed record ApiRuntimeInfoDto(
     string? DashboardOrigin,
     int ProcessId,
     DateTimeOffset StartupUtc,
-    string EnvironmentName
+    string EnvironmentName,
+    string AppVersion,
+    string ApiVersion
 );
 
 public sealed record ApiSecurityInfoDto(
@@ -97,3 +99,37 @@ public sealed record DashboardActionAvailability(
 );
 
 public sealed record DashboardActionRequirement(string Key, string Description, bool IsMet);
+
+public enum LaunchMode
+{
+    Standalone,
+    AppHost,
+    Desktop
+}
+
+public enum ManagedProcessStatus
+{
+    NotStarted,
+    Starting,
+    Running,
+    Stopping,
+    Stopped,
+    Crashed
+}
+
+public sealed record ManagedProcessInfo(
+    string Name,
+    int? ProcessId,
+    ManagedProcessStatus Status,
+    string? BaseUrl,
+    DateTimeOffset? StartedAt
+);
+
+public sealed record AppHostRuntimeState(
+    ManagedProcessInfo LocalApi,
+    ManagedProcessInfo? Dashboard,
+    DateTimeOffset StartedAt,
+    string AppVersion
+);
+
+public sealed record LocalEndpointProbeResult(bool IsHealthy, string? Message, int? StatusCode);

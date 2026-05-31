@@ -9,6 +9,25 @@ builder.Services.AddRazorComponents();
 builder.Services.AddSourceWorkerApiClient(options =>
 {
     builder.Configuration.GetSection("SourceWorkerApi").Bind(options);
+    
+    // Auto-discovery from environment variables (provided by AppHost)
+    var envBaseUrl = Environment.GetEnvironmentVariable("SOURCEWORKER_API_BASE_URL");
+    if (!string.IsNullOrEmpty(envBaseUrl))
+    {
+        options.BaseUrl = envBaseUrl;
+    }
+
+    var envToken = Environment.GetEnvironmentVariable("SOURCEWORKER_API_TOKEN");
+    if (!string.IsNullOrEmpty(envToken))
+    {
+        options.BearerToken = envToken;
+    }
+
+    var envLaunchMode = Environment.GetEnvironmentVariable("SOURCEWORKER_LAUNCH_MODE");
+    if (!string.IsNullOrEmpty(envLaunchMode))
+    {
+        options.LaunchMode = envLaunchMode;
+    }
 });
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<DashboardActionService>();

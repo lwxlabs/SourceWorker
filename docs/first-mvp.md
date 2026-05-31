@@ -88,6 +88,14 @@ dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\proj
 dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
 ```
 
+## Local App Host (One-Start)
+
+Starting with MVP 2.0, use the AppHost to start everything:
+
+```powershell
+dotnet run --project src/services/SourceWorker.AppHost -- --open
+```
+
 ## Local API
 
 Start the API:
