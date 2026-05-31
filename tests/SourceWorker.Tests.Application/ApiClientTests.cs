@@ -33,6 +33,88 @@ public sealed class ApiClientTests
         Assert.Equal("Sample", projects[0].Name);
     }
 
+    [Fact]
+    public async Task Api_client_can_register_project()
+    {
+        using var http = new HttpClient(new StubHandler(request => 
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/api/projects")
+                return """{"project":{"id":"11111111-1111-1111-1111-111111111111","name":"NewProject","rootPath":"C:\\New","createdAt":"2026-05-31T00:00:00Z","lastScannedAt":null}}""";
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+        
+        var project = await client.RegisterProjectAsync("C:\\New", "NewProject");
+        
+        Assert.Equal("NewProject", project.Name);
+        Assert.Equal("C:\\New", project.RootPath);
+    }
+
+    [Fact]
+    public async Task Api_client_can_start_scan()
+    {
+        var jobId = Guid.NewGuid();
+        using var http = new HttpClient(new StubHandler(request => 
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/scan") == true)
+                return $$"""{"jobId":"{{jobId}}"}""";
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+        
+        var response = await client.StartProjectScanAsync(Guid.NewGuid());
+        
+        Assert.Equal(jobId, response.JobId);
+    }
+
+    [Fact]
+    public async Task Api_client_can_run_cleanup()
+    {
+        var projectId = Guid.NewGuid();
+        using var http = new HttpClient(new StubHandler(request => 
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/cleanup-generated") == true)
+                return $$"""{"projectId":"{{projectId}}","dryRun":false,"deletedFiles":["file1.md"],"skippedFiles":[]}""";
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+        
+        var response = await client.CleanupGeneratedAsync(projectId, dryRun: false, force: false);
+        
+        Assert.Equal(projectId, response.ProjectId);
+        Assert.Single(response.DeletedFiles);
+        Assert.Equal("file1.md", response.DeletedFiles[0]);
+    }
+
+    [Fact]
+    public async Task Api_client_can_run_export()
+    {
+        using var http = new HttpClient(new StubHandler(request => 
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.Contains("/exports/") == true)
+                return """{"exportProfileId":"test","outputPath":"out","files":["f1.md"]}""";
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+        
+        var response = await client.RunExportAsync(Guid.NewGuid(), "test");
+        
+        Assert.Equal("test", response.ExportProfileId);
+        Assert.Single(response.Files);
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, string> responseFactory) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

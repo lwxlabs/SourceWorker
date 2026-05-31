@@ -4,15 +4,16 @@ Date: 2026-05-31
 
 SourceWorker is a local-first project context engine.
 
-MVP 1.8 Hardening:
-- Local API hardening with Bearer token authentication.
-- Simple local token generation and storage in AppData.
-- CORS hardening allowing configured dashboard origins.
-- Local API runtime/security/version endpoints.
-- Project list filtering (search, include/exclude missing or test projects).
-- Project summary DTO with freshness, technology, route, and flow counts.
-- Dashboard improvements: updated settings, project filtering, and job progress.
-- Initial foundation for dashboard write actions (scan button, refresh).
+MVP 1.9 Dashboard Write Actions:
+- Project registration through the dashboard.
+- Scan project button with real-time job progress polling.
+- Export docs to configured external mirrors.
+- Export packs to default `.ai-context/packs` location.
+- Cleanup preview and safe cleanup with confirmation.
+- Dashboard action safety model (safety levels).
+- Reusable UI services: `ToastService`, `DashboardActionService`.
+- Reusable UI components: `JobProgressPanel`, `ActionResultPanel`, `ConfirmActionDialog`, `DangerousActionWarning`.
+- Targeted Verification Policy for faster development.
 
 ## Architecture
 
@@ -91,17 +92,32 @@ Routes:
 
 Dashboard behavior:
 
-- shows Local API connection status
-- lists projects from Local API
-- shows project dashboard metrics
-- shows context freshness and doctor summaries
-- shows artifact lifecycle counts
-- shows output routes and pack manifests
-- browses generated context files grouped by API-provided kind
-- previews `.ai-context/docs/backend` through Local API
-- previews context packs
-- shows symbols, routes, flows, service/config/test counts
-- shows storage provider/path/schema in settings
+- shows Local API connection status (connected, unauthorized, disconnected).
+- registers new projects via local path with validation.
+- lists projects with advanced filtering (test, missing, search).
+- shows project dashboard metrics, context freshness, and doctor summaries.
+- tracks real-time job progress (polling) for scans and background tasks.
+- exports documentation to configured external mirrors.
+- exports context packs to default `.ai-context/packs` location.
+- provides artifact lifecycle management (missing, modified, stale, orphaned).
+- runs safe cleanup with mandatory preview and confirmation.
+- enforces a safety-level model for all dashboard actions.
+- browses generated context files and previews documentation.
+- shows code intelligence: symbols, routes, flows, and test info.
+- shows storage provider/path/schema in settings.
+
+## Dashboard Action Safety Model
+
+SourceWorker 1.9 introduces a safety model to protect against accidental data loss or unwanted file mutations.
+
+Safety Levels:
+- **ReadOnly**: Safe information retrieval (e.g., Get Health, Get Projects).
+- **SafeWrite**: Low-risk registration or metadata changes (e.g., Register Project).
+- **GeneratedFileWrite**: Writing to `.ai-context` or configured mirrors (e.g., Scan Project, Export Docs).
+- **DestructiveGeneratedCleanup**: Deleting confidently identified orphaned/stale generated files (e.g., Cleanup Generated). Requires confirmation.
+- **DangerousDisabled**: Actions that are currently restricted or require manual CLI execution (e.g., Force Cleanup).
+
+Dashboard components use the `DashboardActionService` to evaluate if an action is allowed based on the project state and the required safety level.
 
 Architecture rules currently enforced:
 
@@ -110,7 +126,8 @@ Architecture rules currently enforced:
 - UI does not reference `SourceWorker.Infrastructure`.
 - UI does not reference `SourceWorker.Scanner`.
 - UI does not read files directly.
-- No dashboard write actions yet.
+- Dashboard write actions enabled (register, scan, export, cleanup).
+- Safety level model enforces action permissions.
 
 ## Localite Table-Backed Storage
 
@@ -322,6 +339,7 @@ Cleanup behavior:
 - `GET /api/projects/{id}/packs` (Protected)
 - `GET /api/projects/{id}/packs/{packId}` (Protected)
 - `GET /api/projects/{id}/packs/{packId}/content` (Protected)
+- `POST /api/projects/{id}/packs/{packId}/export-default` (Protected)
 - `POST /api/projects/{id}/exports/{exportProfileId}/run` (Protected)
 
 Protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
@@ -332,9 +350,25 @@ Current tests cover:
 - ... (existing coverage)
 - Local API security (public vs protected, token validation)
 - CORS origin validation
-- Project filtering and search
-- Job list and project-specific jobs
+- Project filtering, search, and registration logic
+- Job management: starting scans, tracking progress, and log retrieval
+- Export flows: documentation mirrors and default pack exports
+- Artifact cleanup: preview generation and safe deletion logic
 - ApiClient token provider and connection diagnostics
+
+## Verification Policy
+
+To ensure stability while maintaining development speed, follow this targeted verification policy:
+
+- **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
+- **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
+- **Scanner changes**: Run scanner tests and only related application/CLI tests.
+- **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
+- **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
+- **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
+- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
+- **Docs-only changes**: No test run required unless docs generation code changed.
+- **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.
 
 ## Latest Verification
 
@@ -349,8 +383,7 @@ dotnet run --project ui/SourceWorker.Dashboard
 
 ## Next Recommended Step
 
-MVP 1.8 established the security and dashboard foundation. The next step is MVP 1.9 fully enabled dashboard write actions:
-- Enable scan project button with real job progress.
-- Enable cleanup generated with confirmation.
-- Enable export docs with status.
-- Add project registration form in dashboard.
+MVP 1.9 enabled dashboard write actions and established a safety model. The next step is MVP 2.0:
+- AI provider integration foundation.
+- Context pack refinement for LLM consumption.
+- MAUI Blazor Hybrid host exploration.

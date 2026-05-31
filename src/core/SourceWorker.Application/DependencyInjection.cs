@@ -37,7 +37,8 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetPackQuery, SourceWorker.Domain.ContextPackManifest?>, GetPackQueryHandler>();
         services.AddScoped<IRequestHandler<ReadPackContentQuery, string>, ReadPackContentQueryHandler>();
         services.AddScoped<IRequestHandler<ExportPackCommand, string>, ExportPackCommandHandler>();
-        services.AddScoped<IRequestHandler<ExportDocsCommand, SourceWorker.Domain.ExportRun>, ExportDocsCommandHandler>();
+        services.AddScoped<IRequestHandler<ExportPackDefaultCommand, SourceWorker.Contracts.ExportPackResponse>, ExportPackDefaultCommandHandler>();
+        services.AddScoped<IRequestHandler<ExportDocsCommand, SourceWorker.Contracts.RunExportResponse>, ExportDocsCommandHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

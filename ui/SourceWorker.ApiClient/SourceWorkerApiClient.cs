@@ -16,11 +16,28 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     public async Task<IReadOnlyList<ProjectSummaryDto>> GetProjectsSummaryAsync(bool includeTestProjects = false, bool includeMissing = false, string? search = null, int? limit = null, CancellationToken cancellationToken = default)
     {
-        var query = $"/api/projects?includeTestProjects={includeTestProjects}&includeMissing={includeMissing}";
+        var query = $"/api/projects?includeTestProjects={includeTestProjects.ToString().ToLower()}&includeMissing={includeMissing.ToString().ToLower()}";
         if (!string.IsNullOrEmpty(search)) query += $"&search={Uri.EscapeDataString(search)}";
         if (limit.HasValue) query += $"&limit={limit.Value}";
         
         return await GetAsync<ProjectSummaryDto[]>(query, cancellationToken) ?? [];
+    }
+
+    public async Task<ProjectDto> RegisterProjectAsync(string path, string? name = null, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/projects", new { path, name }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<CreateProjectResponse>(JsonOptions, cancellationToken);
+        return result?.Project ?? throw new InvalidOperationException("Failed to register project.");
+    }
+
+    public async Task<StartScanResponse> StartProjectScanAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/projects/{projectId}/scan", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<StartScanResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Failed to start scan.");
     }
 
     public Task<ApiRuntimeInfoDto> GetRuntimeInfoAsync(CancellationToken cancellationToken = default)
@@ -78,8 +95,16 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public Task<ArtifactLifecycleReport> GetArtifactsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<ArtifactLifecycleReport>($"/api/projects/{projectId}/artifacts", cancellationToken);
 
-    public Task<CleanupPreviewReport> GetCleanupPreviewAsync(Guid projectId, CancellationToken cancellationToken = default)
-        => Required<CleanupPreviewReport>($"/api/projects/{projectId}/cleanup-preview", cancellationToken);
+    public Task<CleanupPreviewDto> GetCleanupPreviewAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<CleanupPreviewDto>($"/api/projects/{projectId}/cleanup-preview", cancellationToken);
+
+    public async Task<CleanupGeneratedResponse> CleanupGeneratedAsync(Guid projectId, bool dryRun = false, bool force = false, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/cleanup-generated", new { dryRun, force }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<CleanupGeneratedResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Failed to cleanup.");
+    }
 
     public async Task<IReadOnlyList<CodeSymbol>> GetSymbolsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => await GetAsync<CodeSymbol[]>($"/api/projects/{projectId}/symbols", cancellationToken) ?? [];
@@ -126,12 +151,20 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await httpClient.GetStringAsync($"/api/projects/{projectId}/packs/{Uri.EscapeDataString(packId)}/content", cancellationToken);
     }
 
-    public async Task<ExportRun> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default)
+    public async Task<ExportPackResponse> ExportPackToDefaultAsync(Guid projectId, string packId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/projects/{projectId}/packs/{Uri.EscapeDataString(packId)}/export-default", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ExportPackResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Failed to export pack.");
+    }
+
+    public async Task<RunExportResponse> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default)
     {
         await ApplyTokenAsync();
         using var response = await httpClient.PostAsync($"/api/projects/{projectId}/exports/{Uri.EscapeDataString(exportProfileId)}/run", null, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ExportRun>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Export response was empty.");
+        return await response.Content.ReadFromJsonAsync<RunExportResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Export response was empty.");
     }
 
     private async Task<T> Required<T>(string path, CancellationToken cancellationToken)

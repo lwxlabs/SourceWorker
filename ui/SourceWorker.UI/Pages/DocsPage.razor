@@ -1,8 +1,42 @@
 @page "/projects/{ProjectId:guid}/docs"
 
-<h1>Backend Docs</h1>
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+@inject DashboardActionService Actions
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Backend Docs</h1>
+    @{ var availability = Actions.GetAvailability(DashboardActionKind.ExportDocs); }
+    <button class="btn btn-outline-primary" @onclick="ExportDocs" disabled="@(!availability.IsEnabled || exporting)" title="@availability.DisabledReason">
+        @if (exporting)
+        {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        }
+        <i class="bi bi-box-arrow-up me-1"></i> Export to instructions/Result/Backend
+    </button>
+</div>
+
 <BackendDocsViewer ProjectId="@ProjectId" />
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
+    private bool exporting;
+
+    private async Task ExportDocs()
+    {
+        exporting = true;
+        try
+        {
+            var result = await Api.RunExportAsync(ProjectId, "backend-docs-compact");
+            Toast.ShowSuccess($"Exported {result.Files.Count} files to {result.OutputPath}");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to export docs: {ex.Message}");
+        }
+        finally
+        {
+            exporting = false;
+        }
+    }
 }

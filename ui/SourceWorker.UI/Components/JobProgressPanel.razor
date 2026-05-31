@@ -1,0 +1,121 @@
+﻿@inject ISourceWorkerApiClient Api
+@implements IDisposable
+
+@if (job != null)
+{
+    <div class="card mb-3 @GetStatusBorderClass()">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">@job.Type Job: @job.Id</h6>
+                <span class="badge @GetStatusBadgeClass()">@job.Status</span>
+            </div>
+            
+            @{ var progressStyle = $"width: {job.ProgressPercent}%"; }
+            <div class="progress mb-2" style="height: 20px;">
+                <div class="progress-bar @(job.Status == "Running" ? "progress-bar-striped progress-bar-animated" : "")" 
+                     role="progressbar" 
+                     style="width: @(job.ProgressPercent.ToString() + "%")"
+                     aria-valuenow="@job.ProgressPercent" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                    @(job.ProgressPercent)%
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between small text-muted">
+                <span>@job.CurrentStep</span>
+                <span>@job.Message</span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(job.ErrorMessage))
+            {
+                <div class="alert alert-danger mt-2 py-1 px-2 small">@job.ErrorMessage</div>
+            }
+
+            @if (showLogs && job.Logs.Any())
+            {
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-link p-0 text-decoration-none" @onclick="() => logsExpanded = !logsExpanded">
+                        @(logsExpanded ? "Hide Logs" : "Show Logs")
+                    </button>
+                    @if (logsExpanded)
+                    {
+                        <pre class="bg-light p-2 small mt-1 border" style="max-height: 200px; overflow-y: auto; font-family: monospace;">@string.Join(Environment.NewLine, job.Logs)</pre>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid JobId { get; set; }
+    [Parameter] public EventCallback OnCompleted { get; set; }
+    [Parameter] public bool showLogs { get; set; } = true;
+
+    private JobStatusDto? job;
+    private bool logsExpanded;
+    private System.Timers.Timer? timer;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (JobId != Guid.Empty)
+        {
+            await Refresh();
+            StartPolling();
+        }
+    }
+
+    private void StartPolling()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+        
+        timer = new System.Timers.Timer(1500);
+        timer.Elapsed += async (s, e) => await InvokeAsync(Refresh);
+        timer.AutoReset = true;
+        timer.Enabled = true;
+    }
+
+    private async Task Refresh()
+    {
+        try
+        {
+            job = await Api.GetJobStatusAsync(JobId);
+            if (job != null && (job.Status == "Completed" || job.Status == "Failed" || job.Status == "Cancelled"))
+            {
+                timer?.Stop();
+                await OnCompleted.InvokeAsync();
+            }
+            StateHasChanged();
+        }
+        catch
+        {
+            timer?.Stop();
+        }
+    }
+
+    private string GetProgressStyle() => $"width: {job?.ProgressPercent ?? 0}%";
+
+    private string GetStatusBorderClass() => job?.Status switch
+    {
+        "Completed" => "border-success",
+        "Failed" => "border-danger",
+        "Running" => "border-primary",
+        _ => "border-secondary"
+    };
+
+    private string GetStatusBadgeClass() => job?.Status switch
+    {
+        "Completed" => "bg-success",
+        "Failed" => "bg-danger",
+        "Running" => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    public void Dispose()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+    }
+}

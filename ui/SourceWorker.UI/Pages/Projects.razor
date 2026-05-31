@@ -4,6 +4,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
     <h1>Projects</h1>
     <div style="display: flex; gap: 1rem; align-items: center;">
+        <button class="btn btn-primary btn-sm" @onclick="() => showRegistration = true">Register Project</button>
         <input type="text" @bind="search" placeholder="Search..." style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;" @onkeyup="HandleSearch" />
         <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 4px;">
             <input type="checkbox" @bind="includeTestProjects" @onclick="() => { includeTestProjects = !includeTestProjects; return LoadProjects(); }" /> Tests
@@ -13,6 +14,11 @@
         </label>
     </div>
 </div>
+
+@if (showRegistration)
+{
+    <ProjectRegistrationForm OnSuccess="HandleRegistrationSuccess" OnCancel="() => showRegistration = false" />
+}
 
 @if (loading)
 {
@@ -29,6 +35,7 @@ else
     private bool includeTestProjects = false;
     private bool includeMissing = false;
     private bool loading = true;
+    private bool showRegistration = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -50,6 +57,12 @@ else
         {
             loading = false;
         }
+    }
+
+    private async Task HandleRegistrationSuccess()
+    {
+        showRegistration = false;
+        await LoadProjects();
     }
 
     private async Task HandleSearch(KeyboardEventArgs e)

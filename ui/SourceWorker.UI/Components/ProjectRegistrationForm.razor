@@ -1,0 +1,78 @@
+﻿@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+@inject DashboardActionService Actions
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Register New Project</h5>
+    </div>
+    <div class="card-body">
+        @{ var availability = Actions.GetAvailability(DashboardActionKind.RegisterProject); }
+        @if (!availability.IsEnabled)
+        {
+            <div class="alert alert-warning">@availability.DisabledReason</div>
+        }
+        
+        <div class="mb-3">
+            <label class="form-label">Local Project Path</label>
+            <input type="text" class="form-control" @bind="path" placeholder="C:\path\to\project" disabled="@(!availability.IsEnabled)" />
+            <div class="form-text">The path must be accessible by the Local API process.</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Project Name (Optional)</label>
+            <input type="text" class="form-control" @bind="name" placeholder="My Project" disabled="@(!availability.IsEnabled)" />
+        </div>
+        
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="alert alert-danger">@error</div>
+        }
+
+        <div class="d-flex justify-content-between">
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+            <button class="btn btn-primary" @onclick="Register" disabled="@(!availability.IsEnabled || string.IsNullOrWhiteSpace(path) || registering)">
+                @if (registering)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                Register Project
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnSuccess { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string path = "";
+    private string name = "";
+    private string? error;
+    private bool registering;
+
+    private async Task Register()
+    {
+        error = null;
+        registering = true;
+        try
+        {
+            await Api.RegisterProjectAsync(path, string.IsNullOrWhiteSpace(name) ? null : name);
+            Toast.ShowSuccess($"Project registered: {path}");
+            await OnSuccess.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            Toast.ShowError($"Failed to register project: {ex.Message}");
+        }
+        finally
+        {
+            registering = false;
+        }
+    }
+
+    private async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}

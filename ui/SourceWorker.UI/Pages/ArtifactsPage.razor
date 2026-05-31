@@ -1,7 +1,33 @@
 @page "/projects/{ProjectId:guid}/artifacts"
 @inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+@inject DashboardActionService Actions
 
 <h1>Artifacts</h1>
+
+<div class="mb-4 d-flex align-items-center gap-2">
+    @{ var previewAvail = Actions.GetAvailability(DashboardActionKind.CleanupPreview); }
+    <button class="btn btn-outline-primary" @onclick="LoadPreview" disabled="@(!previewAvail.IsEnabled || loadingPreview)" title="@previewAvail.DisabledReason">
+        @if (loadingPreview)
+        {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        }
+        Run Cleanup Preview
+    </button>
+    
+    @if (preview != null && preview.Candidates.Any(c => c.SafeToDelete))
+    {
+        var cleanupAvail = Actions.GetAvailability(DashboardActionKind.CleanupGenerated);
+        <button class="btn btn-danger" @onclick="() => showConfirmCleanup = true" disabled="@(!cleanupAvail.IsEnabled)" title="@cleanupAvail.DisabledReason">Cleanup Generated</button>
+    }
+</div>
+
+@if (preview != null)
+{
+    <div class="mb-4">
+        <CleanupPreviewPanel Preview="@preview" />
+    </div>
+}
 
 <ArtifactStatusCard Report="@report" />
 
@@ -19,9 +45,59 @@
 @code {
     [Parameter] public Guid ProjectId { get; set; }
     private ArtifactLifecycleReport? report;
+    private CleanupPreviewDto? preview;
+    private bool loadingPreview;
+    private bool showConfirmCleanup;
 
     protected override async Task OnParametersSetAsync()
     {
+        await LoadArtifacts();
+    }
+
+    private async Task LoadArtifacts()
+    {
         report = await Api.GetArtifactsAsync(ProjectId);
     }
+
+    private async Task LoadPreview()
+    {
+        loadingPreview = true;
+        try
+        {
+            preview = await Api.GetCleanupPreviewAsync(ProjectId);
+            Toast.ShowInfo("Cleanup preview loaded.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to load cleanup preview: {ex.Message}");
+        }
+        finally
+        {
+            loadingPreview = false;
+        }
+    }
+
+    private async Task RunCleanup()
+    {
+        try
+        {
+            var result = await Api.CleanupGeneratedAsync(ProjectId, dryRun: false, force: false);
+            Toast.ShowSuccess($"Cleanup completed. Deleted {result.DeletedFiles.Count} files.");
+            preview = null;
+            await LoadArtifacts();
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to run cleanup: {ex.Message}");
+        }
+    }
 }
+
+<ConfirmActionDialog 
+    @bind-IsVisible="showConfirmCleanup"
+    Title="Confirm Cleanup"
+    ConfirmText="Run Cleanup"
+    ConfirmButtonClass="btn-danger"
+    OnConfirm="RunCleanup">
+    <DangerousActionWarning Message="@($"This will delete {preview?.SafeToDeleteCount} files identified as safe to remove (orphaned or deprecated). Manually modified files and missing records will NOT be deleted.")" />
+</ConfirmActionDialog>

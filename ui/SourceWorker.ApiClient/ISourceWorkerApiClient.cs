@@ -5,6 +5,8 @@ public interface ISourceWorkerApiClient
     Task<HealthResponse?> GetHealthAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProjectDto>> GetProjectsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProjectSummaryDto>> GetProjectsSummaryAsync(bool includeTestProjects = false, bool includeMissing = false, string? search = null, int? limit = null, CancellationToken cancellationToken = default);
+    Task<ProjectDto> RegisterProjectAsync(string path, string? name = null, CancellationToken cancellationToken = default);
+    Task<StartScanResponse> StartProjectScanAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<ApiRuntimeInfoDto> GetRuntimeInfoAsync(CancellationToken cancellationToken = default);
     Task<ApiSecurityInfoDto> GetSecurityInfoAsync(CancellationToken cancellationToken = default);
     Task<string> RotateTokenAsync(CancellationToken cancellationToken = default);
@@ -19,7 +21,8 @@ public interface ISourceWorkerApiClient
     Task<ContextFreshnessReport> GetContextStatusAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<StorageInfo> GetStorageInfoAsync(CancellationToken cancellationToken = default);
     Task<ArtifactLifecycleReport> GetArtifactsAsync(Guid projectId, CancellationToken cancellationToken = default);
-    Task<CleanupPreviewReport> GetCleanupPreviewAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<CleanupPreviewDto> GetCleanupPreviewAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<CleanupGeneratedResponse> CleanupGeneratedAsync(Guid projectId, bool dryRun = false, bool force = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CodeSymbol>> GetSymbolsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CodeFlow>> GetFlowsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RouteInfo>> GetRoutesAsync(Guid projectId, CancellationToken cancellationToken = default);
@@ -33,7 +36,8 @@ public interface ISourceWorkerApiClient
     Task<IReadOnlyList<ContextPackManifest>> GetPacksAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<ContextPackManifest?> GetPackAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
     Task<string> GetPackContentAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
-    Task<ExportRun> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default);
+    Task<ExportPackResponse> ExportPackToDefaultAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
+    Task<RunExportResponse> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default);
 }
 
 public interface ITokenProvider

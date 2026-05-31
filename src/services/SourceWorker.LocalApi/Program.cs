@@ -160,10 +160,10 @@ app.MapGet("/api/projects/{id:guid}/artifacts", async (Guid id, IRequestFlow flo
     => Results.Ok(await flow.Send(new GetArtifactsQuery(id), cancellationToken)));
 
 app.MapGet("/api/projects/{id:guid}/cleanup-preview", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
-    => Results.Ok(await flow.Send(new GetCleanupPreviewQuery(id), cancellationToken)));
+    => Results.Ok((await flow.Send(new GetCleanupPreviewQuery(id), cancellationToken)).ToDto()));
 
-app.MapPost("/api/projects/{id:guid}/cleanup-generated", async (Guid id, CleanupGeneratedRequest request, IRequestFlow flow, CancellationToken cancellationToken)
-    => Results.Ok(await flow.Send(new CleanupGeneratedCommand(id, request.DryRun, request.Force), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/cleanup-generated", async (Guid id, SourceWorker.Contracts.CleanupGeneratedRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok((await flow.Send(new CleanupGeneratedCommand(id, request.DryRun, request.Force), cancellationToken)).ToDto()));
 
 app.MapGet("/api/projects/{id:guid}/symbols", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetSymbolsQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/flows", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetFlowsQuery(id), cancellationToken)));
@@ -183,9 +183,9 @@ app.MapGet("/api/projects/{id:guid}/packs/{packId}", async (Guid id, string pack
     return pack is null ? Results.NotFound() : Results.Ok(pack);
 });
 app.MapGet("/api/projects/{id:guid}/packs/{packId}/content", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadPackContentQuery(id, packId), cancellationToken), "text/markdown"));
+app.MapPost("/api/projects/{id:guid}/packs/{packId}/export-default", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new ExportPackDefaultCommand(id, packId), cancellationToken)));
 app.MapPost("/api/projects/{id:guid}/exports/{exportProfileId}/run", async (Guid id, string exportProfileId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new ExportDocsCommand(id, exportProfileId), cancellationToken)));
 
 app.Run();
 
 public partial class Program;
-public sealed record CleanupGeneratedRequest(bool DryRun, bool Force);

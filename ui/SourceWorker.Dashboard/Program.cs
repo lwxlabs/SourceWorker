@@ -1,5 +1,6 @@
 using SourceWorker.Dashboard.Components;
 using SourceWorker.ApiClient;
+using SourceWorker.UI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,8 @@ builder.Services.AddSourceWorkerApiClient(options =>
 {
     builder.Configuration.GetSection("SourceWorkerApi").Bind(options);
 });
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<DashboardActionService>();
 
 var app = builder.Build();
 

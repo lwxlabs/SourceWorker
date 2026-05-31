@@ -304,7 +304,7 @@ switch (args[0].ToLowerInvariant())
         var project = await flow.Send(new AddProjectCommand(args[1]));
         var run = await flow.Send(new ExportDocsCommand(project.Id, args[2]));
         Console.WriteLine($"Exported docs: {run.ExportProfileId}");
-        foreach (var file in run.ExportedFiles) Console.WriteLine(file);
+        foreach (var file in run.Files) Console.WriteLine(file);
         return 0;
     }
     default:

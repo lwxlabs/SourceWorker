@@ -57,7 +57,21 @@ dotnet run --project src/services/SourceWorker.LocalApi
 dotnet run --project ui/SourceWorker.Dashboard
 ```
 
-The dashboard is read-only for MVP 1.7. It shows projects, health, storage, doctor/context freshness, artifacts, outputs, packs, context files, generated backend docs, symbols, routes, flows, tests, and settings. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
+The UI is interactive for MVP 1.9. It allows registering projects, scanning projects with real-time job progress, exporting docs and packs, previewing context cleanup, and performing safe cleanup with confirmation. It uses a safety-level model to protect destructive actions. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
+
+## Verification Policy
+
+To ensure stability while maintaining development speed, follow this targeted verification policy:
+
+- **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
+- **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
+- **Scanner changes**: Run scanner tests and only related application/CLI tests.
+- **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
+- **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
+- **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
+- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
+- **Docs-only changes**: No test run required unless docs generation code changed.
+- **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.
 
 ## Scanner MVP
 

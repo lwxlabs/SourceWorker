@@ -165,7 +165,7 @@ Routes:
 - `/projects/{projectId}/artifacts`
 - `/settings`
 
-The UI is read-only and Local API-driven. It does not access Localite, scanner, infrastructure, application services, or project files directly.
+The UI is interactive for MVP 1.9. It supports project registration, scanning with job progress, doc/pack exports, and safe cleanup with confirmation. It is Local API-driven and does not access Localite, scanner, infrastructure, application services, or project files directly.
 
 ## Generated Context
 
@@ -217,3 +217,17 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 `backend-docs-compact` uses scan data, imported instructions, detected routes, service registrations, configuration usage, tests, background workers, and rule-based flows. Flow diagrams are generated as simple Mermaid flowcharts for high-confidence flows.
 
 `.ai-context/docs/backend/` is the canonical generated documentation location. `instructions/Result/Backend/` is an external Markdown mirror/export target.
+
+## Verification Policy
+
+To ensure stability while maintaining development speed, follow this targeted verification policy:
+
+- **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
+- **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
+- **Scanner changes**: Run scanner tests and only related application/CLI tests.
+- **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
+- **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
+- **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
+- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
+- **Docs-only changes**: No test run required unless docs generation code changed.
+- **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.

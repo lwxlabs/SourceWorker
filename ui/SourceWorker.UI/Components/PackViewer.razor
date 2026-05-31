@@ -1,3 +1,7 @@
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+@inject DashboardActionService Actions
+
 <Cards Title="Pack">
     @if (Pack is null)
     {
@@ -5,7 +9,17 @@
     }
     else
     {
-        <h3>@Pack.Pack.Name</h3>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">@Pack.Pack.Name</h3>
+            @{ var availability = Actions.GetAvailability(DashboardActionKind.ExportPack); }
+            <button class="btn btn-primary btn-sm" @onclick="ExportPack" disabled="@(!availability.IsEnabled || exporting)" title="@availability.DisabledReason">
+                @if (exporting)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                <i class="bi bi-file-earmark-arrow-down me-1"></i> Export to .ai-context/packs
+            </button>
+        </div>
         <p>@Pack.Pack.Description</p>
         <span class="pill @(Pack.IsValid ? "ok" : "warn")">@(Pack.IsValid ? "valid" : "missing files")</span>
         @foreach (var item in Pack.Pack.Items)
@@ -20,6 +34,28 @@
 </Cards>
 
 @code {
+    [Parameter] public Guid ProjectId { get; set; }
     [Parameter] public ContextPackManifest? Pack { get; set; }
     [Parameter] public string? Content { get; set; }
+
+    private bool exporting;
+
+    private async Task ExportPack()
+    {
+        if (Pack == null) return;
+        exporting = true;
+        try
+        {
+            var result = await Api.ExportPackToDefaultAsync(ProjectId, Pack.Pack.Id);
+            Toast.ShowSuccess($"Pack exported to {result.OutputPath}");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to export pack: {ex.Message}");
+        }
+        finally
+        {
+            exporting = false;
+        }
+    }
 }

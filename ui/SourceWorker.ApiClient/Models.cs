@@ -4,6 +4,7 @@ namespace SourceWorker.ApiClient;
 
 public sealed record HealthResponse(string Status, string Service);
 public sealed record ProjectDto(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
+public sealed record CreateProjectResponse(ProjectDto Project);
 public sealed record LocalStorageSchemaInfo(string Provider, string Mode, string StoragePath, int SchemaVersion, DateTimeOffset CreatedUtc, DateTimeOffset LastMigratedUtc, string AppStorageFormatVersion);
 public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount, int CodeFlowCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount, int TestInfoCount);
 public sealed record DoctorReport(string ProjectRoot, bool ProjectRootFound, bool GitRepoFound, IReadOnlyList<string> SolutionFiles, IReadOnlyList<string> ProjectFiles, IReadOnlyList<string> TestProjects, bool ContextFolderExists, bool ImportedInstructionsFound, IReadOnlyList<string> Recipes, IReadOnlyList<ProjectInstructionSourcePath> MissingSourcePaths, bool IsContextStale, DateTimeOffset? LastScanTime, IReadOnlyList<string> Warnings);
@@ -78,3 +79,42 @@ public sealed record ApiErrorInfo(string Message, string? Code = null, string? D
 public sealed record ApiConnectionStatus(bool Connected, string? Error = null, ApiRuntimeInfoDto? Runtime = null);
 
 public sealed record JobStatusDto(Guid Id, Guid? ProjectId, string Type, string Status, int ProgressPercent, string? Message, string? CurrentStep, string? ErrorMessage, IReadOnlyList<string> Logs);
+
+public sealed record StartScanResponse(Guid JobId);
+public sealed record RunExportResponse(string ExportProfileId, string OutputPath, IReadOnlyList<string> Files);
+public sealed record ExportPackResponse(string PackId, string OutputPath, bool Success);
+
+public sealed record CleanupCandidateDto(string RelativePath, string Kind, bool SafeToDelete);
+public sealed record CleanupPreviewDto(Guid ProjectId, IReadOnlyList<CleanupCandidateDto> Candidates, int SafeToDeleteCount, string RecommendedCommand);
+public sealed record CleanupGeneratedResponse(Guid ProjectId, bool DryRun, IReadOnlyList<string> DeletedFiles, IReadOnlyList<string> SkippedFiles);
+
+public enum DashboardActionKind
+{
+    ScanProject,
+    RunRecipe,
+    ExportDocs,
+    ExportPack,
+    CleanupPreview,
+    CleanupGenerated,
+    CleanupForce,
+    RegisterProject
+}
+
+public enum DashboardActionSafetyLevel
+{
+    ReadOnly,
+    SafeWrite,
+    GeneratedFileWrite,
+    DestructiveGeneratedCleanup,
+    DangerousDisabled
+}
+
+public sealed record DashboardActionAvailability(
+    DashboardActionKind Kind,
+    DashboardActionSafetyLevel SafetyLevel,
+    bool IsEnabled,
+    string? DisabledReason = null,
+    DashboardActionRequirement[]? Requirements = null
+);
+
+public sealed record DashboardActionRequirement(string Key, string Description, bool IsMet);

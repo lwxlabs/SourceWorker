@@ -12,6 +12,11 @@
 @if (project is not null)
 {
     <p class="path" style="margin-bottom: 1rem; color: #666;">@project.RootPath</p>
+    
+    <div class="mb-4">
+        <ScanProjectButton ProjectId="@ProjectId" OnScanCompleted="Refresh" />
+    </div>
+
     <nav class="tabs">
         <a href="/projects/@ProjectId/context">Context</a>
         <a href="/projects/@ProjectId/docs">Docs</a>

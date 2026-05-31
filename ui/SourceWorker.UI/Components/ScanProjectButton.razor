@@ -1,0 +1,60 @@
+﻿@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+@inject DashboardActionService Actions
+
+<div class="mb-3">
+    @if (jobId == Guid.Empty)
+    {
+        var availability = Actions.GetAvailability(DashboardActionKind.ScanProject);
+        <button class="btn btn-primary" @onclick="StartScan" disabled="@(!availability.IsEnabled || scanning)" title="@availability.DisabledReason">
+            @if (scanning)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            }
+            <i class="bi bi-play-fill me-1"></i> Scan Project
+        </button>
+        @if (!availability.IsEnabled && !string.IsNullOrEmpty(availability.DisabledReason))
+        {
+            <div class="small text-danger mt-1">@availability.DisabledReason</div>
+        }
+    }
+    else
+    {
+        <JobProgressPanel JobId="@jobId" OnCompleted="HandleCompleted" />
+    }
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public EventCallback OnScanCompleted { get; set; }
+
+    private Guid jobId = Guid.Empty;
+    private bool scanning;
+
+    private async Task StartScan()
+    {
+        scanning = true;
+        try
+        {
+            var response = await Api.StartProjectScanAsync(ProjectId);
+            jobId = response.JobId;
+            Toast.ShowInfo("Scan job started.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to start scan: {ex.Message}");
+        }
+        finally
+        {
+            scanning = false;
+        }
+    }
+
+    private async Task HandleCompleted()
+    {
+        Toast.ShowSuccess("Scan completed successfully.");
+        await OnScanCompleted.InvokeAsync();
+        // Keep the job panel for a few seconds then clear it?
+        // Or just leave it until refresh.
+    }
+}

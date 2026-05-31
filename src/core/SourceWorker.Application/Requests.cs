@@ -33,7 +33,8 @@ public sealed record GetPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<Cont
 public sealed record GetPackQuery(Guid ProjectId, string PackId) : IRequest<ContextPackManifest?>;
 public sealed record ReadPackContentQuery(Guid ProjectId, string PackId) : IRequest<string>;
 public sealed record ExportPackCommand(Guid ProjectId, string PackId, string OutputFile) : IRequest<string>;
-public sealed record ExportDocsCommand(Guid ProjectId, string ExportProfileId) : IRequest<ExportRun>;
+public sealed record ExportPackDefaultCommand(Guid ProjectId, string PackId) : IRequest<ExportPackResponse>;
+public sealed record ExportDocsCommand(Guid ProjectId, string ExportProfileId) : IRequest<RunExportResponse>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -311,10 +312,51 @@ public sealed class ExportPackCommandHandler(IProjectRepository projects, IConte
         return full;
     }
 }
-public sealed class ExportDocsCommandHandler(IProjectRepository projects, IExportRunner runner) : IRequestHandler<ExportDocsCommand, ExportRun> { public async Task<ExportRun> Handle(ExportDocsCommand request, CancellationToken cancellationToken) => await runner.RunAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.ExportProfileId, cancellationToken); }
+
+public sealed class ExportPackDefaultCommandHandler(IProjectRepository projects, IContextPackReader reader) : IRequestHandler<ExportPackDefaultCommand, ExportPackResponse>
+{
+    public async Task<ExportPackResponse> Handle(ExportPackDefaultCommand request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var content = await reader.ReadPackContentAsync(project, request.PackId, cancellationToken);
+        var dir = Path.Combine(project.RootPath, ".ai-context", "packs");
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        var fileName = $"{request.PackId}.md";
+        var fullPath = Path.Combine(dir, fileName);
+        await File.WriteAllTextAsync(fullPath, content, cancellationToken);
+        return new ExportPackResponse(request.PackId, fullPath, true);
+    }
+}
+
+public sealed class ExportDocsCommandHandler(IProjectRepository projects, IExportRunner runner) : IRequestHandler<ExportDocsCommand, RunExportResponse> 
+{ 
+    public async Task<RunExportResponse> Handle(ExportDocsCommand request, CancellationToken cancellationToken) 
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var run = await runner.RunAsync(project, request.ExportProfileId, cancellationToken);
+        return new RunExportResponse(run.ExportProfileId, "instructions/Result/Backend", run.ExportedFiles);
+    }
+}
 
 public static class ProjectMappings
 {
     public static ProjectDto ToDto(this Project project) => new(project.Id, project.Name, project.RootPath, project.CreatedAt, project.LastScannedAt);
     public static JobStatusDto ToDto(this WorkerJob job) => new(job.Id, job.ProjectId, job.Type, job.Status, job.ProgressPercent, job.Message, job.CurrentStep, job.ErrorMessage, job.Logs ?? []);
+
+    public static CleanupPreviewDto ToDto(this CleanupPreviewReport report) => new(
+        report.ProjectId,
+        report.SafeDeleteFiles.Select(f => new CleanupCandidateDto(f, "Orphaned/Deprecated", true))
+            .Concat(report.StaleTrackedArtifacts.Select(f => new CleanupCandidateDto(f, "Stale", false)))
+            .Concat(report.MissingTrackedArtifacts.Select(f => new CleanupCandidateDto(f, "Missing Record", false)))
+            .ToArray(),
+        report.SafeDeleteFiles.Count,
+        $"cleanup-generated {report.ProjectId}"
+    );
+
+    public static CleanupGeneratedResponse ToDto(this CleanupResult result) => new(
+        result.ProjectId,
+        result.DryRun,
+        result.DeletedFiles,
+        result.SkippedFiles
+    );
 }
