@@ -1,8 +1,8 @@
 # SourceWorker
 
-SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a first read-only Blazor dashboard over the Local API.
+SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a Blazor dashboard over a hardened Local API with Bearer token authentication.
 
-No AI provider, desktop UI, MCP server, cloud sync, licensing, or secret storage is included yet.
+No AI provider, desktop UI, MCP server, cloud sync, or licensing is included yet.
 
 ## Architecture
 

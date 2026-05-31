@@ -205,3 +205,42 @@ public sealed record ContextBrowserFile(string RelativePath, string AbsolutePath
 public sealed record ContextBrowserSummary(Guid ProjectId, IReadOnlyList<ContextBrowserFile> Files, IReadOnlyList<ProjectRecipe> Recipes, IReadOnlyList<CodeFlow> Flows, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<TodoItem> Todos, IReadOnlyList<GeneratedArtifact> ProblemArtifacts);
 public sealed record ContextBrowserQueryResult(string Query, IReadOnlyList<ContextBrowserSearchHit> Hits);
 public sealed record ContextBrowserSearchHit(string RelativePath, int LineNumber, string Preview);
+
+public sealed class LocalApiRuntimeOptions
+{
+    public string? Host { get; set; } = "localhost";
+    public int? Port { get; set; }
+    public bool UseRandomPort { get; set; } = false;
+    public bool RequireToken { get; set; } = true;
+    public string[]? AllowedOrigins { get; set; }
+}
+
+public sealed record LocalApiEndpointInfo(
+    string Method,
+    string Path,
+    bool RequiresAuth
+);
+
+public sealed record LocalApiSecurityOptions(
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin
+);
+
+public sealed record LocalApiCorsOptions(
+    string[] AllowedOrigins
+);
+
+public sealed record LocalApiRuntimeState(
+    string SelectedHost,
+    int SelectedPort,
+    string BaseUrl,
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin,
+    int ProcessId,
+    DateTimeOffset StartupUtc,
+    string EnvironmentName
+);

@@ -2,9 +2,17 @@
 
 Date: 2026-05-31
 
-SourceWorker is a local-first project context engine. It intentionally does not include AI providers, MAUI/Desktop UI, MCP, cloud sync, licensing, or terminal agent execution.
+SourceWorker is a local-first project context engine.
 
-MVP 1.7 adds the first read-only Blazor dashboard. SourceWorker now has a browser UI over the Local API for projects, context health, generated docs, packs, outputs, artifacts, code intelligence, and settings.
+MVP 1.8 Hardening:
+- Local API hardening with Bearer token authentication.
+- Simple local token generation and storage in AppData.
+- CORS hardening allowing configured dashboard origins.
+- Local API runtime/security/version endpoints.
+- Project list filtering (search, include/exclude missing or test projects).
+- Project summary DTO with freshness, technology, route, and flow counts.
+- Dashboard improvements: updated settings, project filtering, and job progress.
+- Initial foundation for dashboard write actions (scan button, refresh).
 
 ## Architecture
 
@@ -274,66 +282,59 @@ Cleanup behavior:
 
 ## Local API
 
-- `GET /health`
-- `GET /api/projects`
-- `POST /api/projects`
-- `POST /api/projects/{id}/scan`
-- `GET /api/jobs/{id}`
-- `GET /api/projects/{id}/doctor`
-- `GET /api/projects/{id}/changes`
-- `GET /api/projects/{id}/context-status`
-- `GET /api/projects/{id}/context-files`
-- `GET /api/projects/{id}/scan-runs`
-- `GET /api/projects/{id}/scan-runs/latest`
-- `GET /api/storage/info`
-- `GET /api/projects/{id}/artifacts`
-- `GET /api/projects/{id}/cleanup-preview`
-- `POST /api/projects/{id}/cleanup-generated`
-- `GET /api/projects/{id}/symbols`
-- `GET /api/projects/{id}/flows`
-- `GET /api/projects/{id}/routes`
-- `GET /api/projects/{id}/service-registrations`
-- `GET /api/projects/{id}/configuration-usages`
-- `GET /api/projects/{id}/tests`
-- `GET /api/projects/{id}/context-browser`
-- `GET /api/projects/{id}/context-browser/files`
-- `GET /api/projects/{id}/context-browser/files/{*relativePath}`
-- `GET /api/projects/{id}/context-browser/search?query=...`
-- `GET /api/projects/{id}/outputs`
-- `GET /api/projects/{id}/packs`
-- `GET /api/projects/{id}/packs/{packId}`
-- `GET /api/projects/{id}/packs/{packId}/content`
-- `POST /api/projects/{id}/exports/{exportProfileId}/run`
+- `GET /health` (Public)
+- `GET /api/version` (Public)
+- `GET /api/runtime/info` (Public)
+- `GET /api/runtime/security` (Protected)
+- `POST /api/runtime/token/rotate` (Protected)
+- `GET /api/projects` (Protected)
+  - `includeTestProjects=false`
+  - `includeMissing=false`
+  - `search=`
+  - `limit=50`
+- `POST /api/projects` (Protected)
+- `POST /api/projects/{id}/scan` (Protected)
+- `GET /api/jobs` (Protected)
+- `GET /api/projects/{id}/jobs` (Protected)
+- `GET /api/jobs/{id}` (Protected)
+- `GET /api/jobs/{id}/logs` (Protected)
+- `GET /api/projects/{id}/doctor` (Protected)
+- `GET /api/projects/{id}/changes` (Protected)
+- `GET /api/projects/{id}/context-status` (Protected)
+- `GET /api/projects/{id}/context-files` (Protected)
+- `GET /api/projects/{id}/scan-runs` (Protected)
+- `GET /api/projects/{id}/scan-runs/latest` (Protected)
+- `GET /api/storage/info` (Protected)
+- `GET /api/projects/{id}/artifacts` (Protected)
+- `GET /api/projects/{id}/cleanup-preview` (Protected)
+- `POST /api/projects/{id}/cleanup-generated` (Protected)
+- `GET /api/projects/{id}/symbols` (Protected)
+- `GET /api/projects/{id}/flows` (Protected)
+- `GET /api/projects/{id}/routes` (Protected)
+- `GET /api/projects/{id}/service-registrations` (Protected)
+- `GET /api/projects/{id}/configuration-usages` (Protected)
+- `GET /api/projects/{id}/tests` (Protected)
+- `GET /api/projects/{id}/context-browser` (Protected)
+- `GET /api/projects/{id}/context-browser/files` (Protected)
+- `GET /api/projects/{id}/context-browser/files/{*relativePath}` (Protected)
+- `GET /api/projects/{id}/context-browser/search?query=...` (Protected)
+- `GET /api/projects/{id}/outputs` (Protected)
+- `GET /api/projects/{id}/packs` (Protected)
+- `GET /api/projects/{id}/packs/{packId}` (Protected)
+- `GET /api/projects/{id}/packs/{packId}/content` (Protected)
+- `POST /api/projects/{id}/exports/{exportProfileId}/run` (Protected)
 
-Context browser endpoints are read-only. They only read known generated context/doc files under `.ai-context` and `instructions/Result/Backend`; they do not expose arbitrary filesystem reads.
+Protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
 
 ## Tests
 
 Current tests cover:
-
-- scanner detection and ignore behavior
-- instruction parser behavior
-- source path validation
-- recipe YAML generation
-- context writer output
-- application command flows
-- CLI smoke flow
-- Local API engine endpoints
-- table-backed storage info
-- persisted scan/index/artifact records
-- artifact lifecycle and cleanup dry-run/force behavior
-- manual edit freshness detection
-- lightweight C# code intelligence detection
-- rule-based flow extraction
-- Mermaid generation for high-confidence flows
-- code intelligence persistence
-- CLI symbols/flows/routes/context browser commands
-- Local API code intelligence and context browser endpoints
-- output routing and context pack commands
-- Local API output/pack/export endpoints
-- internal docs plus external docs mirror
-- typed API client deserialization
-- read-only dashboard build and route smoke checks
+- ... (existing coverage)
+- Local API security (public vs protected, token validation)
+- CORS origin validation
+- Project filtering and search
+- Job list and project-specific jobs
+- ApiClient token provider and connection diagnostics
 
 ## Latest Verification
 
@@ -342,46 +343,14 @@ These commands passed:
 ```powershell
 dotnet build SourceWorker.slnx
 dotnet test SourceWorker.slnx --no-build
-dotnet run --project src/services/SourceWorker.Cli -- scan C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- symbols C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- flows C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- routes C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- context-files C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- read-context C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker .ai-context/ai-handoff.md
-dotnet run --project src/services/SourceWorker.Cli -- outputs C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- packs C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- pack-show C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker backend-docs
-dotnet run --project src/services/SourceWorker.Cli -- pack-export C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker backend-docs --out C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker\.ai-context\packs\backend-docs.md
-dotnet run --project src/services/SourceWorker.Cli -- export-docs C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker backend-docs-compact
-dotnet run --project src/services/SourceWorker.Cli -- doctor C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- context-status C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- artifacts C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- cleanup-preview C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- storage-info
 dotnet run --project src/services/SourceWorker.LocalApi
 dotnet run --project ui/SourceWorker.Dashboard
 ```
 
-Latest `storage-info` after verification showed table-backed Localite storage at `C:\Users\louie\AppData\Local\SourceWorker\sourceworker.localite.db`, schema version 1, with persisted project, scan run, indexed file, generated artifact, and instruction records.
-
-Dashboard runtime smoke verification passed on local test ports for:
-
-- `/`
-- `/projects`
-- `/settings`
-- `/projects/{projectId}`
-- `/projects/{projectId}/context`
-- `/projects/{projectId}/docs`
-- `/projects/{projectId}/packs`
-- `/projects/{projectId}/code`
-- `/projects/{projectId}/artifacts`
-
 ## Next Recommended Step
 
-Now that the read-only dashboard exists, the next best step is local API product hardening before write actions or AI:
-
-- local API token placeholder becomes real local token auth;
-- CORS policy for dashboard origins;
-- random/available local API port discovery;
-- dashboard-friendly project filtering so test temp projects do not dominate the project list;
-- then MVP 1.8 dashboard write actions: scan, run recipe, export docs, pack export, cleanup preview/run.
+MVP 1.8 established the security and dashboard foundation. The next step is MVP 1.9 fully enabled dashboard write actions:
+- Enable scan project button with real job progress.
+- Enable cleanup generated with confirmation.
+- Enable export docs with status.
+- Add project registration form in dashboard.

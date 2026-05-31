@@ -9,18 +9,70 @@
     <StorageInfoCard Info="@storage" />
 </div>
 
-<Cards Title="Local API">
-    <div class="list-row"><strong>Base URL</strong><code>@Options.BaseUrl</code></div>
-    <div class="list-row"><strong>Token placeholder</strong><span>@(string.IsNullOrWhiteSpace(Options.BearerToken) ? "not configured" : "configured")</span></div>
+<Cards Title="Local API Runtime">
+    @if (runtime != null)
+    {
+        <div class="list-row"><strong>Base URL</strong><code>@runtime.BaseUrl</code></div>
+        <div class="list-row"><strong>Host / Port</strong><span>@runtime.SelectedHost : @runtime.SelectedPort</span></div>
+        <div class="list-row"><strong>Auth Enabled</strong><span>@(runtime.TokenEnabled ? "Yes" : "No")</span></div>
+        @if (runtime.TokenEnabled)
+        {
+            <div class="list-row"><strong>Token Created</strong><span>@runtime.TokenCreatedUtc?.ToString("g")</span></div>
+        }
+        <div class="list-row"><strong>Process ID</strong><span>@runtime.ProcessId</span></div>
+        <div class="list-row"><strong>Startup</strong><span>@runtime.StartupUtc.ToString("g")</span></div>
+        <div class="list-row"><strong>Environment</strong><span>@runtime.EnvironmentName</span></div>
+    }
+    else
+    {
+        <LoadingState />
+    }
+</Cards>
+
+<Cards Title="Security & Origins">
+    @if (runtime != null)
+    {
+        <div class="list-row"><strong>Dashboard Origin</strong><span>@(runtime.DashboardOrigin ?? "none")</span></div>
+        <div class="list-row"><strong>Allowed Origins</strong>
+            <div style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                @foreach (var origin in runtime.AllowedOrigins)
+                {
+                    <span style="font-size: 0.8rem; background: #eee; padding: 2px 6px; border-radius: 4px;">@origin</span>
+                }
+            </div>
+        </div>
+    }
+</Cards>
+
+<Cards Title="App Version">
+    @if (version != null)
+    {
+        <div class="list-row"><strong>App</strong><span>@version.AppName @version.AppVersion</span></div>
+        <div class="list-row"><strong>API</strong><span>@version.ApiVersion</span></div>
+        <div class="list-row"><strong>Storage Schema</strong><span>@version.StorageSchemaVersion</span></div>
+        <div class="list-row"><strong>Context Format</strong><span>@version.ContextFormatVersion</span></div>
+        <div class="list-row"><strong>Build</strong><span>@version.BuildConfiguration</span></div>
+    }
 </Cards>
 
 @code {
     private HealthResponse? health;
     private StorageInfo? storage;
+    private ApiRuntimeInfoDto? runtime;
+    private VersionInfoDto? version;
 
     protected override async Task OnInitializedAsync()
     {
-        health = await Api.GetHealthAsync();
-        storage = await Api.GetStorageInfoAsync();
+        try 
+        {
+            health = await Api.GetHealthAsync();
+            storage = await Api.GetStorageInfoAsync();
+            runtime = await Api.GetRuntimeInfoAsync();
+            version = await Api.GetVersionAsync();
+        }
+        catch (Exception)
+        {
+            // Silently fail for now to keep UI working
+        }
     }
 }

@@ -98,11 +98,18 @@ dotnet run --project src/services/SourceWorker.LocalApi
 
 Minimal endpoints:
 
-- `GET /health`
-- `GET /api/projects`
+- `GET /health` (Public)
+- `GET /api/version` (Public)
+- `GET /api/runtime/info` (Public)
+- `GET /api/runtime/security` (Protected)
+- `POST /api/runtime/token/rotate` (Protected)
+- `GET /api/projects` (Protected)
 - `POST /api/projects` with `{ "path": "C:\\path\\to\\project", "name": null }`
 - `POST /api/projects/{id}/scan`
+- `GET /api/jobs`
 - `GET /api/jobs/{id}`
+- `GET /api/jobs/{id}/logs`
+- `GET /api/projects/{id}/jobs`
 - `GET /api/projects/{id}/doctor`
 - `GET /api/projects/{id}/changes`
 - `GET /api/projects/{id}/context-status`

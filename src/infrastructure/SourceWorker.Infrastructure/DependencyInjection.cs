@@ -43,6 +43,12 @@ public static class DependencyInjection
         services.AddSingleton<IRecipeFactory, RecipeFactory>();
         services.AddSingleton<IRecipeRepository, FileRecipeRepository>();
         services.AddSingleton<IRecipeRunner, BasicRecipeRunner>();
+        
+        services.AddSingleton<ILocalApiTokenService, LocalApiTokenService>();
+        services.AddSingleton<ILocalApiOriginService, LocalApiOriginService>();
+        services.AddSingleton<ILocalApiRuntimeService, LocalApiRuntimeService>();
+        services.AddSingleton<IAppVersionService, AppVersionService>();
+        
         return services;
     }
 }

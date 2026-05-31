@@ -14,6 +14,58 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public async Task<IReadOnlyList<ProjectDto>> GetProjectsAsync(CancellationToken cancellationToken = default)
         => await GetAsync<ProjectDto[]>("/api/projects", cancellationToken) ?? [];
 
+    public async Task<IReadOnlyList<ProjectSummaryDto>> GetProjectsSummaryAsync(bool includeTestProjects = false, bool includeMissing = false, string? search = null, int? limit = null, CancellationToken cancellationToken = default)
+    {
+        var query = $"/api/projects?includeTestProjects={includeTestProjects}&includeMissing={includeMissing}";
+        if (!string.IsNullOrEmpty(search)) query += $"&search={Uri.EscapeDataString(search)}";
+        if (limit.HasValue) query += $"&limit={limit.Value}";
+        
+        return await GetAsync<ProjectSummaryDto[]>(query, cancellationToken) ?? [];
+    }
+
+    public Task<ApiRuntimeInfoDto> GetRuntimeInfoAsync(CancellationToken cancellationToken = default)
+        => Required<ApiRuntimeInfoDto>("/api/runtime/info", cancellationToken);
+
+    public Task<ApiSecurityInfoDto> GetSecurityInfoAsync(CancellationToken cancellationToken = default)
+        => Required<ApiSecurityInfoDto>("/api/runtime/security", cancellationToken);
+
+    public async Task<string> RotateTokenAsync(CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync("/api/runtime/token/rotate", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions, cancellationToken);
+        return result.GetProperty("token").GetString() ?? "";
+    }
+
+    public Task<VersionInfoDto> GetVersionAsync(CancellationToken cancellationToken = default)
+        => Required<VersionInfoDto>("/api/version", cancellationToken);
+
+    public async Task<ApiConnectionStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var runtime = await GetRuntimeInfoAsync(cancellationToken);
+            return new ApiConnectionStatus(true, null, runtime);
+        }
+        catch (Exception ex)
+        {
+            return new ApiConnectionStatus(false, ex.Message);
+        }
+    }
+
+    public async Task<IReadOnlyList<JobStatusDto>> GetJobsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<JobStatusDto[]>("/api/jobs", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<JobStatusDto>> GetProjectJobsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<JobStatusDto[]>($"/api/projects/{projectId}/jobs", cancellationToken) ?? [];
+
+    public Task<JobStatusDto?> GetJobStatusAsync(Guid jobId, CancellationToken cancellationToken = default)
+        => GetAsync<JobStatusDto>($"/api/jobs/{jobId}", cancellationToken);
+
+    public async Task<IReadOnlyList<string>> GetJobLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
+        => await GetAsync<string[]>($"/api/jobs/{jobId}/logs", cancellationToken) ?? [];
+
     public Task<DoctorReport> GetDoctorAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<DoctorReport>($"/api/projects/{projectId}/doctor", cancellationToken);
 
@@ -54,7 +106,10 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         => await GetAsync<ContextBrowserFile[]>($"/api/projects/{projectId}/context-browser/files", cancellationToken) ?? [];
 
     public async Task<string> ReadContextAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default)
-        => await httpClient.GetStringAsync($"/api/projects/{projectId}/context-browser/files/{EscapeRelativePath(relativePath)}", cancellationToken);
+    {
+        await ApplyTokenAsync();
+        return await httpClient.GetStringAsync($"/api/projects/{projectId}/context-browser/files/{EscapeRelativePath(relativePath)}", cancellationToken);
+    }
 
     public Task<GeneratedOutputSet> GetOutputsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<GeneratedOutputSet>($"/api/projects/{projectId}/outputs", cancellationToken);
@@ -66,10 +121,14 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         => GetAsync<ContextPackManifest>($"/api/projects/{projectId}/packs/{Uri.EscapeDataString(packId)}", cancellationToken);
 
     public async Task<string> GetPackContentAsync(Guid projectId, string packId, CancellationToken cancellationToken = default)
-        => await httpClient.GetStringAsync($"/api/projects/{projectId}/packs/{Uri.EscapeDataString(packId)}/content", cancellationToken);
+    {
+        await ApplyTokenAsync();
+        return await httpClient.GetStringAsync($"/api/projects/{projectId}/packs/{Uri.EscapeDataString(packId)}/content", cancellationToken);
+    }
 
     public async Task<ExportRun> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default)
     {
+        await ApplyTokenAsync();
         using var response = await httpClient.PostAsync($"/api/projects/{projectId}/exports/{Uri.EscapeDataString(exportProfileId)}/run", null, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ExportRun>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Export response was empty.");
@@ -80,17 +139,25 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     private async Task<T?> GetAsync<T>(string path, CancellationToken cancellationToken)
     {
-        ApplyToken();
+        await ApplyTokenAsync();
         using var response = await httpClient.GetAsync(path, cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return default;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
     }
 
-    private void ApplyToken()
+    private async Task ApplyTokenAsync()
     {
-        if (string.IsNullOrWhiteSpace(options.BearerToken)) return;
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.BearerToken);
+        string? token = options.BearerToken;
+        if (options.TokenProvider != null)
+        {
+            token = await options.TokenProvider.GetTokenAsync();
+        }
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
     }
 
     private static string EscapeRelativePath(string relativePath)

@@ -9,8 +9,10 @@ public static class DependencyInjection
     {
         services.AddScoped<IRequestFlow, ServiceProviderRequestFlow>();
         services.AddScoped<IRequestHandler<AddProjectCommand, SourceWorker.Contracts.ProjectDto>, AddProjectCommandHandler>();
-        services.AddScoped<IRequestHandler<GetProjectsQuery, IReadOnlyList<SourceWorker.Contracts.ProjectDto>>, GetProjectsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetProjectsQuery, IReadOnlyList<SourceWorker.Contracts.ProjectSummaryDto>>, GetProjectsQueryHandler>();
         services.AddScoped<IRequestHandler<StartProjectScanCommand, SourceWorker.Contracts.StartScanResponse>, StartProjectScanCommandHandler>();
+        services.AddScoped<IRequestHandler<GetJobsQuery, IReadOnlyList<SourceWorker.Contracts.JobStatusDto>>, GetJobsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetProjectJobsQuery, IReadOnlyList<SourceWorker.Contracts.JobStatusDto>>, GetProjectJobsQueryHandler>();
         services.AddScoped<IRequestHandler<GetJobStatusQuery, SourceWorker.Contracts.JobStatusDto?>, GetJobStatusQueryHandler>();
         services.AddScoped<IRequestHandler<GenerateBasicContextCommand, SourceWorker.Contracts.ContextGenerationResponse>, GenerateBasicContextCommandHandler>();
         services.AddScoped<IRequestHandler<ImportProjectInstructionsCommand, SourceWorker.Contracts.ImportInstructionsResponse>, ImportProjectInstructionsCommandHandler>();

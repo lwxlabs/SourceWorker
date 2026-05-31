@@ -29,3 +29,52 @@ public sealed record ContextPackManifest(ContextPack Pack, string RelativePath, 
 public sealed record ContextPack(string Id, string Name, string Description, string Audience, string Purpose, IReadOnlyList<ContextPackItem> Items, IReadOnlyList<string> IncludedSelectors, string MaxRecommendedUse, int TokenEstimate, string FreshnessStatus, Guid? SourceScanRunId, DateTimeOffset GeneratedUtc);
 public sealed record ContextPackItem(string RelativePath, string Kind, bool Required);
 public sealed record ExportRun(string Id, string ExportProfileId, Guid ProjectId, DateTimeOffset StartedUtc, DateTimeOffset FinishedUtc, IReadOnlyList<string> ExportedFiles, IReadOnlyList<string> Warnings);
+
+public sealed record ProjectSummaryDto(
+    Guid Id,
+    string Name,
+    string Path,
+    bool Exists,
+    DateTimeOffset? LastScanUtc,
+    int ContextFreshnessScore,
+    bool HasStaleContext,
+    bool HasManualGeneratedFiles,
+    int TechnologyCount,
+    int RouteCount,
+    int FlowCount
+);
+
+public sealed record ApiRuntimeInfoDto(
+    string SelectedHost,
+    int SelectedPort,
+    string BaseUrl,
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin,
+    int ProcessId,
+    DateTimeOffset StartupUtc,
+    string EnvironmentName
+);
+
+public sealed record ApiSecurityInfoDto(
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin
+);
+
+public sealed record VersionInfoDto(
+    string AppName,
+    string AppVersion,
+    string ApiVersion,
+    string SupportedApiClientVersion,
+    int StorageSchemaVersion,
+    int ContextFormatVersion,
+    string BuildConfiguration
+);
+
+public sealed record ApiErrorInfo(string Message, string? Code = null, string? Detail = null);
+public sealed record ApiConnectionStatus(bool Connected, string? Error = null, ApiRuntimeInfoDto? Runtime = null);
+
+public sealed record JobStatusDto(Guid Id, Guid? ProjectId, string Type, string Status, int ProgressPercent, string? Message, string? CurrentStep, string? ErrorMessage, IReadOnlyList<string> Logs);

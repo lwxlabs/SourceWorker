@@ -5,8 +5,10 @@ using SourceWorker.Domain;
 namespace SourceWorker.Application;
 
 public sealed record AddProjectCommand(string Path, string? Name = null) : IRequest<ProjectDto>;
-public sealed record GetProjectsQuery : IRequest<IReadOnlyList<ProjectDto>>;
+public sealed record GetProjectsQuery(bool? IncludeTestProjects = null, bool? IncludeMissing = null, string? Search = null, int? Limit = null) : IRequest<IReadOnlyList<ProjectSummaryDto>>;
 public sealed record StartProjectScanCommand(Guid ProjectId) : IRequest<StartScanResponse>;
+public sealed record GetJobsQuery : IRequest<IReadOnlyList<JobStatusDto>>;
+public sealed record GetProjectJobsQuery(Guid ProjectId) : IRequest<IReadOnlyList<JobStatusDto>>;
 public sealed record GetJobStatusQuery(Guid JobId) : IRequest<JobStatusDto?>;
 public sealed record GenerateBasicContextCommand(Guid ProjectId) : IRequest<ContextGenerationResponse>;
 public sealed record ImportProjectInstructionsCommand(Guid ProjectId, string InstructionFilePath) : IRequest<ImportInstructionsResponse>;
@@ -46,10 +48,76 @@ public sealed class AddProjectCommandHandler(IProjectRepository projects) : IReq
     }
 }
 
-public sealed class GetProjectsQueryHandler(IProjectRepository projects) : IRequestHandler<GetProjectsQuery, IReadOnlyList<ProjectDto>>
+public sealed class GetProjectsQueryHandler(
+    IProjectRepository projects, 
+    IScanRunRepository scanRuns,
+    IRouteInfoRepository routes,
+    ICodeFlowRepository flows) : IRequestHandler<GetProjectsQuery, IReadOnlyList<ProjectSummaryDto>>
 {
-    public async Task<IReadOnlyList<ProjectDto>> Handle(GetProjectsQuery request, CancellationToken cancellationToken)
-        => (await projects.ListAsync(cancellationToken)).Select(ProjectMappings.ToDto).ToArray();
+    public async Task<IReadOnlyList<ProjectSummaryDto>> Handle(GetProjectsQuery request, CancellationToken cancellationToken)
+    {
+        var all = await projects.ListAsync(cancellationToken);
+        var summaries = new List<ProjectSummaryDto>();
+
+        foreach (var p in all)
+        {
+            var exists = Directory.Exists(p.RootPath);
+            if (request.IncludeMissing == false && !exists) continue;
+            
+            if (!string.IsNullOrEmpty(request.Search) && 
+                !p.Name.Contains(request.Search, StringComparison.OrdinalIgnoreCase) && 
+                !p.RootPath.Contains(request.Search, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var latestScan = await scanRuns.GetLatestAsync(p.Id, cancellationToken);
+            
+            var isTestProject = p.Name.Contains("Tests", StringComparison.OrdinalIgnoreCase) || p.RootPath.Contains("tests", StringComparison.OrdinalIgnoreCase);
+            if (request.IncludeTestProjects == false && isTestProject) continue;
+
+            int routeCount = 0;
+            int flowCount = 0;
+
+            if (latestScan != null)
+            {
+                routeCount = (await routes.GetByProjectAsync(p.Id, cancellationToken)).Count;
+                flowCount = (await flows.GetByProjectAsync(p.Id, cancellationToken)).Count;
+            }
+
+            summaries.Add(new ProjectSummaryDto(
+                p.Id,
+                p.Name,
+                p.RootPath,
+                exists,
+                latestScan?.CompletedAt,
+                exists ? 80 : 0,
+                false,
+                false,
+                0,
+                routeCount,
+                flowCount
+            ));
+        }
+
+        var result = summaries.OrderByDescending(s => s.LastScanUtc).ThenBy(s => s.Name).AsEnumerable();
+        if (request.Limit.HasValue) result = result.Take(request.Limit.Value);
+
+        return result.ToArray();
+    }
+}
+
+public sealed class GetJobsQueryHandler(IJobRepository jobs) : IRequestHandler<GetJobsQuery, IReadOnlyList<JobStatusDto>>
+{
+    public async Task<IReadOnlyList<JobStatusDto>> Handle(GetJobsQuery request, CancellationToken cancellationToken)
+        => (await jobs.ListAsync(cancellationToken)).Select(ProjectMappings.ToDto).OrderByDescending(j => j.Id).ToArray();
+}
+
+public sealed class GetProjectJobsQueryHandler(IJobRepository jobs) : IRequestHandler<GetProjectJobsQuery, IReadOnlyList<JobStatusDto>>
+{
+    public async Task<IReadOnlyList<JobStatusDto>> Handle(GetProjectJobsQuery request, CancellationToken cancellationToken)
+        => (await jobs.ListAsync(cancellationToken))
+            .Where(j => j.ProjectId == request.ProjectId)
+            .Select(ProjectMappings.ToDto)
+            .OrderByDescending(j => j.Id)
+            .ToArray();
 }
 
 public sealed class StartProjectScanCommandHandler(IProjectRepository projects, IJobRepository jobs, ILocalJobQueue queue) : IRequestHandler<StartProjectScanCommand, StartScanResponse>

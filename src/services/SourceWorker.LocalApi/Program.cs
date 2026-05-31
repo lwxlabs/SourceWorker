@@ -1,11 +1,15 @@
 using LwX.Flow;
+using Microsoft.AspNetCore.Mvc;
 using SourceWorker.Application;
 using SourceWorker.Contracts;
+using SourceWorker.Domain;
 using SourceWorker.Infrastructure;
 using SourceWorker.Worker;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<LocalApiRuntimeOptions>(builder.Configuration.GetSection("SourceWorker:LocalApi"));
+builder.Services.AddCors();
 builder.Services.AddOpenApi();
 builder.Services
     .AddSourceWorkerApplication()
@@ -14,6 +18,47 @@ builder.Services
 
 var app = builder.Build();
 
+var originService = app.Services.GetRequiredService<ILocalApiOriginService>();
+app.UseCors(policy => policy
+    .WithOrigins(originService.GetAllowedOrigins())
+    .AllowAnyMethod()
+    .AllowAnyHeader());
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/health") || 
+        context.Request.Path.StartsWithSegments("/api/version") ||
+        context.Request.Path.StartsWithSegments("/api/runtime/info"))
+    {
+        await next();
+        return;
+    }
+
+    var runtimeService = context.RequestServices.GetRequiredService<ILocalApiRuntimeService>();
+    if (!runtimeService.GetState().TokenEnabled)
+    {
+        await next();
+        return;
+    }
+
+    var tokenService = context.RequestServices.GetRequiredService<ILocalApiTokenService>();
+    if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) || 
+        !authHeader.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    var token = authHeader.ToString()["Bearer ".Length..].Trim();
+    if (!tokenService.ValidateToken(token))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    await next();
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -21,8 +66,47 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "SourceWorker.LocalApi" }));
 
-app.MapGet("/api/projects", async (IRequestFlow flow, CancellationToken cancellationToken)
-    => Results.Ok(await flow.Send(new GetProjectsQuery(), cancellationToken)));
+app.MapGet("/api/version", (IAppVersionService versionService) => Results.Ok(versionService.GetVersion()));
+
+app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService) => {
+    var state = runtimeService.GetState();
+    return Results.Ok(new ApiRuntimeInfoDto(
+        state.SelectedHost,
+        state.SelectedPort,
+        state.BaseUrl,
+        state.TokenEnabled,
+        state.TokenCreatedUtc,
+        state.AllowedOrigins,
+        state.DashboardOrigin,
+        state.ProcessId,
+        state.StartupUtc,
+        state.EnvironmentName
+    ));
+});
+
+app.MapGet("/api/runtime/security", (ILocalApiRuntimeService runtimeService) => {
+    var state = runtimeService.GetState();
+    return Results.Ok(new ApiSecurityInfoDto(
+        state.TokenEnabled,
+        state.TokenCreatedUtc,
+        state.AllowedOrigins,
+        state.DashboardOrigin
+    ));
+});
+
+app.MapPost("/api/runtime/token/rotate", (ILocalApiTokenService tokenService) => {
+    var newToken = tokenService.GenerateAndSaveToken();
+    return Results.Ok(new { token = newToken });
+});
+
+app.MapGet("/api/projects", async (
+    [FromQuery] bool? includeTestProjects,
+    [FromQuery] bool? includeMissing,
+    [FromQuery] string? search,
+    [FromQuery] int? limit,
+    IRequestFlow flow, 
+    CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetProjectsQuery(includeTestProjects, includeMissing, search, limit), cancellationToken)));
 
 app.MapPost("/api/projects", async (AddProjectRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(new CreateProjectResponse(await flow.Send(new AddProjectCommand(request.Path, request.Name), cancellationToken))));
@@ -30,10 +114,22 @@ app.MapPost("/api/projects", async (AddProjectRequest request, IRequestFlow flow
 app.MapPost("/api/projects/{id:guid}/scan", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Accepted($"/api/projects/{id}/scan", await flow.Send(new StartProjectScanCommand(id), cancellationToken)));
 
+app.MapGet("/api/jobs", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetJobsQuery(), cancellationToken)));
+
+app.MapGet("/api/projects/{id:guid}/jobs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetProjectJobsQuery(id), cancellationToken)));
+
 app.MapGet("/api/jobs/{id:guid}", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) =>
 {
     var job = await flow.Send(new GetJobStatusQuery(id), cancellationToken);
     return job is null ? Results.NotFound() : Results.Ok(job);
+});
+
+app.MapGet("/api/jobs/{id:guid}/logs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) =>
+{
+    var job = await flow.Send(new GetJobStatusQuery(id), cancellationToken);
+    return job is null ? Results.NotFound() : Results.Ok(job.Logs);
 });
 
 app.MapGet("/api/projects/{id:guid}/doctor", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)

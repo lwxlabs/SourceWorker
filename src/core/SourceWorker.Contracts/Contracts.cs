@@ -12,3 +12,50 @@ public sealed record ImportInstructionsResponse(Guid DocumentId, string Imported
 public sealed record RecipeListItemDto(string Id, string Name, string Description, string OutputPath);
 public sealed record RunRecipeResponse(string RecipeId, string OutputPath, IReadOnlyList<string> Files);
 public sealed record ChangeSetDto(IReadOnlyList<string> NewFiles, IReadOnlyList<string> ChangedFiles, IReadOnlyList<string> DeletedFiles, int UnchangedCount, int IgnoredCount);
+
+public sealed record ApiRuntimeInfoDto(
+    string SelectedHost,
+    int SelectedPort,
+    string BaseUrl,
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin,
+    int ProcessId,
+    DateTimeOffset StartupUtc,
+    string EnvironmentName
+);
+
+public sealed record ApiSecurityInfoDto(
+    bool TokenEnabled,
+    DateTimeOffset? TokenCreatedUtc,
+    string[] AllowedOrigins,
+    string? DashboardOrigin
+);
+
+public sealed record ProjectSummaryDto(
+    Guid Id,
+    string Name,
+    string Path,
+    bool Exists,
+    DateTimeOffset? LastScanUtc,
+    int ContextFreshnessScore,
+    bool HasStaleContext,
+    bool HasManualGeneratedFiles,
+    int TechnologyCount,
+    int RouteCount,
+    int FlowCount
+);
+
+public sealed record VersionInfoDto(
+    string AppName,
+    string AppVersion,
+    string ApiVersion,
+    string SupportedApiClientVersion,
+    int StorageSchemaVersion,
+    int ContextFormatVersion,
+    string BuildConfiguration
+);
+
+public sealed record ApiErrorInfo(string Message, string? Code = null, string? Detail = null);
+public sealed record ApiConnectionStatus(bool Connected, string? Error = null, ApiRuntimeInfoDto? Runtime = null);

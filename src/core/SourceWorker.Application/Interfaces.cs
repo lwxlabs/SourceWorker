@@ -1,4 +1,5 @@
 using SourceWorker.Domain;
+using SourceWorker.Contracts;
 
 namespace SourceWorker.Application;
 
@@ -240,3 +241,27 @@ public sealed record ProjectScanResult(
     IReadOnlyList<string> MainEntrypoints,
     IReadOnlyList<string> DeletedFiles);
 public sealed record ContextWriteResult(string OutputPath, IReadOnlyList<string> Files);
+
+public interface ILocalApiRuntimeService
+{
+    LocalApiRuntimeState GetState();
+}
+
+public interface ILocalApiTokenService
+{
+    string? GetCurrentToken();
+    string GenerateAndSaveToken();
+    bool ValidateToken(string token);
+    DateTimeOffset? GetTokenCreatedUtc();
+}
+
+public interface ILocalApiOriginService
+{
+    bool IsOriginAllowed(string? origin);
+    string[] GetAllowedOrigins();
+}
+
+public interface IAppVersionService
+{
+    VersionInfoDto GetVersion();
+}

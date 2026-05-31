@@ -1,10 +1,17 @@
 @page "/projects/{ProjectId:guid}"
 @inject ISourceWorkerApiClient Api
 
-<h1>@(project?.Name ?? "Project")</h1>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+    <h1>@(project?.Name ?? "Project")</h1>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <span style="font-size: 0.8rem; color: #666;">Last loaded: @lastLoaded.ToString("T")</span>
+        <button @onclick="Refresh" style="padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px; background: #f8f9fa; cursor: pointer; font-size: 0.9rem;">Refresh</button>
+    </div>
+</div>
+
 @if (project is not null)
 {
-    <p class="path">@project.RootPath</p>
+    <p class="path" style="margin-bottom: 1rem; color: #666;">@project.RootPath</p>
     <nav class="tabs">
         <a href="/projects/@ProjectId/context">Context</a>
         <a href="/projects/@ProjectId/docs">Docs</a>
@@ -36,18 +43,33 @@
     private IReadOnlyList<RouteInfo> routes = [];
     private IReadOnlyList<CodeFlow> flows = [];
     private IReadOnlyList<TestInfo> tests = [];
+    
+    private DateTimeOffset lastLoaded = DateTimeOffset.Now;
 
     protected override async Task OnParametersSetAsync()
     {
-        project = (await Api.GetProjectsAsync()).FirstOrDefault(p => p.Id == ProjectId);
-        doctor = await Api.GetDoctorAsync(ProjectId);
-        freshness = await Api.GetContextStatusAsync(ProjectId);
-        artifacts = await Api.GetArtifactsAsync(ProjectId);
-        outputs = await Api.GetOutputsAsync(ProjectId);
-        packs = await Api.GetPacksAsync(ProjectId);
-        symbols = await Api.GetSymbolsAsync(ProjectId);
-        routes = await Api.GetRoutesAsync(ProjectId);
-        flows = await Api.GetFlowsAsync(ProjectId);
-        tests = await Api.GetTestsAsync(ProjectId);
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        try 
+        {
+            project = (await Api.GetProjectsAsync()).FirstOrDefault(p => p.Id == ProjectId);
+            doctor = await Api.GetDoctorAsync(ProjectId);
+            freshness = await Api.GetContextStatusAsync(ProjectId);
+            artifacts = await Api.GetArtifactsAsync(ProjectId);
+            outputs = await Api.GetOutputsAsync(ProjectId);
+            packs = await Api.GetPacksAsync(ProjectId);
+            symbols = await Api.GetSymbolsAsync(ProjectId);
+            routes = await Api.GetRoutesAsync(ProjectId);
+            flows = await Api.GetFlowsAsync(ProjectId);
+            tests = await Api.GetTestsAsync(ProjectId);
+            lastLoaded = DateTimeOffset.Now;
+        }
+        catch (Exception)
+        {
+            // Error handling could be improved
+        }
     }
 }

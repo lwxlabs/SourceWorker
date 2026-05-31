@@ -16,7 +16,7 @@
 @code {
     private HealthResponse? health;
     private StorageInfo? storage;
-    private IReadOnlyList<ProjectDto> projects = [];
+    private IReadOnlyList<ProjectSummaryDto> projects = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -24,7 +24,7 @@
         {
             health = await Api.GetHealthAsync();
             storage = await Api.GetStorageInfoAsync();
-            projects = await Api.GetProjectsAsync();
+            projects = await Api.GetProjectsSummaryAsync(limit: 5);
         }
         catch
         {

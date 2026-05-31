@@ -1,20 +1,38 @@
 @if (Projects.Count == 0)
 {
-    <EmptyState Message="No projects registered in the Local API yet." />
+    <EmptyState Message="No projects matched your filters." />
 }
 else
 {
     <div class="project-list">
-        @foreach (var project in Projects.OrderBy(p => p.Name))
+        @foreach (var project in Projects)
         {
-            <a class="project-row" href="/projects/@project.Id">
-                <strong>@project.Name</strong>
-                <span>@project.RootPath</span>
+            <a class="project-row" href="/projects/@project.Id" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid #eee; margin-bottom: 0.5rem; border-radius: 4px; text-decoration: none; color: inherit;">
+                <div style="display: flex; flex-direction: column;">
+                    <strong style="font-size: 1.1rem;">@project.Name</strong>
+                    <span style="font-size: 0.85rem; color: #666;">@project.Path</span>
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    @if (project.LastScanUtc.HasValue)
+                    {
+                        <span style="font-size: 0.85rem; color: #666;" title="Last Scan">📅 @project.LastScanUtc.Value.ToString("g")</span>
+                    }
+                    <span title="Routes">🔗 @project.RouteCount</span>
+                    <span title="Flows">⚡ @project.FlowCount</span>
+                    @if (project.HasStaleContext)
+                    {
+                        <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">Stale</span>
+                    }
+                    @if (!project.Exists)
+                    {
+                        <span style="background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">Missing</span>
+                    }
+                </div>
             </a>
         }
     </div>
 }
 
 @code {
-    [Parameter] public IReadOnlyList<ProjectDto> Projects { get; set; } = [];
+    [Parameter] public IReadOnlyList<ProjectSummaryDto> Projects { get; set; } = [];
 }

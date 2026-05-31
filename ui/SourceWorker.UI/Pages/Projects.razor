@@ -1,15 +1,62 @@
 @page "/projects"
 @inject ISourceWorkerApiClient Api
 
-<h1>Projects</h1>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <h1>Projects</h1>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <input type="text" @bind="search" placeholder="Search..." style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;" @onkeyup="HandleSearch" />
+        <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 4px;">
+            <input type="checkbox" @bind="includeTestProjects" @onclick="() => { includeTestProjects = !includeTestProjects; return LoadProjects(); }" /> Tests
+        </label>
+        <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 4px;">
+            <input type="checkbox" @bind="includeMissing" @onclick="() => { includeMissing = !includeMissing; return LoadProjects(); }" /> Missing
+        </label>
+    </div>
+</div>
 
-<ProjectPicker Projects="@projects" />
+@if (loading)
+{
+    <LoadingState />
+}
+else
+{
+    <ProjectPicker Projects="@projects" />
+}
 
 @code {
-    private IReadOnlyList<ProjectDto> projects = [];
+    private IReadOnlyList<ProjectSummaryDto> projects = [];
+    private string search = "";
+    private bool includeTestProjects = false;
+    private bool includeMissing = false;
+    private bool loading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        projects = await Api.GetProjectsAsync();
+        await LoadProjects();
+    }
+
+    private async Task LoadProjects()
+    {
+        loading = true;
+        try 
+        {
+            projects = await Api.GetProjectsSummaryAsync(includeTestProjects, includeMissing, search);
+        }
+        catch 
+        {
+            projects = [];
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleSearch(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadProjects();
+        }
     }
 }

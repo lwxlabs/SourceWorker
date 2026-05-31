@@ -1,0 +1,80 @@
+﻿@page "/jobs"
+@inject ISourceWorkerApiClient Api
+@using System.Timers
+
+<h1>Recent Jobs</h1>
+
+@if (jobs == null)
+{
+    <LoadingState />
+}
+else if (jobs.Count == 0)
+{
+    <EmptyState Message="No jobs have been run yet." />
+}
+else
+{
+    <div class="job-list">
+        @foreach (var job in jobs)
+        {
+            <div class="job-card" style="padding: 1rem; border: 1px solid #eee; margin-bottom: 0.5rem; border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong>@job.Type</strong>
+                    <span class="tag @GetStatusClass(job.Status)">@job.Status</span>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.9rem;">
+                    @if (!string.IsNullOrEmpty(job.CurrentStep))
+                    {
+                        <span>Step: @job.CurrentStep</span>
+                    }
+                    <div style="background: #eee; height: 8px; border-radius: 4px; margin-top: 4px;">
+                        <div style="background: #007bff; height: 100%; border-radius: 4px; width: @(job.ProgressPercent + "%")"></div>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                {
+                    <div style="color: red; margin-top: 0.5rem; font-size: 0.85rem;">@job.ErrorMessage</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<JobStatusDto>? jobs;
+    private Timer? timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobs();
+        timer = new Timer(3000);
+        timer.Elapsed += async (s, e) => await InvokeAsync(LoadJobs);
+        timer.Start();
+    }
+
+    private async Task LoadJobs()
+    {
+        try 
+        {
+            jobs = await Api.GetJobsAsync();
+            StateHasChanged();
+        }
+        catch 
+        {
+            // Ignore
+        }
+    }
+
+    private string GetStatusClass(string status) => status switch
+    {
+        "Running" => "info",
+        "Completed" => "success",
+        "Failed" => "danger",
+        _ => "warning"
+    };
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+}

@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\SourceWorker.LocalApi\SourceWorker.LocalApi.csproj" />
+    <ProjectReference Include="..\..\src\core\SourceWorker.Application\SourceWorker.Application.csproj" />
+    <ProjectReference Include="..\..\src\infrastructure\SourceWorker.Infrastructure\SourceWorker.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

@@ -3,23 +3,29 @@
 <header class="sw-topbar">
     <div>
         <strong>Local Dashboard</strong>
-        <span class="muted">Read-only Local API view</span>
+        <span class="muted">MVP 1.8 Hardening</span>
     </div>
-    <span class="pill @(connected ? "ok" : "warn")">@(connected ? "API OK" : "API Offline")</span>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+        @if (status != null)
+        {
+            <span class="pill @(status.Connected ? "ok" : "warn")">
+                @(status.Connected ? "API OK" : "API Offline")
+            </span>
+            @if (status.Connected && status.Runtime != null)
+            {
+                <span style="font-size: 0.75rem; background: #eef; color: #336; border: 1px solid #ccd; padding: 2px 6px; border-radius: 4px;">
+                    @(status.Runtime.TokenEnabled ? "🔒 Auth" : "🔓 Open")
+                </span>
+            }
+        }
+    </div>
 </header>
 
 @code {
-    private bool connected;
+    private ApiConnectionStatus? status;
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            connected = (await Api.GetHealthAsync())?.Status.Equals("ok", StringComparison.OrdinalIgnoreCase) == true;
-        }
-        catch
-        {
-            connected = false;
-        }
+        status = await Api.CheckConnectionAsync();
     }
 }
