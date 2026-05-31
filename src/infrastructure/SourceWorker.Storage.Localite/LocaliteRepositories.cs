@@ -28,6 +28,8 @@ public static class LocaliteStorage
         services.AddSingleton<IConfigurationUsageRepository, LocaliteConfigurationUsageRepository>();
         services.AddSingleton<IBackgroundWorkerInfoRepository, LocaliteBackgroundWorkerInfoRepository>();
         services.AddSingleton<ITestInfoRepository, LocaliteTestInfoRepository>();
+        services.AddSingleton<IAiProviderConfigurationRepository, LocaliteAiProviderConfigurationRepository>();
+        services.AddSingleton<IAiRunRepository, LocaliteAiRunRepository>();
         return services;
     }
 }
@@ -186,7 +188,9 @@ internal static class Tables
     public const string ServiceRegistrations = "ServiceRegistrationRecord";
     public const string BackgroundWorkers = "BackgroundWorkerInfoRecord";
     public const string Tests = "TestInfoRecord";
-    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests];
+    public const string AiProviderConfigurations = "AiProviderConfigurationRecord";
+    public const string AiRuns = "AiRunRecord";
+    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns];
 }
 
 internal sealed record ProjectRecord(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
@@ -194,6 +198,8 @@ internal sealed record ScanRunRecord(Guid Id, Guid ProjectId, DateTimeOffset Sta
 internal sealed record IndexedFileRecord(Guid Id, Guid ProjectId, Guid ScanRunId, string Path, string RelativePath, string Extension, long SizeBytes, DateTimeOffset LastModifiedUtc, string Sha256, IndexedFileKind Kind, bool WasIgnored, string? IgnoreReason, FileChangeKind ChangeKind);
 internal sealed record GeneratedArtifactRecord(Guid Id, Guid ProjectId, Guid? ScanRunId, string? RecipeId, string RelativePath, string AbsolutePath, GeneratedArtifactType Type, string ContentHash, DateTimeOffset GeneratedUtc, string SourceInputHash, GeneratedArtifactStatus Status, string GeneratorName, string? Notes);
 internal sealed record WorkerJobRecord(Guid Id, Guid? ProjectId, WorkerJobType Type, WorkerJobStatus Status, int ProgressPercent, string? Message, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? CurrentStep, string? ErrorMessage, IReadOnlyList<string>? Logs);
+internal sealed record AiProviderConfigurationRecord(Guid Id, AiProviderKind Kind, string Name, string Model, string? BaseUrl, bool IsEnabled, string? ApiKeySecretName, string? MaskedApiKey, DateTimeOffset UpdatedUtc);
+internal sealed record AiRunRecord(Guid Id, Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, string? UserInstruction, string PromptHash, bool StoredPromptText, string? PromptPreview, IReadOnlyList<string> IncludedFiles, IReadOnlyList<AiSafetyWarning> SafetyWarnings, AiTokenEstimate TokenEstimate, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string? Error, string? OutputText, string? OutputHash);
 
 internal static class ProjectRecordMapper { public static ProjectRecord ToRecord(Project p) => new(p.Id, p.Name, p.RootPath, p.CreatedAt, p.LastScannedAt); public static Project ToDomain(ProjectRecord r) => new(r.Id, r.Name, r.RootPath, r.CreatedAt, r.LastScannedAt); }
 internal static class ScanRunRecordMapper { public static ScanRunRecord ToRecord(ScanRun s) => new(s.Id, s.ProjectId, s.StartedAt, s.CompletedAt, s.Status, s.FilesIndexed, s.TodosFound, s.TotalFilesSeen, s.IgnoredFileCount, s.ChangedFileCount, s.DetectedTechnologyCount, s.ErrorMessage); public static ScanRun ToDomain(ScanRunRecord r) => new(r.Id, r.ProjectId, r.StartedAt, r.CompletedAt, r.Status, r.FilesIndexed, r.TodosFound, r.TotalFilesSeen, r.IgnoredFileCount, r.ChangedFileCount, r.DetectedTechnologyCount, r.ErrorMessage); }
@@ -203,6 +209,8 @@ internal static class JobRecordMapper { public static WorkerJobRecord ToRecord(W
 internal static class InstructionRecordMapper { public static ProjectInstructionDocument ToDomain(ProjectInstructionDocument d) => d; public static ProjectInstructionDocument ToRecord(ProjectInstructionDocument d) => d; }
 internal static class RecipeRecordMapper { public static ProjectRecipe ToDomain(ProjectRecipe r) => r; public static ProjectRecipe ToRecord(ProjectRecipe r) => r; }
 internal static class DoctorReportRecordMapper { public static DoctorReport ToDomain(DoctorReport r) => r; public static DoctorReport ToRecord(DoctorReport r) => r; }
+internal static class AiProviderConfigurationRecordMapper { public static AiProviderConfigurationRecord ToRecord(AiProviderConfiguration c) => new(c.Id, c.Kind, c.Name, c.Model, c.BaseUrl, c.IsEnabled, c.ApiKeySecretName, c.MaskedApiKey, c.UpdatedUtc); public static AiProviderConfiguration ToDomain(AiProviderConfigurationRecord r) => new(r.Id, r.Kind, r.Name, r.Model, r.BaseUrl, r.IsEnabled, r.ApiKeySecretName, r.MaskedApiKey, r.UpdatedUtc); }
+internal static class AiRunRecordMapper { public static AiRunRecord ToRecord(AiRun r) => new(r.Id, r.ProjectId, r.ProviderId, r.ProviderKind, r.Model, r.PackId, r.UserInstruction, r.PromptHash, r.StoredPromptText, r.PromptPreview, r.IncludedFiles, r.SafetyWarnings, r.TokenEstimate, r.Status, r.CreatedUtc, r.CompletedUtc, r.Error, r.OutputText, r.OutputHash); public static AiRun ToDomain(AiRunRecord r) => new(r.Id, r.ProjectId, r.ProviderId, r.ProviderKind, r.Model, r.PackId, r.UserInstruction, r.PromptHash, r.StoredPromptText, r.PromptPreview, r.IncludedFiles, r.SafetyWarnings, r.TokenEstimate, r.Status, r.CreatedUtc, r.CompletedUtc, r.Error, r.OutputText, r.OutputHash); }
 
 public sealed class LocaliteProjectRepository(LocaliteTableStore store) : IProjectRepository
 {
@@ -261,7 +269,7 @@ public sealed class LocaliteStorageSchemaService(LocaliteTableStore store) : ILo
 public sealed class LocaliteStorageInfoService(LocaliteTableStore store) : IStorageInfoService, IStorageHealthService
 {
     public async Task<StorageInfo> GetInfoAsync(CancellationToken cancellationToken)
-        => new(await store.SchemaInfoAsync(cancellationToken), await store.CountAsync(Tables.Projects, cancellationToken), await store.CountAsync(Tables.ScanRuns, cancellationToken), await store.CountAsync(Tables.IndexedFiles, cancellationToken), await store.CountAsync(Tables.GeneratedArtifacts, cancellationToken), await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true, await store.CountAsync(Tables.CodeSymbols, cancellationToken), await store.CountAsync(Tables.CodeFlows, cancellationToken), await store.CountAsync(Tables.Routes, cancellationToken), await store.CountAsync(Tables.ServiceRegistrations, cancellationToken), await store.CountAsync(Tables.ConfigurationUsages, cancellationToken), await store.CountAsync(Tables.Tests, cancellationToken));
+        => new(await store.SchemaInfoAsync(cancellationToken), await store.CountAsync(Tables.Projects, cancellationToken), await store.CountAsync(Tables.ScanRuns, cancellationToken), await store.CountAsync(Tables.IndexedFiles, cancellationToken), await store.CountAsync(Tables.GeneratedArtifacts, cancellationToken), await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true, await store.CountAsync(Tables.CodeSymbols, cancellationToken), await store.CountAsync(Tables.CodeFlows, cancellationToken), await store.CountAsync(Tables.Routes, cancellationToken), await store.CountAsync(Tables.ServiceRegistrations, cancellationToken), await store.CountAsync(Tables.ConfigurationUsages, cancellationToken), await store.CountAsync(Tables.Tests, cancellationToken), await store.CountAsync(Tables.AiProviderConfigurations, cancellationToken), await store.CountAsync(Tables.AiRuns, cancellationToken));
     public Task<bool> CheckAsync(CancellationToken cancellationToken) => Task.FromResult(File.Exists(store.StoragePath));
 }
 
@@ -299,4 +307,36 @@ public sealed class LocaliteTestInfoRepository(LocaliteTableStore store) : ITest
 {
     public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.Tests, projectId, cancellationToken); foreach (var item in tests) await store.UpsertAsync(Tables.Tests, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
     public Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<TestInfo>(Tables.Tests, projectId, cancellationToken);
+}
+
+public sealed class LocaliteAiProviderConfigurationRepository(LocaliteTableStore store) : IAiProviderConfigurationRepository
+{
+    public async Task<AiProviderConfiguration> SaveAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken)
+    {
+        var existing = await GetAsync(configuration.Kind.ToString(), cancellationToken);
+        var value = existing is null ? configuration : configuration with { Id = existing.Id };
+        await store.UpsertAsync(Tables.AiProviderConfigurations, value.Id, null, value.Kind.ToString(), AiProviderConfigurationRecordMapper.ToRecord(value), cancellationToken);
+        return value;
+    }
+
+    public async Task<AiProviderConfiguration?> GetAsync(string providerId, CancellationToken cancellationToken)
+        => (await ListAsync(cancellationToken)).FirstOrDefault(c => c.Kind.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase) || c.Id.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase));
+
+    public async Task<IReadOnlyList<AiProviderConfiguration>> ListAsync(CancellationToken cancellationToken)
+        => (await store.ListAsync<AiProviderConfigurationRecord>(Tables.AiProviderConfigurations, null, cancellationToken)).Select(AiProviderConfigurationRecordMapper.ToDomain).OrderBy(c => c.Kind.ToString()).ToArray();
+}
+
+public sealed class LocaliteAiRunRepository(LocaliteTableStore store) : IAiRunRepository
+{
+    public async Task<AiRun> SaveAsync(AiRun run, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.AiRuns, run.Id, run.ProjectId, run.CreatedUtc.ToString("O"), AiRunRecordMapper.ToRecord(run), cancellationToken);
+        return run;
+    }
+
+    public async Task<AiRun?> GetAsync(Guid runId, CancellationToken cancellationToken)
+        => (await store.GetAsync<AiRunRecord>(Tables.AiRuns, runId, cancellationToken)) is { } record ? AiRunRecordMapper.ToDomain(record) : null;
+
+    public async Task<IReadOnlyList<AiRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<AiRunRecord>(Tables.AiRuns, projectId, cancellationToken)).Select(AiRunRecordMapper.ToDomain).OrderByDescending(r => r.CreatedUtc).ToArray();
 }

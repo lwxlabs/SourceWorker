@@ -2,7 +2,7 @@
 
 SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a Blazor dashboard over a hardened Local API with Bearer token authentication.
 
-No AI provider, desktop UI, MCP server, cloud sync, or licensing is included yet.
+MVP 2.1 adds a safe AI provider preview layer. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, and full MAUI desktop hosting are still intentionally not included.
 
 ## Architecture
 
@@ -12,6 +12,8 @@ No AI provider, desktop UI, MCP server, cloud sync, or licensing is included yet
 - `src/libs/SourceWorker.Scanner` contains project scanning plus deterministic C# code intelligence and rule-based flow extraction.
 - `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, and exposes read-only context browsing.
 - `src/libs/SourceWorker.Recipes` hosts rule-based recipe execution, including `backend-docs-compact`.
+- `src/libs/SourceWorker.AI` owns AI prompt building, context-pack prompting, token/cost estimates, safety checks, redaction preview, and AI run orchestration.
+- `src/infrastructure/SourceWorker.AI.Providers` implements OpenAI, Ollama, OpenAI-compatible providers, and local AppData secret storage.
 - `src/infrastructure/SourceWorker.Storage.Localite` wires table-backed Localite/SQLite storage. Secrets are intentionally not stored.
 - `src/infrastructure/SourceWorker.Git` provides basic Git inspection.
 - `src/services/SourceWorker.Cli` exposes `scan`, `status`, and `handoff`.
@@ -75,19 +77,42 @@ dotnet run --project ui/SourceWorker.Dashboard
 
 The UI is interactive for MVP 1.9. It allows registering projects, scanning projects with real-time job progress, exporting docs and packs, previewing context cleanup, and performing safe cleanup with confirmation. It uses a safety-level model to protect destructive actions. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
 
-## Verification Policy
+MVP 2.1 adds dashboard routes for safe AI preview:
 
-To ensure stability while maintaining development speed, follow this targeted verification policy:
+- `/settings/ai`: configure OpenAI, Ollama, or OpenAI-compatible providers and test provider health.
+- `/projects/{projectId}/ai`: select a context pack, preview the generated prompt, see safety warnings and token estimates, then run a preview-only AI request.
+- `/projects/{projectId}/ai/runs`: view AI run history and output previews.
 
-- **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
-- **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
-- **Scanner changes**: Run scanner tests and only related application/CLI tests.
-- **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
-- **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
-- **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
-- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
-- **Docs-only changes**: No test run required unless docs generation code changed.
-- **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.
+API keys are never written to `.ai-context`, generated docs, diagnostics, or logs. The current `LocalAiSecretStore` stores secrets under AppData for MVP use; OS secret store integration is planned for production hardening.
+
+## AI Provider Preview
+
+Supported MVP providers:
+
+- OpenAI: API key plus model name.
+- Ollama: local base URL, default `http://localhost:11434`, no key required.
+- OpenAI-compatible: configurable base URL, optional API key, model name.
+
+Prompt preview is built from a selected context pack, pack metadata, optional user instruction, safe AI assistant rules, project metadata, freshness warnings, source path warnings, and a max output token budget. Token estimates use a deterministic `characters / 4` rule. Cost is shown only when static model price metadata exists; otherwise it is unknown.
+
+Safety checks warn on obvious API keys, tokens, private keys, connection strings, secret-prone files, low context freshness, missing pack files, stale generated files, and manually modified generated files. Warnings require user confirmation before a run. AI runs persist run metadata, prompt hash, included files, warnings, token estimate, status, error, and output text/hash. They do not write source or generated files.
+
+## Test Execution Rules For Codex
+
+Codex must not run the full solution test suite by default.
+
+Codex must not run `CliCommandTests` unless `src/services/SourceWorker.Cli/Program.cs`, CLI command parsing, CLI output, or CLI behavior changed. Do not run `CliCommandTests` for AppHost-only, dashboard/UI-only, ApiClient-only, DTO/property-only, docs-only, CSS/layout, AI provider UI changes unless CLI commands were added, or Local API endpoint changes unless CLI consumes that endpoint.
+
+Targeted examples:
+
+- AI provider domain/application changes: run AI provider tests and affected Application tests.
+- AI provider Local API endpoints: run LocalApi AI endpoint tests and ApiClient AI tests.
+- AI dashboard UI: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`; run ApiClient AI tests if the client changed.
+- Docs-only: no tests required.
+- Shared contract changes: run affected ApiClient and LocalApi tests; full tests only if broad contracts break many projects.
+- Final milestone: build solution, run targeted AI/ApiClient/LocalApi tests, and only run full tests if shared architecture, storage, security middleware, or application base abstractions changed.
+
+Every Codex summary must include what changed, which targeted tests were run, why they were enough, whether full tests were intentionally skipped, and whether `CliCommandTests` were skipped and why.
 
 ## Scanner MVP
 

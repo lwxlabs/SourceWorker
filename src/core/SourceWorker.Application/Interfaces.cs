@@ -265,3 +265,49 @@ public interface IAppVersionService
 {
     VersionInfoDto GetVersion();
 }
+
+public interface IAiProvider
+{
+    string Id { get; }
+    AiProviderKind Kind { get; }
+    Task<AiProviderHealthResult> CheckHealthAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken);
+    Task<AiRunOutput> RunAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken);
+}
+
+public interface IAiProviderRegistry
+{
+    IReadOnlyList<IAiProvider> ListProviders();
+    IAiProvider? GetProvider(string providerId);
+}
+
+public interface IAiProviderConfigurationRepository
+{
+    Task<AiProviderConfiguration> SaveAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken);
+    Task<AiProviderConfiguration?> GetAsync(string providerId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AiProviderConfiguration>> ListAsync(CancellationToken cancellationToken);
+}
+
+public interface IAiModelCatalogService { IReadOnlyList<AiModelInfo> GetModels(AiProviderKind providerKind); }
+public interface IAiPromptBuilder { Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken); }
+public interface IAiPromptPreviewService { Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, CancellationToken cancellationToken); }
+public interface IAiTokenEstimator { AiTokenEstimate Estimate(string prompt, int maxOutputTokens); AiCostEstimate EstimateCost(AiTokenEstimate tokens, AiModelInfo? model); }
+public interface IAiRunRepository
+{
+    Task<AiRun> SaveAsync(AiRun run, CancellationToken cancellationToken);
+    Task<AiRun?> GetAsync(Guid runId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AiRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+}
+public interface IAiRunService
+{
+    Task<AiRun> StartAsync(AiRunInput input, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AiRun>> GetRunsAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<AiRun?> GetRunAsync(Guid runId, CancellationToken cancellationToken);
+}
+public interface IAiSafetyService { AiRunSafetyCheck Check(string content, ContextPackManifest? pack = null, ContextFreshnessReport? freshness = null); }
+public interface IAiRedactionService { AiRedactionResult Redact(string content); }
+public interface IAiSecretStore
+{
+    Task SaveSecretAsync(string secretName, string secretValue, CancellationToken cancellationToken);
+    Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken);
+    string Mask(string? secretValue);
+}

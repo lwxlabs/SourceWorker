@@ -167,6 +167,53 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await response.Content.ReadFromJsonAsync<RunExportResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Export response was empty.");
     }
 
+    public async Task<IReadOnlyList<AiProviderStatusDto>> GetAiProvidersAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<AiProviderStatusDto[]>("/api/ai/providers", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<AiProviderStatusDto>> GetAiProviderStatusesAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<AiProviderStatusDto[]>("/api/ai/providers/status", cancellationToken) ?? [];
+
+    public async Task<AiProviderConfigurationResultDto> ConfigureAiProviderAsync(AiProviderConfigurationDto configuration, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/ai/providers/configure", configuration, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiProviderConfigurationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider configuration response was empty.");
+    }
+
+    public async Task<AiProviderStatusDto> TestAiProviderAsync(string providerId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/ai/providers/{Uri.EscapeDataString(providerId)}/test", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiProviderStatusDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Provider test response was empty.");
+    }
+
+    public async Task<IReadOnlyList<ContextPackManifest>> GetAiPacksAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<ContextPackManifest[]>($"/api/projects/{projectId}/ai/packs", cancellationToken) ?? [];
+
+    public async Task<AiPromptPreviewResponse> PreviewAiPromptAsync(Guid projectId, AiPromptPreviewRequest request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/prompt-preview", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiPromptPreviewResponse>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Prompt preview response was empty.");
+    }
+
+    public async Task<AiRunDetailDto> StartAiRunAsync(Guid projectId, AiRunRequest request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/runs", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiRunDetailDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI run response was empty.");
+    }
+
+    public async Task<IReadOnlyList<AiRunSummaryDto>> GetAiRunsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<AiRunSummaryDto[]>($"/api/projects/{projectId}/ai/runs", cancellationToken) ?? [];
+
+    public Task<AiRunDetailDto?> GetAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
+        => GetAsync<AiRunDetailDto>($"/api/projects/{projectId}/ai/runs/{runId}", cancellationToken);
+
     private async Task<T> Required<T>(string path, CancellationToken cancellationToken)
         => await GetAsync<T>(path, cancellationToken) ?? throw new InvalidOperationException($"Local API returned an empty response for '{path}'.");
 

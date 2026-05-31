@@ -52,4 +52,39 @@ public sealed class HealthTests
         (await client.GetAsync($"/api/projects/{created.Project.Id}/packs/backend-docs/content")).EnsureSuccessStatusCode();
         (await client.PostAsync($"/api/projects/{created.Project.Id}/exports/backend-docs-compact/run", null)).EnsureSuccessStatusCode();
     }
+
+    [Fact]
+    public async Task Ai_endpoints_require_token()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "true" })));
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/ai/providers");
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ai_endpoints_configure_preview_and_create_run()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "sourceworker-api-ai-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# Sample");
+
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        using var client = factory.CreateClient();
+        var created = await (await client.PostAsJsonAsync("/api/projects", new AddProjectRequest(root, "AiSample"))).Content.ReadFromJsonAsync<CreateProjectResponse>();
+        Assert.NotNull(created);
+
+        (await client.GetAsync("/api/ai/providers")).EnsureSuccessStatusCode();
+        var configure = await client.PostAsJsonAsync("/api/ai/providers/configure", new { kind = 1, model = "llama3.1", baseUrl = "http://localhost:11434", apiKey = (string?)null, isEnabled = true });
+        configure.EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/ai/providers/Ollama/test", null)).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created!.Project.Id}/ai/packs")).EnsureSuccessStatusCode();
+        var preview = await client.PostAsJsonAsync($"/api/projects/{created.Project.Id}/ai/prompt-preview", new { providerId = "Ollama", packId = "ai-handoff", userInstruction = "Summarize", maxOutputTokens = 100 });
+        preview.EnsureSuccessStatusCode();
+        var run = await client.PostAsJsonAsync($"/api/projects/{created.Project.Id}/ai/runs", new { providerId = "Ollama", packId = "ai-handoff", userInstruction = "Summarize", confirmSafetyWarnings = true, maxOutputTokens = 10 });
+        run.EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/ai/runs")).EnsureSuccessStatusCode();
+    }
 }

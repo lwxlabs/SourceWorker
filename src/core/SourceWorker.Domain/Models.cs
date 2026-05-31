@@ -167,7 +167,7 @@ public sealed record ChangeSetReport(
     int IgnoredCount);
 
 public sealed record LocalStorageSchemaInfo(string Provider, string Mode, string StoragePath, int SchemaVersion, DateTimeOffset CreatedUtc, DateTimeOffset LastMigratedUtc, string AppStorageFormatVersion);
-public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount = 0, int CodeFlowCount = 0, int RouteCount = 0, int ServiceRegistrationCount = 0, int ConfigurationUsageCount = 0, int TestInfoCount = 0);
+public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount = 0, int CodeFlowCount = 0, int RouteCount = 0, int ServiceRegistrationCount = 0, int ConfigurationUsageCount = 0, int TestInfoCount = 0, int AiProviderConfigCount = 0, int AiRunCount = 0);
 
 public sealed record ArtifactLifecycleReport(
     Guid ProjectId,
@@ -244,3 +244,78 @@ public sealed record LocalApiRuntimeState(
     DateTimeOffset StartupUtc,
     string EnvironmentName
 );
+
+public sealed record AiProviderConfiguration(
+    Guid Id,
+    AiProviderKind Kind,
+    string Name,
+    string Model,
+    string? BaseUrl,
+    bool IsEnabled,
+    string? ApiKeySecretName,
+    string? MaskedApiKey,
+    DateTimeOffset UpdatedUtc);
+
+public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater }
+public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
+public enum AiModelCapability { Chat, StreamingLater, ToolCallingLater, VisionLater, Local }
+public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
+
+public sealed record AiModelInfo(string Id, string Name, AiProviderKind ProviderKind, IReadOnlyList<AiModelCapability> Capabilities, decimal? InputUsdPerMillionTokens = null, decimal? OutputUsdPerMillionTokens = null);
+public sealed record AiPromptTemplate(string Id, string Name, string Description, string SystemPrefix);
+public sealed record AiContextPackSelection(Guid ProjectId, string PackId, IReadOnlyList<string> IncludedFiles, IReadOnlyList<string> MissingFiles);
+public sealed record AiTokenEstimate(int PromptTokens, int MaxOutputTokens, int TotalTokens);
+public sealed record AiCostEstimate(decimal? PromptCostUsd, decimal? OutputCostUsd, decimal? TotalCostUsd, string Currency = "USD");
+public sealed record AiSafetyWarning(string Code, string Severity, string Message, string? RelativePath = null);
+public sealed record AiRunSafetyCheck(bool HasWarnings, IReadOnlyList<AiSafetyWarning> Warnings, bool RequiresConfirmation);
+public sealed record AiRedactionResult(string Text, IReadOnlyList<AiSafetyWarning> Warnings, int RedactionCount);
+public sealed record AiProviderHealthResult(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey = null);
+
+public sealed record AiPromptPreview(
+    Guid ProjectId,
+    string ProjectName,
+    string ProviderId,
+    AiProviderKind ProviderKind,
+    string Model,
+    string PackId,
+    IReadOnlyList<string> IncludedFiles,
+    IReadOnlyList<string> MissingFiles,
+    IReadOnlyList<string> FreshnessWarnings,
+    IReadOnlyList<AiSafetyWarning> SafetyWarnings,
+    AiTokenEstimate TokenEstimate,
+    AiCostEstimate CostEstimate,
+    string PromptText,
+    string PromptHash);
+
+public sealed record AiRunInput(
+    Guid ProjectId,
+    string ProviderId,
+    AiProviderKind ProviderKind,
+    string Model,
+    string PackId,
+    string? UserInstruction,
+    bool ConfirmSafetyWarnings,
+    int MaxOutputTokens = 1200);
+
+public sealed record AiRunOutput(string Text, string OutputHash, AiTokenEstimate? TokenEstimate = null, AiCostEstimate? CostEstimate = null);
+
+public sealed record AiRun(
+    Guid Id,
+    Guid ProjectId,
+    string ProviderId,
+    AiProviderKind ProviderKind,
+    string Model,
+    string PackId,
+    string? UserInstruction,
+    string PromptHash,
+    bool StoredPromptText,
+    string? PromptPreview,
+    IReadOnlyList<string> IncludedFiles,
+    IReadOnlyList<AiSafetyWarning> SafetyWarnings,
+    AiTokenEstimate TokenEstimate,
+    AiRunStatus Status,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset? CompletedUtc,
+    string? Error,
+    string? OutputText,
+    string? OutputHash);

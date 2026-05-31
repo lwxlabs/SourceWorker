@@ -116,6 +116,44 @@ public sealed class ApiClientTests
     }
 
     [Fact]
+    public async Task ApiClient_ai_methods_include_bearer_token_and_parse_responses()
+    {
+        var projectId = Guid.NewGuid();
+        var sawAuth = false;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            sawAuth = request.Headers.Authorization?.Scheme == "Bearer" && request.Headers.Authorization.Parameter == "test-token";
+            return request.RequestUri?.AbsolutePath switch
+            {
+                "/api/ai/providers" => """[{"providerId":"Ollama","kind":1,"status":0,"message":"Provider is not configured.","checkedUtc":"2026-05-31T00:00:00Z","maskedApiKey":null}]""",
+                "/api/ai/providers/configure" => """{"id":"11111111-1111-1111-1111-111111111111","kind":1,"name":"Ollama","model":"llama3.1","baseUrl":"http://localhost:11434","isEnabled":true,"apiKeySecretName":null,"maskedApiKey":null,"updatedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/ai/providers/Ollama/test" => """{"providerId":"Ollama","kind":1,"status":1,"message":"ok","checkedUtc":"2026-05-31T00:00:00Z","maskedApiKey":null}""",
+                var path when path == $"/api/projects/{projectId}/ai/prompt-preview" => $$"""{"projectId":"{{projectId}}","projectName":"Sample","providerId":"Ollama","providerKind":1,"model":"llama3.1","packId":"backend-docs","includedFiles":[],"missingFiles":[],"freshnessWarnings":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"costEstimate":{"promptCostUsd":null,"outputCostUsd":null,"totalCostUsd":null,"currency":"USD"},"promptText":"hello","promptHash":"abc"}""",
+                var path when path == $"/api/projects/{projectId}/ai/runs" && request.Method == HttpMethod.Post => $$"""{"id":"22222222-2222-2222-2222-222222222222","projectId":"{{projectId}}","providerId":"Ollama","providerKind":1,"model":"llama3.1","packId":"backend-docs","userInstruction":null,"promptHash":"abc","storedPromptText":false,"promptPreview":null,"includedFiles":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"status":2,"createdUtc":"2026-05-31T00:00:00Z","completedUtc":"2026-05-31T00:00:01Z","error":null,"outputText":"ok","outputHash":"hash"}""",
+                var path when path == $"/api/projects/{projectId}/ai/runs" => "[]",
+                _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
+            };
+        }))
+        { BaseAddress = new Uri("http://localhost:5000") };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions { BearerToken = "test-token" });
+
+        var providers = await client.GetAiProvidersAsync();
+        var config = await client.ConfigureAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "llama3.1", "http://localhost:11434", null));
+        var health = await client.TestAiProviderAsync("Ollama");
+        var preview = await client.PreviewAiPromptAsync(projectId, new AiPromptPreviewRequest("Ollama", "backend-docs", "Summarize"));
+        var run = await client.StartAiRunAsync(projectId, new AiRunRequest("Ollama", "backend-docs", null, true));
+        var runs = await client.GetAiRunsAsync(projectId);
+
+        Assert.True(sawAuth);
+        Assert.Single(providers);
+        Assert.Equal("llama3.1", config.Model);
+        Assert.Equal(AiProviderStatus.Healthy, health.Status);
+        Assert.Equal("hello", preview.PromptText);
+        Assert.Equal("ok", run.OutputText);
+        Assert.Empty(runs);
+    }
+
+    [Fact]
     public async Task Api_client_can_get_runtime_info()
     {
         using var http = new HttpClient(new StubHandler(request => 

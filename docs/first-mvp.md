@@ -146,6 +146,20 @@ Minimal endpoints:
 
 The API uses an in-process queue for scan jobs. It does not expose AI, MCP, cloud, licensing, or desktop UI features yet.
 
+MVP 2.1 adds protected AI preview endpoints:
+
+- `GET /api/ai/providers`
+- `GET /api/ai/providers/status`
+- `POST /api/ai/providers/configure`
+- `POST /api/ai/providers/{providerId}/test`
+- `GET /api/projects/{id}/ai/packs`
+- `POST /api/projects/{id}/ai/prompt-preview`
+- `POST /api/projects/{id}/ai/runs`
+- `GET /api/projects/{id}/ai/runs`
+- `GET /api/projects/{id}/ai/runs/{runId}`
+
+AI endpoints are preview-only. They do not write files. API keys are masked in responses and are not written to `.ai-context`.
+
 ## Dashboard
 
 Start the read-only Blazor dashboard:
@@ -172,8 +186,23 @@ Routes:
 - `/projects/{projectId}/code`
 - `/projects/{projectId}/artifacts`
 - `/settings`
+- `/settings/ai`
+- `/projects/{projectId}/ai`
+- `/projects/{projectId}/ai/runs`
 
 The UI is interactive for MVP 1.9. It supports project registration, scanning with job progress, doc/pack exports, and safe cleanup with confirmation. It is Local API-driven and does not access Localite, scanner, infrastructure, application services, or project files directly.
+
+MVP 2.1 adds AI preview UI. Users can configure OpenAI, Ollama, or OpenAI-compatible providers, choose a context pack, preview the final prompt, see safety warnings and rough token/cost estimates, run an AI request, and view/copy the output. AI results are preview-only and are not applied to files.
+
+## AI Provider Preview
+
+- AI core logic lives in `src/libs/SourceWorker.AI`.
+- Provider and secret infrastructure lives in `src/infrastructure/SourceWorker.AI.Providers`.
+- OpenAI and OpenAI-compatible providers use an OpenAI-style chat completions request.
+- Ollama uses local `api/generate` with default base URL `http://localhost:11434`.
+- Token estimate is deterministic: characters divided by 4, rounded up.
+- Safety checks detect obvious API keys, token values, private keys, connection strings, missing pack files, stale context, and manually modified generated files.
+- Local secret storage is under AppData for MVP use. OS secret store integration is planned later.
 
 ## Generated Context
 
@@ -226,16 +255,18 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 
 `.ai-context/docs/backend/` is the canonical generated documentation location. `instructions/Result/Backend/` is an external Markdown mirror/export target.
 
-## Verification Policy
+## Test Execution Rules For Codex
 
-To ensure stability while maintaining development speed, follow this targeted verification policy:
+Codex must not run the full solution test suite by default.
 
-- **Small UI-only changes**: Run build for affected UI projects and relevant UI/ApiClient tests only.
-- **DTO/Property-only changes**: Run affected ApiClient, LocalApi, and Application tests.
-- **Scanner changes**: Run scanner tests and only related application/CLI tests.
-- **Local API endpoint changes**: Run LocalApi tests and ApiClient tests.
-- **Storage/Schema changes**: Run storage, persistence, freshness, and affected API tests.
-- **Security/Auth/CORS changes**: Run LocalApi security tests and ApiClient connection tests.
-- **CLI command changes**: Run CLI command tests and smoke-test the changed command.
-- **Docs-only changes**: No test run required unless docs generation code changed.
-- **Major changes / Final verification**: Run full `dotnet test SourceWorker.slnx --no-build`.
+Codex must not run `CliCommandTests` unless `src/services/SourceWorker.Cli/Program.cs`, CLI parsing, CLI output, or CLI behavior changed.
+
+Do not run `CliCommandTests` for AppHost-only changes, Dashboard/UI-only changes, ApiClient-only changes, DTO/property-only changes, docs-only changes, CSS/layout changes, AI provider UI changes unless CLI commands were added, or Local API endpoint changes unless CLI consumes that endpoint.
+
+Targeted verification:
+
+- AI application logic: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai`
+- AI ApiClient changes: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient`
+- AI Local API endpoints: `dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Ai`
+- UI-only changes: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`
+- Docs-only: no tests required

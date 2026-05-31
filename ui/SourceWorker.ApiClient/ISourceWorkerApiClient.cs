@@ -38,6 +38,15 @@ public interface ISourceWorkerApiClient
     Task<string> GetPackContentAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
     Task<ExportPackResponse> ExportPackToDefaultAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
     Task<RunExportResponse> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiProviderStatusDto>> GetAiProvidersAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiProviderStatusDto>> GetAiProviderStatusesAsync(CancellationToken cancellationToken = default);
+    Task<AiProviderConfigurationResultDto> ConfigureAiProviderAsync(AiProviderConfigurationDto configuration, CancellationToken cancellationToken = default);
+    Task<AiProviderStatusDto> TestAiProviderAsync(string providerId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ContextPackManifest>> GetAiPacksAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<AiPromptPreviewResponse> PreviewAiPromptAsync(Guid projectId, AiPromptPreviewRequest request, CancellationToken cancellationToken = default);
+    Task<AiRunDetailDto> StartAiRunAsync(Guid projectId, AiRunRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiRunSummaryDto>> GetAiRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<AiRunDetailDto?> GetAiRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
 }
 
 public interface ITokenProvider

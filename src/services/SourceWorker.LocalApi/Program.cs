@@ -189,6 +189,32 @@ app.MapGet("/api/projects/{id:guid}/packs/{packId}/content", async (Guid id, str
 app.MapPost("/api/projects/{id:guid}/packs/{packId}/export-default", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new ExportPackDefaultCommand(id, packId), cancellationToken)));
 app.MapPost("/api/projects/{id:guid}/exports/{exportProfileId}/run", async (Guid id, string exportProfileId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new ExportDocsCommand(id, exportProfileId), cancellationToken)));
 
+app.MapGet("/api/ai/providers", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiProvidersQuery(), cancellationToken)));
+app.MapGet("/api/ai/providers/status", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiProviderStatusesQuery(), cancellationToken)));
+app.MapPost("/api/ai/providers/configure", async (ConfigureAiProviderRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ConfigureAiProviderCommand(request.Kind, request.Model, request.BaseUrl, request.ApiKey, request.IsEnabled), cancellationToken)));
+app.MapPost("/api/ai/providers/{providerId}/test", async (string providerId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new TestAiProviderCommand(providerId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/packs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetProjectAiPacksQuery(id), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/prompt-preview", async (Guid id, AiPromptPreviewRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new PreviewAiPromptCommand(id, request.ProviderId, request.PackId, request.UserInstruction, request.MaxOutputTokens), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/runs", async (Guid id, AiRunRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new StartAiRunCommand(id, request.ProviderId, request.PackId, request.UserInstruction, request.ConfirmSafetyWarnings, request.MaxOutputTokens), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/runs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiRunsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/runs/{runId:guid}", async (Guid id, Guid runId, IRequestFlow flow, CancellationToken cancellationToken) =>
+{
+    var run = await flow.Send(new GetAiRunQuery(id, runId), cancellationToken);
+    return run is null ? Results.NotFound() : Results.Ok(run);
+});
+
 app.Run();
 
 public partial class Program;
+
+public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
+public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200);
+public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);

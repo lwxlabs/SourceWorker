@@ -1,0 +1,33 @@
+@page "/projects/{ProjectId:guid}/ai/runs"
+@inject ISourceWorkerApiClient Api
+
+<h1>AI Runs</h1>
+
+@if (runs is null)
+{
+    <LoadingState />
+}
+else if (runs.Count == 0)
+{
+    <EmptyState Message="Run an AI preview from a context pack to see history here." />
+}
+else
+{
+    <Cards Title="Run History">
+        @foreach (var item in runs)
+        {
+            <div class="list-row">
+                <strong>@item.ProviderKind / @item.Model</strong>
+                <span>@item.PackId - @item.Status - @item.CreatedUtc.ToString("g")</span>
+            </div>
+        }
+    </Cards>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private IReadOnlyList<AiRunSummaryDto>? runs;
+
+    protected override async Task OnInitializedAsync()
+        => runs = await Api.GetAiRunsAsync(ProjectId);
+}

@@ -1,0 +1,81 @@
+@page "/settings/ai"
+@inject ISourceWorkerApiClient Api
+
+<h1>AI Settings</h1>
+
+<Cards Title="Provider Configuration">
+    <div class="grid two">
+        <label>Provider
+            <select @bind="kind">
+                <option value="@AiProviderKind.OpenAI">OpenAI</option>
+                <option value="@AiProviderKind.Ollama">Ollama</option>
+                <option value="@AiProviderKind.OpenAiCompatible">OpenAI-compatible</option>
+            </select>
+        </label>
+        <label>Model
+            <input @bind="model" />
+        </label>
+        <label>Base URL
+            <input @bind="baseUrl" />
+        </label>
+        <label>API key
+            <input type="password" @bind="apiKey" />
+        </label>
+    </div>
+    <button @onclick="ConfigureAsync">Save provider</button>
+    <p class="muted">Secrets are stored locally for preview use and are never written to .ai-context.</p>
+</Cards>
+
+<Cards Title="Providers">
+    @if (providers is null)
+    {
+        <LoadingState />
+    }
+    else if (providers.Count == 0)
+    {
+        <EmptyState Message="Configure OpenAI, Ollama, or an OpenAI-compatible endpoint." />
+    }
+    else
+    {
+        @foreach (var provider in providers)
+        {
+            <div class="list-row">
+                <strong>@provider.Kind</strong>
+                <span>@provider.Status - @provider.Message @(string.IsNullOrWhiteSpace(provider.MaskedApiKey) ? "" : $"({provider.MaskedApiKey})")</span>
+                <button @onclick="() => TestAsync(provider.ProviderId)">Test</button>
+            </div>
+        }
+    }
+</Cards>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+@code {
+    private IReadOnlyList<AiProviderStatusDto>? providers;
+    private AiProviderKind kind = AiProviderKind.Ollama;
+    private string model = "llama3.1";
+    private string? baseUrl = "http://localhost:11434";
+    private string? apiKey;
+    private string? message;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync() => providers = await Api.GetAiProvidersAsync();
+
+    private async Task ConfigureAsync()
+    {
+        var result = await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey));
+        message = $"Saved {result.Kind} with model {result.Model}.";
+        await RefreshAsync();
+    }
+
+    private async Task TestAsync(string providerId)
+    {
+        var result = await Api.TestAiProviderAsync(providerId);
+        message = $"{result.Kind}: {result.Status} - {result.Message}";
+        await RefreshAsync();
+    }
+}

@@ -35,6 +35,15 @@ public sealed record ReadPackContentQuery(Guid ProjectId, string PackId) : IRequ
 public sealed record ExportPackCommand(Guid ProjectId, string PackId, string OutputFile) : IRequest<string>;
 public sealed record ExportPackDefaultCommand(Guid ProjectId, string PackId) : IRequest<ExportPackResponse>;
 public sealed record ExportDocsCommand(Guid ProjectId, string ExportProfileId) : IRequest<RunExportResponse>;
+public sealed record GetAiProvidersQuery : IRequest<IReadOnlyList<AiProviderHealthResult>>;
+public sealed record GetAiProviderStatusesQuery : IRequest<IReadOnlyList<AiProviderHealthResult>>;
+public sealed record ConfigureAiProviderCommand(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true) : IRequest<AiProviderConfiguration>;
+public sealed record TestAiProviderCommand(string ProviderId) : IRequest<AiProviderHealthResult>;
+public sealed record GetProjectAiPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
+public sealed record PreviewAiPromptCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200) : IRequest<AiPromptPreview>;
+public sealed record StartAiRunCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200) : IRequest<AiRun>;
+public sealed record GetAiRunsQuery(Guid ProjectId) : IRequest<IReadOnlyList<AiRun>>;
+public sealed record GetAiRunQuery(Guid ProjectId, Guid RunId) : IRequest<AiRun?>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -335,6 +344,103 @@ public sealed class ExportDocsCommandHandler(IProjectRepository projects, IExpor
         var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
         var run = await runner.RunAsync(project, request.ExportProfileId, cancellationToken);
         return new RunExportResponse(run.ExportProfileId, "instructions/Result/Backend", run.ExportedFiles);
+    }
+}
+
+public sealed class GetAiProvidersQueryHandler(IAiProviderRegistry registry, IAiProviderConfigurationRepository configurations) : IRequestHandler<GetAiProvidersQuery, IReadOnlyList<AiProviderHealthResult>>
+{
+    public async Task<IReadOnlyList<AiProviderHealthResult>> Handle(GetAiProvidersQuery request, CancellationToken cancellationToken)
+    {
+        var configured = await configurations.ListAsync(cancellationToken);
+        return registry.ListProviders()
+            .Select(provider =>
+            {
+                var config = configured.FirstOrDefault(c => c.Kind == provider.Kind);
+                return new AiProviderHealthResult(provider.Id, provider.Kind, config is null ? AiProviderStatus.NotConfigured : (config.IsEnabled ? AiProviderStatus.NotConfigured : AiProviderStatus.Disabled), config is null ? "Provider is not configured." : "Provider is configured.", DateTimeOffset.UtcNow, config?.MaskedApiKey);
+            })
+            .ToArray();
+    }
+}
+
+public sealed class GetAiProviderStatusesQueryHandler(IAiProviderRegistry registry, IAiProviderConfigurationRepository configurations) : IRequestHandler<GetAiProviderStatusesQuery, IReadOnlyList<AiProviderHealthResult>>
+{
+    public async Task<IReadOnlyList<AiProviderHealthResult>> Handle(GetAiProviderStatusesQuery request, CancellationToken cancellationToken)
+    {
+        var results = new List<AiProviderHealthResult>();
+        foreach (var configuration in await configurations.ListAsync(cancellationToken))
+        {
+            var provider = registry.GetProvider(configuration.Kind.ToString());
+            results.Add(provider is null
+                ? new AiProviderHealthResult(configuration.Kind.ToString(), configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey)
+                : await provider.CheckHealthAsync(configuration, cancellationToken));
+        }
+        return results;
+    }
+}
+
+public sealed class ConfigureAiProviderCommandHandler(IAiProviderConfigurationRepository configurations, IAiSecretStore secrets) : IRequestHandler<ConfigureAiProviderCommand, AiProviderConfiguration>
+{
+    public async Task<AiProviderConfiguration> Handle(ConfigureAiProviderCommand request, CancellationToken cancellationToken)
+    {
+        var secretName = request.Kind is AiProviderKind.Ollama ? null : $"ai:{request.Kind}:api-key";
+        string? masked = null;
+        if (!string.IsNullOrWhiteSpace(secretName) && !string.IsNullOrWhiteSpace(request.ApiKey))
+        {
+            await secrets.SaveSecretAsync(secretName, request.ApiKey, cancellationToken);
+            masked = secrets.Mask(request.ApiKey);
+        }
+        else if (!string.IsNullOrWhiteSpace(secretName))
+        {
+            var existing = await secrets.GetSecretAsync(secretName, cancellationToken);
+            masked = secrets.Mask(existing);
+        }
+
+        return await configurations.SaveAsync(new AiProviderConfiguration(Guid.NewGuid(), request.Kind, request.Kind.ToString(), request.Model, request.BaseUrl, request.IsEnabled, secretName, masked, DateTimeOffset.UtcNow), cancellationToken);
+    }
+}
+
+public sealed class TestAiProviderCommandHandler(IAiProviderRegistry registry, IAiProviderConfigurationRepository configurations) : IRequestHandler<TestAiProviderCommand, AiProviderHealthResult>
+{
+    public async Task<AiProviderHealthResult> Handle(TestAiProviderCommand request, CancellationToken cancellationToken)
+    {
+        var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken);
+        if (configuration is null) return new AiProviderHealthResult(request.ProviderId, AiProviderKind.OpenAiCompatible, AiProviderStatus.NotConfigured, "Provider is not configured.", DateTimeOffset.UtcNow);
+        var provider = registry.GetProvider(request.ProviderId);
+        return provider is null
+            ? new AiProviderHealthResult(request.ProviderId, configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey)
+            : await provider.CheckHealthAsync(configuration, cancellationToken);
+    }
+}
+
+public sealed class GetProjectAiPacksQueryHandler(IProjectRepository projects, IContextPackService packs) : IRequestHandler<GetProjectAiPacksQuery, IReadOnlyList<ContextPackManifest>>
+{
+    public async Task<IReadOnlyList<ContextPackManifest>> Handle(GetProjectAiPacksQuery request, CancellationToken cancellationToken)
+        => await packs.ListAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken);
+}
+
+public sealed class PreviewAiPromptCommandHandler(IAiPromptPreviewService preview) : IRequestHandler<PreviewAiPromptCommand, AiPromptPreview>
+{
+    public Task<AiPromptPreview> Handle(PreviewAiPromptCommand request, CancellationToken cancellationToken)
+        => preview.PreviewAsync(request.ProjectId, request.ProviderId, request.PackId, request.UserInstruction, request.MaxOutputTokens, cancellationToken);
+}
+
+public sealed class StartAiRunCommandHandler(IAiRunService runs) : IRequestHandler<StartAiRunCommand, AiRun>
+{
+    public Task<AiRun> Handle(StartAiRunCommand request, CancellationToken cancellationToken)
+        => runs.StartAsync(new AiRunInput(request.ProjectId, request.ProviderId, AiProviderKind.OpenAiCompatible, "", request.PackId, request.UserInstruction, request.ConfirmSafetyWarnings, request.MaxOutputTokens), cancellationToken);
+}
+
+public sealed class GetAiRunsQueryHandler(IAiRunService runs) : IRequestHandler<GetAiRunsQuery, IReadOnlyList<AiRun>>
+{
+    public Task<IReadOnlyList<AiRun>> Handle(GetAiRunsQuery request, CancellationToken cancellationToken) => runs.GetRunsAsync(request.ProjectId, cancellationToken);
+}
+
+public sealed class GetAiRunQueryHandler(IAiRunService runs) : IRequestHandler<GetAiRunQuery, AiRun?>
+{
+    public async Task<AiRun?> Handle(GetAiRunQuery request, CancellationToken cancellationToken)
+    {
+        var run = await runs.GetRunAsync(request.RunId, cancellationToken);
+        return run?.ProjectId == request.ProjectId ? run : null;
     }
 }
 

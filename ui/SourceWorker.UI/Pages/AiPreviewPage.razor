@@ -1,0 +1,86 @@
+@page "/projects/{ProjectId:guid}/ai"
+@inject ISourceWorkerApiClient Api
+
+<h1>AI Preview</h1>
+
+<Cards Title="Prompt Builder">
+    <div class="grid two">
+        <label>Provider
+            <select @bind="providerId">
+                @foreach (var provider in providers)
+                {
+                    <option value="@provider.ProviderId">@provider.Kind - @provider.Status</option>
+                }
+            </select>
+        </label>
+        <label>Context pack
+            <select @bind="packId">
+                @foreach (var pack in packs)
+                {
+                    <option value="@pack.Pack.Id">@pack.Pack.Name</option>
+                }
+            </select>
+        </label>
+    </div>
+    <label>User instruction
+        <textarea rows="5" @bind="instruction"></textarea>
+    </label>
+    <button @onclick="PreviewAsync">Preview prompt</button>
+    <button @onclick="RunAsync" disabled="@(preview is null)">Run AI</button>
+</Cards>
+
+@if (preview is not null)
+{
+    <Cards Title="Prompt Preview">
+        <div class="grid two">
+            <MetricCard Label="Prompt tokens" Value="@preview.TokenEstimate.PromptTokens.ToString()" />
+            <MetricCard Label="Total estimate" Value="@preview.TokenEstimate.TotalTokens.ToString()" />
+        </div>
+        @if (preview.SafetyWarnings.Count > 0)
+        {
+            <h3>Safety warnings</h3>
+            @foreach (var warning in preview.SafetyWarnings)
+            {
+                <div class="list-row"><strong>@warning.Severity</strong><span>@warning.Message</span></div>
+            }
+        }
+        <pre style="white-space: pre-wrap;">@preview.PromptText</pre>
+    </Cards>
+}
+
+@if (run is not null)
+{
+    <Cards Title="AI Output">
+        <div class="list-row"><strong>Status</strong><span>@run.Status</span></div>
+        @if (!string.IsNullOrWhiteSpace(run.Error))
+        {
+            <p>@run.Error</p>
+        }
+        <pre style="white-space: pre-wrap;">@run.OutputText</pre>
+    </Cards>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private IReadOnlyList<AiProviderStatusDto> providers = [];
+    private IReadOnlyList<ContextPackManifest> packs = [];
+    private string providerId = "";
+    private string packId = "";
+    private string? instruction;
+    private AiPromptPreviewResponse? preview;
+    private AiRunDetailDto? run;
+
+    protected override async Task OnInitializedAsync()
+    {
+        providers = await Api.GetAiProvidersAsync();
+        packs = await Api.GetAiPacksAsync(ProjectId);
+        providerId = providers.FirstOrDefault()?.ProviderId ?? "Ollama";
+        packId = packs.FirstOrDefault()?.Pack.Id ?? "backend-docs";
+    }
+
+    private async Task PreviewAsync()
+        => preview = await Api.PreviewAiPromptAsync(ProjectId, new AiPromptPreviewRequest(providerId, packId, instruction));
+
+    private async Task RunAsync()
+        => run = await Api.StartAiRunAsync(ProjectId, new AiRunRequest(providerId, packId, instruction, preview?.SafetyWarnings.Count > 0));
+}

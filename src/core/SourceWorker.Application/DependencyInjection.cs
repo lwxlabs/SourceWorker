@@ -39,6 +39,15 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<ExportPackCommand, string>, ExportPackCommandHandler>();
         services.AddScoped<IRequestHandler<ExportPackDefaultCommand, SourceWorker.Contracts.ExportPackResponse>, ExportPackDefaultCommandHandler>();
         services.AddScoped<IRequestHandler<ExportDocsCommand, SourceWorker.Contracts.RunExportResponse>, ExportDocsCommandHandler>();
+        services.AddScoped<IRequestHandler<GetAiProvidersQuery, IReadOnlyList<SourceWorker.Domain.AiProviderHealthResult>>, GetAiProvidersQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiProviderStatusesQuery, IReadOnlyList<SourceWorker.Domain.AiProviderHealthResult>>, GetAiProviderStatusesQueryHandler>();
+        services.AddScoped<IRequestHandler<ConfigureAiProviderCommand, SourceWorker.Domain.AiProviderConfiguration>, ConfigureAiProviderCommandHandler>();
+        services.AddScoped<IRequestHandler<TestAiProviderCommand, SourceWorker.Domain.AiProviderHealthResult>, TestAiProviderCommandHandler>();
+        services.AddScoped<IRequestHandler<GetProjectAiPacksQuery, IReadOnlyList<SourceWorker.Domain.ContextPackManifest>>, GetProjectAiPacksQueryHandler>();
+        services.AddScoped<IRequestHandler<PreviewAiPromptCommand, SourceWorker.Domain.AiPromptPreview>, PreviewAiPromptCommandHandler>();
+        services.AddScoped<IRequestHandler<StartAiRunCommand, SourceWorker.Domain.AiRun>, StartAiRunCommandHandler>();
+        services.AddScoped<IRequestHandler<GetAiRunsQuery, IReadOnlyList<SourceWorker.Domain.AiRun>>, GetAiRunsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiRunQuery, SourceWorker.Domain.AiRun?>, GetAiRunQueryHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

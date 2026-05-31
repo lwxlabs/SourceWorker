@@ -6,6 +6,8 @@
     <ProjectReference Include="..\..\libs\SourceWorker.Scanner\SourceWorker.Scanner.csproj" />
     <ProjectReference Include="..\..\libs\SourceWorker.Context\SourceWorker.Context.csproj" />
     <ProjectReference Include="..\..\libs\SourceWorker.Recipes\SourceWorker.Recipes.csproj" />
+    <ProjectReference Include="..\..\libs\SourceWorker.AI\SourceWorker.AI.csproj" />
+    <ProjectReference Include="..\SourceWorker.AI.Providers\SourceWorker.AI.Providers.csproj" />
     <ProjectReference Include="..\SourceWorker.Git\SourceWorker.Git.csproj" />
   </ItemGroup>
 

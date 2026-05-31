@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SourceWorker.Application;
+using SourceWorker.AI;
+using SourceWorker.AI.Providers;
 using SourceWorker.Context;
 using SourceWorker.Git;
 using SourceWorker.Recipes;
@@ -13,6 +15,8 @@ public static class DependencyInjection
     public static IServiceCollection AddSourceWorkerInfrastructure(this IServiceCollection services)
     {
         services.AddSourceWorkerLocaliteStorage();
+        services.AddSourceWorkerAiCore();
+        services.AddSourceWorkerAiProviders();
         services.AddSingleton<IGitInspector, BasicGitInspector>();
         services.AddSingleton<IProjectScanner, BasicProjectScanner>();
         services.AddSingleton<IFlowExtractor, RuleBasedFlowExtractor>();

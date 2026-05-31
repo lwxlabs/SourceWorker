@@ -6,7 +6,7 @@ public sealed record HealthResponse(string Status, string Service);
 public sealed record ProjectDto(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
 public sealed record CreateProjectResponse(ProjectDto Project);
 public sealed record LocalStorageSchemaInfo(string Provider, string Mode, string StoragePath, int SchemaVersion, DateTimeOffset CreatedUtc, DateTimeOffset LastMigratedUtc, string AppStorageFormatVersion);
-public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount, int CodeFlowCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount, int TestInfoCount);
+public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount, int CodeFlowCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount, int TestInfoCount, int AiProviderConfigCount = 0, int AiRunCount = 0);
 public sealed record DoctorReport(string ProjectRoot, bool ProjectRootFound, bool GitRepoFound, IReadOnlyList<string> SolutionFiles, IReadOnlyList<string> ProjectFiles, IReadOnlyList<string> TestProjects, bool ContextFolderExists, bool ImportedInstructionsFound, IReadOnlyList<string> Recipes, IReadOnlyList<ProjectInstructionSourcePath> MissingSourcePaths, bool IsContextStale, DateTimeOffset? LastScanTime, IReadOnlyList<string> Warnings);
 public sealed record ProjectInstructionSourcePath(string OriginalPath, string NormalizedPath, bool Exists, string Type, bool IsInsideProject, string? WarningMessage);
 public sealed record ContextFreshnessReport(Guid ProjectId, bool HasStaleContext, IReadOnlyList<string> StaleContextFiles, IReadOnlyList<string> MissingGeneratedFiles, IReadOnlyList<string> ManuallyModifiedFiles, IReadOnlyList<string> FilesChangedSinceLastGeneration, int FreshnessScore, IReadOnlyList<string> RecommendedActions);
@@ -120,3 +120,18 @@ public sealed record DashboardActionAvailability(
 );
 
 public sealed record DashboardActionRequirement(string Key, string Description, bool IsMet);
+
+public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater }
+public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
+public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
+public sealed record AiProviderConfigurationDto(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
+public sealed record AiProviderConfigurationResultDto(Guid Id, AiProviderKind Kind, string Name, string Model, string? BaseUrl, bool IsEnabled, string? ApiKeySecretName, string? MaskedApiKey, DateTimeOffset UpdatedUtc);
+public sealed record AiProviderStatusDto(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey);
+public sealed record AiSafetyWarningDto(string Code, string Severity, string Message, string? RelativePath);
+public sealed record AiTokenEstimateDto(int PromptTokens, int MaxOutputTokens, int TotalTokens);
+public sealed record AiCostEstimateDto(decimal? PromptCostUsd, decimal? OutputCostUsd, decimal? TotalCostUsd, string Currency);
+public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200);
+public sealed record AiPromptPreviewResponse(Guid ProjectId, string ProjectName, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, IReadOnlyList<string> IncludedFiles, IReadOnlyList<string> MissingFiles, IReadOnlyList<string> FreshnessWarnings, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiCostEstimateDto CostEstimate, string PromptText, string PromptHash);
+public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);
+public sealed record AiRunSummaryDto(Guid Id, Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, string? UserInstruction, string PromptHash, bool StoredPromptText, string? PromptPreview, IReadOnlyList<string> IncludedFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string? Error, string? OutputText, string? OutputHash);
+public sealed record AiRunDetailDto(Guid Id, Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string PackId, string? UserInstruction, string PromptHash, bool StoredPromptText, string? PromptPreview, IReadOnlyList<string> IncludedFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string? Error, string? OutputText, string? OutputHash);

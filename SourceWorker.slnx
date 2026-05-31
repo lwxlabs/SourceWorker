@@ -6,6 +6,7 @@
     <Project Path="src/core/SourceWorker.Domain/SourceWorker.Domain.csproj" />
   </Folder>
   <Folder Name="/src/infrastructure/">
+    <Project Path="src/infrastructure/SourceWorker.AI.Providers/SourceWorker.AI.Providers.csproj" />
     <Project Path="src/infrastructure/SourceWorker.FileSystem/SourceWorker.FileSystem.csproj" />
     <Project Path="src/infrastructure/SourceWorker.Git/SourceWorker.Git.csproj" />
     <Project Path="src/infrastructure/SourceWorker.Infrastructure/SourceWorker.Infrastructure.csproj" />
@@ -13,6 +14,7 @@
     <Project Path="src/infrastructure/SourceWorker.Storage.Localite/SourceWorker.Storage.Localite.csproj" />
   </Folder>
   <Folder Name="/src/libs/">
+    <Project Path="src/libs/SourceWorker.AI/SourceWorker.AI.csproj" />
     <Project Path="src/libs/SourceWorker.Context/SourceWorker.Context.csproj" />
     <Project Path="src/libs/SourceWorker.Recipes/SourceWorker.Recipes.csproj" />
     <Project Path="src/libs/SourceWorker.Scanner/SourceWorker.Scanner.csproj" />
