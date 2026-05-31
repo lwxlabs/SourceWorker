@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\core\SourceWorker.Contracts\SourceWorker.Contracts.csproj" />
+    <ProjectReference Include="..\..\libs\SourceWorker.Hosting\SourceWorker.Hosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

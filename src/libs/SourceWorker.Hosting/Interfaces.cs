@@ -1,6 +1,6 @@
-﻿using SourceWorker.Contracts;
+using SourceWorker.Contracts;
 
-namespace SourceWorker.AppHost;
+namespace SourceWorker.Hosting;
 
 public interface IProcessLauncher
 {
@@ -26,10 +26,16 @@ public interface ILocalBrowserLauncher
     void OpenBrowser(string url);
 }
 
-public sealed record AppHostOptions(
-    bool ApiOnly = false,
-    bool DashboardOnly = false,
-    bool OpenBrowser = false,
-    int? ApiPort = null,
-    string? Environment = null
-);
+public interface ILocalApiLifecycleService
+{
+    Task<LocalApiLifecycleResult> StartAsync(LocalApiLaunchOptions options, CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
+    LocalApiLifecycleResult? Current { get; }
+}
+
+public interface IRuntimePathResolver
+{
+    string FindSolutionRoot();
+    string GetApiTokenPath();
+    string? ReadApiToken();
+}

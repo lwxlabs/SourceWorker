@@ -1,0 +1,28 @@
+<div>
+    <div class="desktop-error">
+        <strong>Startup failed</strong>
+        <p>@State.ErrorMessage</p>
+        <p>@State.SuggestedFix</p>
+    </div>
+
+    <div class="desktop-steps">
+        @foreach (var step in State.Steps)
+        {
+            <div class="desktop-step">
+                <span class="desktop-dot"></span>
+                <span>@step</span>
+            </div>
+        }
+    </div>
+
+    <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-primary" @onclick="OnRetry">Retry</button>
+        <button class="btn btn-outline-secondary" @onclick="OnCopyDiagnostics">Copy diagnostics</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DesktopStartupState State { get; set; } = DesktopStartupState.StartingShell();
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnCopyDiagnostics { get; set; }
+}

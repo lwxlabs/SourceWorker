@@ -1,8 +1,8 @@
 # SourceWorker Current Progress
 
-Date: 2026-05-31
+Date: 2026-06-01
 
-SourceWorker is a local-first project context engine with a protected Local API, one-start AppHost, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, and MVP 2.2 dogfood readiness hardening.
+SourceWorker is a local-first project context engine with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, and MVP 2.4 desktop publishing.
 
 Still intentionally not included:
 - MCP
@@ -11,7 +11,8 @@ Still intentionally not included:
 - terminal agent execution
 - autonomous code editing
 - automatic AI file writes
-- full MAUI desktop host
+- full installer/updater
+- production code signing
 
 ## Current Architecture
 
@@ -28,18 +29,94 @@ Still intentionally not included:
 - `SourceWorker.ApiClient` is the dashboard/client boundary. It has no Blazor dependency.
 - `SourceWorker.UI` contains reusable Razor components/pages.
 - `SourceWorker.Dashboard` is the current Blazor Web App host.
-- `SourceWorker.AppHost` starts Local API and Dashboard together with token/base URL discovery.
+- `SourceWorker.Desktop` is the Windows-first MAUI Blazor Hybrid app. It hosts `SourceWorker.UI`, starts/manages Local API internally, configures `SourceWorker.ApiClient`, and can be published as an `.exe`.
+- `SourceWorker.Hosting` is the shared local orchestration library used by Desktop and AppHost.
+- `SourceWorker.AppHost` starts Local API and Dashboard together with token/base URL discovery for development/browser fallback.
 
-## MVP 2.2 Dogfood Readiness
+## MVP 2.4 Desktop App
 
-MVP 2.2 focuses on making SourceWorker pleasant enough to start using daily on real repositories such as SourceWorker itself, Insights, Localite, and LwX.Flow.
+MVP 2.4 adds `ui/SourceWorker.Desktop`, a Windows-first MAUI Blazor Hybrid host for normal daily use. It is not a browser dashboard wrapper; it uses `BlazorWebView` to host the reusable `SourceWorker.UI` components directly.
 
-New read-only dogfood/onboarding surfaces:
+Desktop startup behavior:
+- starts desktop shell
+- checks for/reuses an existing healthy Local API on `http://localhost:5000`
+- starts `SourceWorker.LocalApi` if needed
+- waits for `/health`
+- reads the same AppData API token used by AppHost
+- configures `SourceWorker.ApiClient` with base URL and bearer token
+- shows startup progress and rich startup errors
+- stops the Local API process on shutdown only when Desktop started it
+
+Desktop-specific pieces:
+- `IDesktopLocalApiLifecycleService`
+- `IDesktopRuntimeStateService`
+- `IDesktopApiConnectionService`
+- `IDesktopStartupDiagnosticsService`
+- `IDesktopShellService`
+- `IDesktopWindowService`
+- `IDesktopNotificationService`
+- `IDesktopClipboardService`
+- `IDesktopFileDialogService`
+- `IDesktopExternalLinkService`
+- `ISingleInstanceService`
+
+Desktop UI additions:
+- startup progress/error screen
+- bottom Local API status bar
+- Desktop launch mode in settings
+- Browse button seam for project registration
+- single-instance mutex
+- in-app notification abstraction
+
+Publish output:
+
+```text
+artifacts/desktop/win-x64/
+  SourceWorker.Desktop.exe
+  LocalApi/
+    SourceWorker.LocalApi.exe
+```
+
+Normal desktop development command:
+
+```powershell
+dotnet run --project ui/SourceWorker.Desktop
+```
+
+Publish command:
+
+```powershell
+.\tools\publish\Publish-Desktop-Windows.ps1
+```
+
+Shortcut command:
+
+```powershell
+.\tools\publish\Create-DesktopShortcut.ps1
+```
+
+Known MVP 2.4 limitations:
+- no full installer/MSIX yet
+- no update mechanism yet
+- no production code signing yet
+- tray/focus-existing-window behavior is only prepared, not complete
+- folder picker uses an MVP file-picker fallback where native folder picking is not available
+- OS notifications are represented by an abstraction and in-app/no-op implementation
+
+## MVP 2.3 Dogfood Feedback Loop
+
+MVP 2.3 focuses on making SourceWorker usable every day on real repositories such as SourceWorker itself, Insights, Localite, and LwX.Flow. It adds session tracking, friction capture, next-action recommendations, path validation, project-level AI defaults, Quick Ask, and local logs. It still does not add autonomous code editing or automatic AI file writes.
+
+Dogfood/onboarding surfaces:
 - `/dogfood`
+- `/dogfood/sessions`
+- `/dogfood/sessions/new`
+- `/dogfood/sessions/{sessionId}`
+- `/dogfood/issues`
 - `/projects/onboarding`
 - `/projects/{projectId}/onboarding`
 
-Dogfood readiness checks:
+Dogfood readiness/session concepts:
 - AppHost detected
 - Local API connected
 - token configured
@@ -52,8 +129,21 @@ Dogfood readiness checks:
 - at least one prompt preview or AI run
 - at least one AI run completed
 - no AI file writes detected
+- selected projects and per-project readiness
+- completed/failed session steps
+- friction issues and notes
+- generated recommendations and feedback export
 
-The dashboard home now shows a next-action dogfood card. Project dashboard now links directly to AI preview, backend docs, packs, and onboarding.
+New MVP 2.3 models and services:
+- `DogfoodSession`, `DogfoodSessionProject`, `DogfoodSessionStep`, `DogfoodSessionIssue`, and `DogfoodSessionNote`
+- `DogfoodFrictionCategory`, `DogfoodSeverity`, and `DogfoodOutcome`
+- `NextAction`, `NextActionKind`, `NextActionPriority`, `NextActionSource`, and `NextActionTarget`
+- `ProjectPathValidationResult` and `RecentProjectPath`
+- `ProjectAiSettings`, `QuickAskRequest`, and `QuickAskResult`
+- `AiRunNote`, `AiRunRating`, and `AiRunComparison`
+- `LogEntry`, `CorrelationId`, and `OperationContext`
+
+The dashboard home now shows next recommended actions. The project dashboard links directly to AI preview, backend docs, packs, onboarding, and includes a Quick Ask card that uses project AI defaults.
 
 ## One-Start Command
 
@@ -108,12 +198,17 @@ No AI CLI commands were added in MVP 2.1. AI preview is Local API and dashboard 
 - `/projects/{projectId}/ai`
 - `/projects/{projectId}/ai/runs`
 - `/dogfood`
+- `/dogfood/sessions`
+- `/dogfood/sessions/new`
+- `/dogfood/sessions/{sessionId}`
+- `/dogfood/issues`
 - `/projects/onboarding`
 - `/projects/{projectId}/onboarding`
 - `/jobs`
 - `/settings`
 - `/settings/ai`
 - `/settings/diagnostics`
+- `/settings/logs`
 
 Dashboard behavior:
 - register projects
@@ -130,6 +225,11 @@ Dashboard behavior:
 - diagnose provider connection issues
 - inspect AI usage and pack readiness
 - view secret-safe diagnostics
+- start and review dogfood sessions
+- capture friction issues and export issue summaries
+- validate project paths before registration
+- view recent local logs
+- use Quick Ask from a project dashboard
 
 ## Localite Storage State
 
@@ -196,6 +296,15 @@ MVP 2.2 hardening:
 - Pack quality scoring checks missing files and freshness before AI runs.
 - Diagnostics summary/export excludes secrets, source code, and prompts by default.
 
+MVP 2.3 daily-use additions:
+- Dogfood session services create default daily-use steps: choose projects, register missing projects, scan, check freshness, open docs/packs, preview `ai-handoff`, preview `backend-docs`, run AI preview, check diagnostics, capture friction, and finish.
+- Friction issues can be reported with route, optional project id, category, severity, title, expected/actual behavior, and status.
+- Next-action generation uses project status, provider status, freshness, jobs, diagnostics, dogfood issues, and pack readiness to suggest the next useful action.
+- Project path validation catches missing paths, unsafe system folders, unreadable paths, duplicate-style cases, missing `.git`, and missing `.sln` as warning/error states before registration.
+- Project AI defaults store default provider, model, pack, prompt template, max output tokens, prompt/output retention flags, and freshness threshold.
+- Quick Ask builds a prompt preview and can run a preview-only AI request using those project defaults.
+- Local logs provide a lightweight dogfood debugging surface for recent jobs, provider diagnostics, and local app events.
+
 ## Generated Context
 
 `.ai-context/` structure:
@@ -212,6 +321,7 @@ MVP 2.2 hardening:
 - `instructions/imported/source-path-validation.md` when imported
 - `docs/backend/*.md`
 - `packs/*.pack.yaml`
+- `dogfood/` feedback exports when explicitly exported
 - `exports/backend-docs-compact.yaml`
 - `diagrams/*.mmd`
 - `recipes/*.yaml`
@@ -226,6 +336,8 @@ Folder responsibilities:
 - `instructions/Result/Backend/` is the external Markdown mirror.
 
 `index.yaml` is format version 5 and includes project, latest scan, Git, storage, context files, recipes, imported instructions, stale status, artifact lifecycle, cleanup, code intelligence, flow confidence, context browser, outputs, packs, exports, and docs state.
+
+Default packs are `ai-handoff`, `backend-docs`, `onboarding`, `current-branch`, and `dogfood-feedback`. The dogfood pack is intended to carry exported dogfood issues/session summaries, diagnostics-safe summaries, and current handoff context into the next planning pass.
 
 ## Code Intelligence And Flow Extraction
 
@@ -278,7 +390,30 @@ MVP 2.2 protected endpoints:
 - `GET /api/diagnostics/summary`
 - `POST /api/diagnostics/export`
 
+MVP 2.3 protected endpoints:
+- `POST /api/projects/validate-path`
+- `GET /api/projects/recent-paths`
+- `GET /api/projects/{id}/ai/settings`
+- `PUT /api/projects/{id}/ai/settings`
+- `POST /api/projects/{id}/ai/quick-ask/preview`
+- `POST /api/projects/{id}/ai/quick-ask/run`
+- `GET /api/dogfood/sessions`
+- `POST /api/dogfood/sessions`
+- `GET /api/dogfood/sessions/{sessionId}`
+- `POST /api/dogfood/sessions/{sessionId}/steps/{stepId}/complete`
+- `POST /api/dogfood/sessions/{sessionId}/finish`
+- `POST /api/dogfood/sessions/{sessionId}/export`
+- `GET /api/dogfood/issues`
+- `POST /api/dogfood/issues`
+- `PUT /api/dogfood/issues/{issueId}/status`
+- `POST /api/dogfood/issues/export`
+- `GET /api/next-actions`
+- `GET /api/projects/{id}/next-actions`
+- `GET /api/logs`
+
 All protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
+
+No new Local API endpoints were required for MVP 2.4. Desktop consumes the existing runtime, project, dashboard, dogfood, diagnostics, AI, and context endpoints through `SourceWorker.ApiClient`.
 
 ## Test Coverage
 
@@ -303,6 +438,21 @@ MVP 2.2 adds targeted coverage for:
 - known model pricing/context-window metadata
 - expanded ApiClient AI calls and bearer usage
 - expanded Local API AI/dogfood/diagnostics endpoints
+
+MVP 2.3 adds targeted coverage for:
+- dogfood session creation and step completion
+- friction issue creation and status update
+- next-action generation for empty/initial app states
+- project path validation for missing and warning-level paths
+- Local API dogfood/session/friction/next-action/log endpoints
+- ApiClient dogfood, friction, project path validation, next-action, and log methods
+
+MVP 2.4 adds targeted coverage for:
+- shared Hosting/AppHost orchestration
+- Local API lifecycle reuse/start/owned shutdown behavior
+- Desktop project build
+- UI/Dashboard builds after the folder picker seam
+- ApiClient regression coverage
 
 ## Test Execution Rules For Codex
 
@@ -341,25 +491,50 @@ Every Codex summary must include:
 
 ## Latest Verification
 
-These commands passed during MVP 2.2:
+These commands passed during MVP 2.4:
 
 ```powershell
 dotnet build SourceWorker.slnx
-dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai
+dotnet build ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj
+dotnet test tests/SourceWorker.Tests.AppHost/SourceWorker.Tests.AppHost.csproj
 dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient
-dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Ai
+dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj
 dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
 dotnet build ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj
+.\tools\publish\Publish-Desktop-Windows.ps1
+.\tools\publish\Create-DesktopShortcut.ps1
 ```
 
-Full solution tests were intentionally not run for MVP 2.2 because the changed surface was AI/application, Local API AI endpoints, ApiClient AI methods, diagnostics/dogfood endpoints, and dashboard AI/dogfood pages. `CliCommandTests` were intentionally skipped because no CLI command parsing, output, or behavior changed.
+MVP 2.4 startup fix:
+- Resolved MAUI crash in `App.CreateWindow` by ensuring `MainPage` is initialized first using `new Window(new MainPage())`.
+- Removed obsolete `MainPage` property usage to comply with .NET 10 MAUI patterns.
+- Verified zero warnings and zero errors in `SourceWorker.Desktop` build.
+
+Published exe created:
+
+```text
+C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker\artifacts\desktop\win-x64\SourceWorker.Desktop.exe
+```
+
+Desktop shortcut created:
+
+```text
+C:\Users\louie\Desktop\SourceWorker.lnk
+```
+
+Full solution tests were intentionally not run for MVP 2.4 because the changed surface was Hosting/AppHost orchestration, Desktop, UI host seams, publish scripts, and docs. `CliCommandTests` were intentionally skipped because no CLI command parsing, output, or behavior changed.
 
 ## Next Recommended Step
 
-MVP 2.2 establishes dogfood readiness and a more practical AI preview loop. The next strong step is a real dogfood pass:
-- Run AppHost.
-- Register and scan SourceWorker, Insights, Localite, and LwX.Flow.
-- Use `backend-docs` and `ai-handoff` packs on each repo.
-- Capture friction in onboarding, diagnostics, and provider setup.
-- Improve provider failure messages and pack quality scoring from real failures.
+MVP 2.4 establishes the Windows-first desktop app. The next strong step is a real desktop dogfood pass:
+- Start `SourceWorker.Desktop.exe` from `artifacts/desktop/win-x64` or the Desktop shortcut.
+- Register SourceWorker, Insights, Localite, and LwX.Flow.
+- Scan all four.
+- Open backend docs and packs.
+- Configure Ollama or OpenAI.
+- Preview `ai-handoff` and `backend-docs`.
+- Run one preview-only AI request and one Quick Ask.
+- Capture friction issues from confusing pages or errors.
+- Export dogfood feedback and use it to prioritize MVP 2.5.
+- Tighten the native folder picker, tray/minimize behavior, startup diagnostics, and Desktop settings from real use.
 - Do not add patch application or automatic AI writes yet.

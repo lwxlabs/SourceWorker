@@ -16,6 +16,7 @@
   <Folder Name="/src/libs/">
     <Project Path="src/libs/SourceWorker.AI/SourceWorker.AI.csproj" />
     <Project Path="src/libs/SourceWorker.Context/SourceWorker.Context.csproj" />
+    <Project Path="src/libs/SourceWorker.Hosting/SourceWorker.Hosting.csproj" />
     <Project Path="src/libs/SourceWorker.Recipes/SourceWorker.Recipes.csproj" />
     <Project Path="src/libs/SourceWorker.Scanner/SourceWorker.Scanner.csproj" />
   </Folder>
@@ -34,6 +35,7 @@
   <Folder Name="/ui/">
     <Project Path="ui/SourceWorker.ApiClient/SourceWorker.ApiClient.csproj" />
     <Project Path="ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj" />
+    <Project Path="ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj" />
     <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
   </Folder>
 </Solution>

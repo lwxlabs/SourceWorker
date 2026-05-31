@@ -357,3 +357,31 @@ public sealed record DogfoodProjectReadiness(Guid? ProjectId, string? ProjectNam
 
 public sealed record DiagnosticsSummary(string AppVersion, string ApiVersion, StorageInfo Storage, LocalApiRuntimeState Runtime, IReadOnlyList<AiProviderHealthResult> ProviderStatuses, int ProjectCount, int JobCount, int AiRunCount, IReadOnlyList<string> RecentErrors, DateTimeOffset GeneratedUtc);
 public sealed record DiagnosticsExport(string FileName, string Content, DateTimeOffset GeneratedUtc);
+
+public sealed record DogfoodSession(Guid Id, DateTimeOffset StartedUtc, DateTimeOffset? CompletedUtc, IReadOnlyList<DogfoodSessionProject> Projects, IReadOnlyList<DogfoodSessionStep> Steps, IReadOnlyList<DogfoodSessionIssue> Issues, IReadOnlyList<DogfoodSessionNote> Notes, DogfoodOutcome Outcome, IReadOnlyList<string> GeneratedRecommendations);
+public sealed record DogfoodSessionProject(Guid? ProjectId, string Name, string? Path, bool IsRegistered, bool IsScanned);
+public sealed record DogfoodSessionStep(string Id, string Label, bool IsCompleted, DateTimeOffset? CompletedUtc, string? Detail = null);
+public sealed record DogfoodSessionIssue(Guid Id, Guid? SessionId, Guid? ProjectId, string PageRoute, DogfoodFrictionCategory Category, DogfoodSeverity Severity, string Title, string Description, string? ExpectedBehavior, string? ActualBehavior, string Status, DateTimeOffset CreatedUtc, string? OperationId = null);
+public sealed record DogfoodSessionNote(Guid Id, string Text, DateTimeOffset CreatedUtc);
+public enum DogfoodFrictionCategory { Startup, ProjectRegistration, Scan, ContextGeneration, Docs, Packs, AIProviderSetup, PromptPreview, AIRun, Diagnostics, UIConfusion, Performance, ErrorMessage, Other }
+public enum DogfoodSeverity { Low, Medium, High, Critical }
+public enum DogfoodOutcome { InProgress, Completed, Blocked, Abandoned }
+
+public sealed record NextAction(string Id, NextActionKind Kind, NextActionPriority Priority, NextActionSource Source, NextActionTarget Target, string Title, string Description, string? Href);
+public enum NextActionKind { RegisterProject, RunFirstScan, OpenBackendDocs, ConfigureAiProvider, FixProviderConfiguration, PreviewAiHandoffPack, RunAiPreview, ReviewStaleContext, RunCleanupPreview, ExportDiagnostics, ResolveFailedJob, StartDogfoodSession }
+public enum NextActionPriority { Low, Medium, High, Critical }
+public enum NextActionSource { ProjectStatus, DogfoodReadiness, ContextFreshness, LatestScan, PackQuality, AiProviderStatus, FailedJobs, FrictionIssues, Diagnostics, ArtifactLifecycle }
+public sealed record NextActionTarget(Guid? ProjectId, string? ProjectName);
+
+public sealed record ProjectPathValidationResult(string Path, bool Exists, bool IsDirectory, bool IsGitRepository, bool HasSolutionFile, bool IsSystemPath, bool CanRead, bool CanRegister, IReadOnlyList<string> Warnings, IReadOnlyList<string> Errors, string SuggestedName);
+public sealed record RecentProjectPath(string Path, string SuggestedName, DateTimeOffset LastUsedUtc);
+public sealed record ProjectAiSettings(Guid ProjectId, string? DefaultProviderId, string? DefaultModel, string DefaultContextPack, string DefaultPromptTemplate, int MaxOutputTokens, bool? StorePrompt, bool? StoreOutput, int FreshnessWarningThreshold);
+public sealed record QuickAskRequest(Guid ProjectId, string Question, string? ProviderId, string? PackId, string? TemplateId, int? MaxOutputTokens, bool ConfirmSafetyWarnings);
+public sealed record QuickAskResult(AiPromptPreview Preview, AiRun? Run);
+public enum AiRunRating { Unrated, Useful, NotUseful }
+public sealed record AiRunNote(Guid Id, Guid RunId, string Text, DateTimeOffset CreatedUtc);
+public sealed record AiRunComparison(Guid LeftRunId, Guid RightRunId, string? Summary);
+
+public sealed record LogEntry(Guid Id, string Level, string Source, string Message, DateTimeOffset CreatedUtc, string? CorrelationId = null, Guid? ProjectId = null);
+public sealed record CorrelationId(string Value);
+public sealed record OperationContext(string CorrelationId, Guid? ProjectId, string Source, DateTimeOffset StartedUtc);

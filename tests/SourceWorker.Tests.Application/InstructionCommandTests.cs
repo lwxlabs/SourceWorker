@@ -54,6 +54,7 @@ public sealed class InstructionCommandTests
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "docs", "backend", "README.md")));
         Assert.True(File.Exists(Path.Combine(root, "instructions", "Result", "Backend", "README.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "packs", "backend-docs.pack.yaml")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "packs", "dogfood-feedback.pack.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "exports", "backend-docs-compact.yaml")));
         Assert.Contains("do not guess", await File.ReadAllTextAsync(Path.Combine(root, ".ai-context", "ai-handoff.md")));
         Assert.Contains("missing.cs", await File.ReadAllTextAsync(Path.Combine(root, ".ai-context", "index.yaml")));

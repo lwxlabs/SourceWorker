@@ -1,0 +1,14 @@
+@inject IDesktopRuntimeStateService Runtime
+
+@{
+    var state = Runtime.GetState();
+}
+
+<div class="desktop-statusbar">
+    <span><strong>Local API:</strong> @(state.LocalApiBaseUrl is null ? "starting" : "connected")</span>
+    <span><strong>Auth:</strong> @(state.TokenConfigured ? "enabled" : "open")</span>
+    <span><strong>API PID:</strong> @(state.LocalApiProcessId?.ToString() ?? "external")</span>
+    <span><strong>Owned:</strong> @(state.OwnedLocalApiProcess ? "yes" : "no")</span>
+    <span><strong>Version:</strong> @state.AppVersion</span>
+    <span><strong>Environment:</strong> Desktop</span>
+</div>

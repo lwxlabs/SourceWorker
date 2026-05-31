@@ -1,0 +1,59 @@
+@page "/dogfood/sessions/{SessionId:guid}"
+@inject ISourceWorkerApiClient Api
+
+<h1>Dogfood Session</h1>
+
+@if (session is null)
+{
+    <LoadingState />
+}
+else
+{
+    <Cards Title="Projects">
+        @foreach (var project in session.Projects)
+        {
+            <div class="list-row"><strong>@project.Name</strong><span>@(project.Path ?? "path not selected")</span></div>
+        }
+    </Cards>
+
+    <Cards Title="Checklist">
+        @foreach (var step in session.Steps)
+        {
+            <div class="list-row">
+                <strong>@(step.IsCompleted ? "Done" : "Open")</strong>
+                <span>@step.Label</span>
+                @if (!step.IsCompleted)
+                {
+                    <button @onclick="() => Complete(step.Id)">Complete</button>
+                }
+            </div>
+        }
+    </Cards>
+
+    <Cards Title="Recommendations">
+        @foreach (var rec in session.GeneratedRecommendations)
+        {
+            <div class="list-row"><strong>Next</strong><span>@rec</span></div>
+        }
+        <button @onclick="Finish">Finish session</button>
+        <button @onclick="Export">Export feedback</button>
+    </Cards>
+}
+
+@if (export is not null)
+{
+    <Cards Title="@export.FileName">
+        <pre style="white-space: pre-wrap;">@export.Content</pre>
+    </Cards>
+}
+
+@code {
+    [Parameter] public Guid SessionId { get; set; }
+    private DogfoodSessionDto? session;
+    private DiagnosticsExportDto? export;
+
+    protected override async Task OnParametersSetAsync() => session = await Api.GetDogfoodSessionAsync(SessionId);
+    private async Task Complete(string stepId) => session = await Api.CompleteDogfoodStepAsync(SessionId, stepId);
+    private async Task Finish() => session = await Api.FinishDogfoodSessionAsync(SessionId);
+    private async Task Export() => export = await Api.ExportDogfoodSessionAsync(SessionId);
+}

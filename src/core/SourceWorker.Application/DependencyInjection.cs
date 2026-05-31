@@ -61,6 +61,24 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetProjectDogfoodStatusQuery, SourceWorker.Domain.DogfoodProjectReadiness>, GetProjectDogfoodStatusQueryHandler>();
         services.AddScoped<IRequestHandler<GetDiagnosticsSummaryQuery, SourceWorker.Domain.DiagnosticsSummary>, GetDiagnosticsSummaryQueryHandler>();
         services.AddScoped<IRequestHandler<ExportDiagnosticsCommand, SourceWorker.Domain.DiagnosticsExport>, ExportDiagnosticsCommandHandler>();
+        services.AddScoped<IRequestHandler<GetDogfoodSessionsQuery, IReadOnlyList<SourceWorker.Domain.DogfoodSession>>, GetDogfoodSessionsQueryHandler>();
+        services.AddScoped<IRequestHandler<StartDogfoodSessionCommand, SourceWorker.Domain.DogfoodSession>, StartDogfoodSessionCommandHandler>();
+        services.AddScoped<IRequestHandler<GetDogfoodSessionQuery, SourceWorker.Domain.DogfoodSession?>, GetDogfoodSessionQueryHandler>();
+        services.AddScoped<IRequestHandler<CompleteDogfoodStepCommand, SourceWorker.Domain.DogfoodSession>, CompleteDogfoodStepCommandHandler>();
+        services.AddScoped<IRequestHandler<FinishDogfoodSessionCommand, SourceWorker.Domain.DogfoodSession>, FinishDogfoodSessionCommandHandler>();
+        services.AddScoped<IRequestHandler<ExportDogfoodSessionCommand, SourceWorker.Domain.DiagnosticsExport>, ExportDogfoodSessionCommandHandler>();
+        services.AddScoped<IRequestHandler<ReportFrictionIssueCommand, SourceWorker.Domain.DogfoodSessionIssue>, ReportFrictionIssueCommandHandler>();
+        services.AddScoped<IRequestHandler<GetFrictionIssuesQuery, IReadOnlyList<SourceWorker.Domain.DogfoodSessionIssue>>, GetFrictionIssuesQueryHandler>();
+        services.AddScoped<IRequestHandler<UpdateFrictionIssueStatusCommand, SourceWorker.Domain.DogfoodSessionIssue?>, UpdateFrictionIssueStatusCommandHandler>();
+        services.AddScoped<IRequestHandler<ExportFrictionIssuesCommand, SourceWorker.Domain.DiagnosticsExport>, ExportFrictionIssuesCommandHandler>();
+        services.AddScoped<IRequestHandler<GetNextActionsQuery, IReadOnlyList<SourceWorker.Domain.NextAction>>, GetNextActionsQueryHandler>();
+        services.AddScoped<IRequestHandler<ValidateProjectPathCommand, SourceWorker.Domain.ProjectPathValidationResult>, ValidateProjectPathCommandHandler>();
+        services.AddScoped<IRequestHandler<GetRecentProjectPathsQuery, IReadOnlyList<SourceWorker.Domain.RecentProjectPath>>, GetRecentProjectPathsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetProjectAiSettingsQuery, SourceWorker.Domain.ProjectAiSettings>, GetProjectAiSettingsQueryHandler>();
+        services.AddScoped<IRequestHandler<UpdateProjectAiSettingsCommand, SourceWorker.Domain.ProjectAiSettings>, UpdateProjectAiSettingsCommandHandler>();
+        services.AddScoped<IRequestHandler<PreviewQuickAskCommand, SourceWorker.Domain.QuickAskResult>, PreviewQuickAskCommandHandler>();
+        services.AddScoped<IRequestHandler<RunQuickAskCommand, SourceWorker.Domain.QuickAskResult>, RunQuickAskCommandHandler>();
+        services.AddScoped<IRequestHandler<GetLogsQuery, IReadOnlyList<SourceWorker.Domain.LogEntry>>, GetLogsQueryHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

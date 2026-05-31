@@ -1,6 +1,7 @@
 ﻿@inject ISourceWorkerApiClient Api
 @inject ToastService Toast
 @inject DashboardActionService Actions
+@inject IProjectFolderPicker FolderPicker
 
 <div class="card mb-4">
     <div class="card-header bg-primary text-white">
@@ -15,7 +16,10 @@
         
         <div class="mb-3">
             <label class="form-label">Local Project Path</label>
-            <input type="text" class="form-control" @bind="path" placeholder="C:\path\to\project" disabled="@(!availability.IsEnabled)" />
+            <div class="input-group">
+                <input type="text" class="form-control" @bind="path" placeholder="C:\path\to\project" disabled="@(!availability.IsEnabled)" />
+                <button class="btn btn-outline-secondary" type="button" @onclick="Browse" disabled="@(!availability.IsEnabled)">Browse</button>
+            </div>
             <div class="form-text">The path must be accessible by the Local API process.</div>
         </div>
         <div class="mb-3">
@@ -74,5 +78,14 @@
     private async Task Cancel()
     {
         await OnCancel.InvokeAsync();
+    }
+
+    private async Task Browse()
+    {
+        var selected = await FolderPicker.PickFolderAsync();
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            path = selected;
+        }
     }
 }

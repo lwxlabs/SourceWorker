@@ -2,7 +2,7 @@
 
 SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a Blazor dashboard over a hardened Local API with Bearer token authentication.
 
-MVP 2.1 adds a safe AI provider preview layer. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, and full MAUI desktop hosting are still intentionally not included.
+MVP 2.4 adds a Windows-first `SourceWorker.Desktop` MAUI Blazor Hybrid app. It reuses `SourceWorker.UI`, starts/manages `SourceWorker.LocalApi` internally, configures `SourceWorker.ApiClient` with the local URL/token, and can be published as a runnable `.exe`. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, patch application, full installer/updater, and production code signing are still intentionally not included.
 
 ## Architecture
 
@@ -13,6 +13,7 @@ MVP 2.1 adds a safe AI provider preview layer. AI output is preview-only and nev
 - `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, and exposes read-only context browsing.
 - `src/libs/SourceWorker.Recipes` hosts rule-based recipe execution, including `backend-docs-compact`.
 - `src/libs/SourceWorker.AI` owns AI prompt building, context-pack prompting, token/cost estimates, safety checks, redaction preview, and AI run orchestration.
+- Dogfood, friction capture, next-action, project path validation, project AI defaults, Quick Ask, and log records follow the same clean architecture flow: dependency-free Domain models, Application ports/handlers, Localite repositories, Local API endpoints, ApiClient methods, and dashboard pages.
 - `src/infrastructure/SourceWorker.AI.Providers` implements OpenAI, Ollama, OpenAI-compatible providers, and local AppData secret storage.
 - `src/infrastructure/SourceWorker.Storage.Localite` wires table-backed Localite/SQLite storage. Secrets are intentionally not stored.
 - `src/infrastructure/SourceWorker.Git` provides basic Git inspection.
@@ -22,6 +23,8 @@ MVP 2.1 adds a safe AI provider preview layer. AI output is preview-only and nev
 - `ui/SourceWorker.ApiClient` is the typed Local API client boundary for UI hosts.
 - `ui/SourceWorker.UI` contains reusable Razor components and pages for future browser/desktop hosts.
 - `ui/SourceWorker.Dashboard` is the first Blazor Web App host. It is read-only and Local API-driven.
+- `ui/SourceWorker.Desktop` is the Windows-first MAUI Blazor Hybrid app for normal daily use.
+- `src/libs/SourceWorker.Hosting` contains reusable Local API/AppHost process orchestration shared by AppHost and Desktop.
 
 ## CLI
 
@@ -50,7 +53,35 @@ dotnet run --project src/services/SourceWorker.Cli -- recipes C:\path\to\project
 dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
 ```
 
-## Startup
+## Desktop Startup
+
+Development:
+
+```powershell
+dotnet run --project ui/SourceWorker.Desktop
+```
+
+Published exe:
+
+```powershell
+.\artifacts\desktop\win-x64\SourceWorker.Desktop.exe
+```
+
+Publish:
+
+```powershell
+.\tools\publish\Publish-Desktop-Windows.ps1
+```
+
+Create shortcut:
+
+```powershell
+.\tools\publish\Create-DesktopShortcut.ps1
+```
+
+The desktop app starts the Local API internally, waits for health, configures the API client with the local token, and hosts the reusable UI through `BlazorWebView`. After publishing and creating the shortcut, no command is needed for normal use. Windows is first; macOS comes later.
+
+## Development Startup
 
 The easiest way to start everything is using the **AppHost**:
 
@@ -58,7 +89,7 @@ The easiest way to start everything is using the **AppHost**:
 dotnet run --project src/services/SourceWorker.AppHost -- --open
 ```
 
-This will:
+AppHost remains useful for development and browser/debug workflows. It will:
 1. Start the **Local API**.
 2. Wait for it to become healthy.
 3. Start the **Dashboard** with auto-discovery.
@@ -111,6 +142,15 @@ MVP 2.2 hardens daily use:
 - AI history/privacy settings.
 - Dogfood readiness and diagnostics endpoints.
 
+MVP 2.3 adds daily dogfood workflow polish:
+
+- Dogfood sessions for SourceWorker, Insights, Localite, LwX.Flow, or any selected projects.
+- In-app friction issue capture with category, severity, status, and markdown export.
+- Local next recommended actions across the home, project, dogfood, AI, and diagnostics surfaces.
+- Project path validation before registration, including duplicate, missing, system-folder, no-git, and no-solution warnings.
+- Project-level AI defaults and a Quick Ask shortcut from the project dashboard.
+- Local logs and correlation-ready records for dogfood debugging.
+
 ## Dogfood Tutorial
 
 Use SourceWorker on SourceWorker:
@@ -131,6 +171,18 @@ Then:
 8. Run AI preview.
 9. Copy output.
 10. Verify no files changed from the AI run.
+
+MVP 2.3 dogfood loop:
+
+1. Open `/dogfood/sessions/new`.
+2. Select SourceWorker, Insights, Localite, and LwX.Flow or enter your own paths.
+3. Register missing projects.
+4. Scan each project.
+5. Open generated docs and packs.
+6. Preview `ai-handoff` and `backend-docs`.
+7. Run one preview-only AI request.
+8. Capture at least one friction issue if anything feels awkward.
+9. Export dogfood feedback for the next planning pass.
 
 Use SourceWorker on Insights:
 
@@ -196,7 +248,7 @@ Folder responsibilities:
 - `.ai-context/exports/` stores export profiles/history.
 - `instructions/Result/Backend/` remains an external mirrored Markdown export target.
 
-The first rule-based recipe, `backend-docs-compact`, writes canonical backend documentation to `.ai-context/docs/backend/` and mirrors it to `instructions/Result/Backend/`.
+The first rule-based recipe, `backend-docs-compact`, writes canonical backend documentation to `.ai-context/docs/backend/` and mirrors it to `instructions/Result/Backend/`. Default packs now include `ai-handoff`, `backend-docs`, `onboarding`, `current-branch`, and `dogfood-feedback`.
 
 Generated markdown includes SourceWorker metadata comments with format version, project id, scan run id, recipe id, generated UTC, input hash, content hash, and status. `index.yaml` is format version 5 and includes storage, artifact lifecycle, code intelligence, flow, context browser, outputs, packs, exports, and docs summaries. Doctor/context-status/artifacts use these records to detect missing, manually modified, orphaned, and deprecated generated files. `cleanup-preview` is read-only; `cleanup-generated` only deletes confidently generated orphan/deprecated files.
 

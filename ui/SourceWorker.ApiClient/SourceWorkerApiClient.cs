@@ -281,6 +281,119 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await response.Content.ReadFromJsonAsync<DiagnosticsExportDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Diagnostics export response was empty.");
     }
 
+    public async Task<IReadOnlyList<DogfoodSessionDto>> GetDogfoodSessionsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<DogfoodSessionDto[]>("/api/dogfood/sessions", cancellationToken) ?? [];
+
+    public async Task<DogfoodSessionDto> StartDogfoodSessionAsync(IReadOnlyList<DogfoodSessionProjectDto> projects, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/dogfood/sessions", new StartDogfoodSessionRequestDto(projects), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DogfoodSessionDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Dogfood session response was empty.");
+    }
+
+    public Task<DogfoodSessionDto?> GetDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        => GetAsync<DogfoodSessionDto>($"/api/dogfood/sessions/{sessionId}", cancellationToken);
+
+    public async Task<DogfoodSessionDto> CompleteDogfoodStepAsync(Guid sessionId, string stepId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/dogfood/sessions/{sessionId}/steps/{Uri.EscapeDataString(stepId)}/complete", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DogfoodSessionDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Dogfood step response was empty.");
+    }
+
+    public async Task<DogfoodSessionDto> FinishDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/dogfood/sessions/{sessionId}/finish", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DogfoodSessionDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Dogfood finish response was empty.");
+    }
+
+    public async Task<DiagnosticsExportDto> ExportDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/dogfood/sessions/{sessionId}/export", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DiagnosticsExportDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Dogfood export response was empty.");
+    }
+
+    public async Task<IReadOnlyList<DogfoodSessionIssueDto>> GetFrictionIssuesAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<DogfoodSessionIssueDto[]>("/api/dogfood/issues", cancellationToken) ?? [];
+
+    public async Task<DogfoodSessionIssueDto> ReportFrictionIssueAsync(DogfoodSessionIssueDto issue, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/dogfood/issues", issue, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DogfoodSessionIssueDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Issue response was empty.");
+    }
+
+    public async Task<DogfoodSessionIssueDto?> UpdateFrictionIssueStatusAsync(Guid issueId, string status, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync($"/api/dogfood/issues/{issueId}/status", new UpdateIssueStatusRequestDto(status), cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DogfoodSessionIssueDto>(JsonOptions, cancellationToken);
+    }
+
+    public async Task<DiagnosticsExportDto> ExportFrictionIssuesAsync(CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync("/api/dogfood/issues/export", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DiagnosticsExportDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Issues export response was empty.");
+    }
+
+    public async Task<IReadOnlyList<NextActionDto>> GetNextActionsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<NextActionDto[]>("/api/next-actions", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<NextActionDto>> GetProjectNextActionsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<NextActionDto[]>($"/api/projects/{projectId}/next-actions", cancellationToken) ?? [];
+
+    public async Task<ProjectPathValidationResultDto> ValidateProjectPathAsync(string path, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync("/api/projects/validate-path", new { path }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProjectPathValidationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Path validation response was empty.");
+    }
+
+    public async Task<IReadOnlyList<RecentProjectPathDto>> GetRecentProjectPathsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<RecentProjectPathDto[]>("/api/projects/recent-paths", cancellationToken) ?? [];
+
+    public Task<ProjectAiSettingsDto> GetProjectAiSettingsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<ProjectAiSettingsDto>($"/api/projects/{projectId}/ai/settings", cancellationToken);
+
+    public async Task<ProjectAiSettingsDto> UpdateProjectAiSettingsAsync(ProjectAiSettingsDto settings, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync($"/api/projects/{settings.ProjectId}/ai/settings", settings, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProjectAiSettingsDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Project AI settings response was empty.");
+    }
+
+    public async Task<QuickAskResultDto> PreviewQuickAskAsync(Guid projectId, QuickAskRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/quick-ask/preview", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<QuickAskResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Quick ask preview response was empty.");
+    }
+
+    public async Task<QuickAskResultDto> RunQuickAskAsync(Guid projectId, QuickAskRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/quick-ask/run", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<QuickAskResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Quick ask response was empty.");
+    }
+
+    public async Task<IReadOnlyList<LogEntryDto>> GetLogsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<LogEntryDto[]>("/api/logs", cancellationToken) ?? [];
+
     private async Task<T> Required<T>(string path, CancellationToken cancellationToken)
         => await GetAsync<T>(path, cancellationToken) ?? throw new InvalidOperationException($"Local API returned an empty response for '{path}'.");
 

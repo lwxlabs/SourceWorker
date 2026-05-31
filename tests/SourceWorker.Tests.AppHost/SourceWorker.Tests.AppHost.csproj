@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\services\SourceWorker.AppHost\SourceWorker.AppHost.csproj" />
+    <ProjectReference Include="..\..\src\libs\SourceWorker.Hosting\SourceWorker.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

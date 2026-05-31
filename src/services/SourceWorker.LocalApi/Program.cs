@@ -113,6 +113,10 @@ app.MapGet("/api/projects", async (
 
 app.MapPost("/api/projects", async (AddProjectRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(new CreateProjectResponse(await flow.Send(new AddProjectCommand(request.Path, request.Name), cancellationToken))));
+app.MapPost("/api/projects/validate-path", async (ValidateProjectPathRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ValidateProjectPathCommand(request.Path), cancellationToken)));
+app.MapGet("/api/projects/recent-paths", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetRecentProjectPathsQuery(), cancellationToken)));
 
 app.MapPost("/api/projects/{id:guid}/scan", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Accepted($"/api/projects/{id}/scan", await flow.Send(new StartProjectScanCommand(id), cancellationToken)));
@@ -226,16 +230,50 @@ app.MapDelete("/api/projects/{id:guid}/ai/runs/{runId:guid}", async (Guid id, Gu
     => await flow.Send(new DeleteAiRunCommand(id, runId), cancellationToken) ? Results.Ok() : Results.NotFound());
 app.MapGet("/api/projects/{id:guid}/ai/usage", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetProjectAiUsageQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/settings", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetProjectAiSettingsQuery(id), cancellationToken)));
+app.MapPut("/api/projects/{id:guid}/ai/settings", async (Guid id, ProjectAiSettings request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new UpdateProjectAiSettingsCommand(request with { ProjectId = id }), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/quick-ask/preview", async (Guid id, QuickAskRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new PreviewQuickAskCommand(request with { ProjectId = id }), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/quick-ask/run", async (Guid id, QuickAskRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new RunQuickAskCommand(request with { ProjectId = id }), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/ai/packs/{packId}/quality", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetAiPackQualityQuery(id, packId), cancellationToken)));
 app.MapGet("/api/dogfood/status", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetDogfoodStatusQuery(), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/dogfood/status", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetProjectDogfoodStatusQuery(id), cancellationToken)));
+app.MapGet("/api/dogfood/sessions", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetDogfoodSessionsQuery(), cancellationToken)));
+app.MapPost("/api/dogfood/sessions", async (StartDogfoodSessionRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new StartDogfoodSessionCommand(request.Projects), cancellationToken)));
+app.MapGet("/api/dogfood/sessions/{sessionId:guid}", async (Guid sessionId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new GetDogfoodSessionQuery(sessionId), cancellationToken) is { } session ? Results.Ok(session) : Results.NotFound());
+app.MapPost("/api/dogfood/sessions/{sessionId:guid}/steps/{stepId}/complete", async (Guid sessionId, string stepId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CompleteDogfoodStepCommand(sessionId, stepId), cancellationToken)));
+app.MapPost("/api/dogfood/sessions/{sessionId:guid}/finish", async (Guid sessionId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new FinishDogfoodSessionCommand(sessionId), cancellationToken)));
+app.MapPost("/api/dogfood/sessions/{sessionId:guid}/export", async (Guid sessionId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ExportDogfoodSessionCommand(sessionId), cancellationToken)));
+app.MapGet("/api/dogfood/issues", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetFrictionIssuesQuery(), cancellationToken)));
+app.MapPost("/api/dogfood/issues", async (DogfoodSessionIssue request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ReportFrictionIssueCommand(request), cancellationToken)));
+app.MapPut("/api/dogfood/issues/{issueId:guid}/status", async (Guid issueId, UpdateIssueStatusRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new UpdateFrictionIssueStatusCommand(issueId, request.Status), cancellationToken) is { } issue ? Results.Ok(issue) : Results.NotFound());
+app.MapPost("/api/dogfood/issues/export", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ExportFrictionIssuesCommand(), cancellationToken)));
+app.MapGet("/api/next-actions", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetNextActionsQuery(), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/next-actions", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetNextActionsQuery(id), cancellationToken)));
 app.MapGet("/api/diagnostics/summary", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetDiagnosticsSummaryQuery(), cancellationToken)));
 app.MapPost("/api/diagnostics/export", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new ExportDiagnosticsCommand(), cancellationToken)));
+app.MapGet("/api/logs", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetLogsQuery(), cancellationToken)));
 
 app.Run();
 
@@ -245,3 +283,6 @@ public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Mode
 public sealed record ValidateAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, int MaxOutputTokens = 1200);
 public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null);
 public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);
+public sealed record ValidateProjectPathRequest(string Path);
+public sealed record StartDogfoodSessionRequest(IReadOnlyList<DogfoodSessionProject> Projects);
+public sealed record UpdateIssueStatusRequest(string Status);

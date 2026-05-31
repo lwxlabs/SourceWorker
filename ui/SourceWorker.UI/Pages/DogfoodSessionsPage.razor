@@ -1,0 +1,51 @@
+@page "/dogfood/sessions"
+@page "/dogfood/sessions/new"
+@inject ISourceWorkerApiClient Api
+
+<h1>Dogfood Sessions</h1>
+<p class="lead">Run a real-use loop across SourceWorker, Insights, Localite, and LwX.Flow.</p>
+
+<Cards Title="New Session">
+    <p>Default projects are labels only. Add or register real paths from onboarding/project pages.</p>
+    <button @onclick="StartSession">Start dogfood session</button>
+</Cards>
+
+@if (sessions is null)
+{
+    <LoadingState />
+}
+else if (sessions.Count == 0)
+{
+    <EmptyState Message="No dogfood sessions yet. Start one to capture daily-use friction." />
+}
+else
+{
+    <Cards Title="Sessions">
+        @foreach (var session in sessions)
+        {
+            <div class="list-row">
+                <strong>@session.StartedUtc.ToString("g")</strong>
+                <span><a href="/dogfood/sessions/@session.Id">@session.Outcome</a> - @session.Steps.Count(s => s.IsCompleted)/@session.Steps.Count steps</span>
+            </div>
+        }
+    </Cards>
+}
+
+@code {
+    private IReadOnlyList<DogfoodSessionDto>? sessions;
+
+    protected override async Task OnInitializedAsync() => sessions = await Api.GetDogfoodSessionsAsync();
+
+    private async Task StartSession()
+    {
+        var projects = new[]
+        {
+            new DogfoodSessionProjectDto(null, "SourceWorker", null, false, false),
+            new DogfoodSessionProjectDto(null, "Insights", null, false, false),
+            new DogfoodSessionProjectDto(null, "Localite", null, false, false),
+            new DogfoodSessionProjectDto(null, "LwX.Flow", null, false, false)
+        };
+        var session = await Api.StartDogfoodSessionAsync(projects);
+        sessions = await Api.GetDogfoodSessionsAsync();
+    }
+}

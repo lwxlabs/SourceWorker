@@ -439,9 +439,9 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine("      files: 7");
         builder.AppendLine("      status: Generated");
         builder.AppendLine("packs:");
-        builder.AppendLine("  total: 4");
+        builder.AppendLine("  total: 5");
         builder.AppendLine("  items:");
-        foreach (var pack in new[] { ("ai-handoff", ".ai-context/packs/ai-handoff.pack.yaml", 3), ("backend-docs", ".ai-context/packs/backend-docs.pack.yaml", 7), ("onboarding", ".ai-context/packs/onboarding.pack.yaml", 3), ("current-branch", ".ai-context/packs/current-branch.pack.yaml", 3) })
+        foreach (var pack in new[] { ("ai-handoff", ".ai-context/packs/ai-handoff.pack.yaml", 3), ("backend-docs", ".ai-context/packs/backend-docs.pack.yaml", 7), ("onboarding", ".ai-context/packs/onboarding.pack.yaml", 3), ("current-branch", ".ai-context/packs/current-branch.pack.yaml", 3), ("dogfood-feedback", ".ai-context/packs/dogfood-feedback.pack.yaml", 3) })
         {
             builder.AppendLine($"    - id: {pack.Item1}");
             builder.AppendLine($"      path: \"{pack.Item2}\"");

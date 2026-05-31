@@ -1,0 +1,28 @@
+@page "/settings/logs"
+@inject ISourceWorkerApiClient Api
+
+<h1>Local Logs</h1>
+<p class="lead">Lightweight local records. No source code or secrets.</p>
+
+@if (logs is null)
+{
+    <LoadingState />
+}
+else if (logs.Count == 0)
+{
+    <EmptyState Message="No persisted logs yet. Job logs and provider diagnostics will appear as local records as dogfooding expands." />
+}
+else
+{
+    <Cards Title="Recent Logs">
+        @foreach (var log in logs)
+        {
+            <div class="list-row"><strong>@log.Level</strong><span>@log.Source - @log.Message - @log.CreatedUtc.ToString("g")</span></div>
+        }
+    </Cards>
+}
+
+@code {
+    private IReadOnlyList<LogEntryDto>? logs;
+    protected override async Task OnInitializedAsync() => logs = await Api.GetLogsAsync();
+}

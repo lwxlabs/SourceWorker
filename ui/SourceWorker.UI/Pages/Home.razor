@@ -21,6 +21,10 @@
         {
             <div class="list-row"><strong>Next</strong><span>@action</span></div>
         }
+        @foreach (var action in nextActions)
+        {
+            <div class="list-row"><strong>@action.Priority</strong><span><a href="@action.Href">@action.Title</a> - @action.Description</span></div>
+        }
         <a href="/dogfood">Open dogfood checklist</a>
     }
 </Cards>
@@ -33,6 +37,7 @@
     private HealthResponse? health;
     private StorageInfo? storage;
     private DogfoodProjectReadinessDto? dogfood;
+    private IReadOnlyList<NextActionDto> nextActions = [];
     private IReadOnlyList<ProjectSummaryDto> projects = [];
 
     protected override async Task OnInitializedAsync()
@@ -43,6 +48,7 @@
             storage = await Api.GetStorageInfoAsync();
             projects = await Api.GetProjectsSummaryAsync(limit: 5);
             dogfood = await Api.GetDogfoodStatusAsync();
+            nextActions = await Api.GetNextActionsAsync();
         }
         catch
         {

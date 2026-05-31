@@ -135,6 +135,15 @@ public sealed class ApiClientTests
                 "/api/dogfood/status" => """{"projectId":null,"projectName":null,"checklist":{"items":[],"status":"Ready","nextActions":[]},"score":100}""",
                 "/api/diagnostics/summary" => """{"appVersion":"2.2","apiVersion":"2.2","storage":{"schema":{"provider":"Localite","mode":"table-backed","storagePath":"local.db","schemaVersion":1,"createdUtc":"2026-05-31T00:00:00Z","lastMigratedUtc":"2026-05-31T00:00:00Z","appStorageFormatVersion":"3"},"projectCount":0,"scanRunCount":0,"indexedFileCount":0,"generatedArtifactCount":0,"jobCount":0,"instructionCount":0,"recipeCount":0,"repositoryHealth":true},"runtime":{"selectedHost":"localhost","selectedPort":5000,"baseUrl":"http://localhost:5000","tokenEnabled":true,"tokenCreatedUtc":null,"allowedOrigins":[],"dashboardOrigin":null,"processId":1,"startupUtc":"2026-05-31T00:00:00Z","environmentName":"Test","appVersion":"2.2","apiVersion":"2.2"},"providerStatuses":[],"projectCount":0,"jobCount":0,"aiRunCount":0,"recentErrors":[],"generatedUtc":"2026-05-31T00:00:00Z"}""",
                 "/api/diagnostics/export" => """{"fileName":"diag.json","content":"{}","generatedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/dogfood/sessions" when request.Method == HttpMethod.Get => "[]",
+                "/api/dogfood/sessions" when request.Method == HttpMethod.Post => """{"id":"33333333-3333-3333-3333-333333333333","startedUtc":"2026-05-31T00:00:00Z","completedUtc":null,"projects":[],"steps":[],"issues":[],"notes":[],"outcome":"InProgress","generatedRecommendations":[]}""",
+                "/api/dogfood/issues" when request.Method == HttpMethod.Get => "[]",
+                "/api/dogfood/issues" when request.Method == HttpMethod.Post => """{"id":"44444444-4444-4444-4444-444444444444","sessionId":null,"projectId":null,"pageRoute":"/","category":"Other","severity":"Low","title":"Issue","description":"Desc","expectedBehavior":null,"actualBehavior":null,"status":"Open","createdUtc":"2026-05-31T00:00:00Z","operationId":null}""",
+                "/api/dogfood/issues/export" => """{"fileName":"issues.md","content":"# Issues","generatedUtc":"2026-05-31T00:00:00Z"}""",
+                "/api/next-actions" => """[{"id":"register","kind":"RegisterProject","priority":"High","source":"DogfoodReadiness","target":{"projectId":null,"projectName":null},"title":"Register","description":"Register project","href":"/projects"}]""",
+                "/api/projects/validate-path" => """{"path":"C:\\Sample","exists":true,"isDirectory":true,"isGitRepository":false,"hasSolutionFile":false,"isSystemPath":false,"canRead":true,"canRegister":true,"warnings":[],"errors":[],"suggestedName":"Sample"}""",
+                "/api/projects/recent-paths" => "[]",
+                "/api/logs" => "[]",
                 var path when path == $"/api/projects/{projectId}/ai/packs/backend-docs/quality" => $$"""{"projectId":"{{projectId}}","packId":"backend-docs","readinessScore":100,"isRecommended":true,"issues":[]}""",
                 var path when path == $"/api/projects/{projectId}/ai/usage" => $$"""{"projectId":"{{projectId}}","totalRuns":1,"successfulRuns":1,"failedRuns":0,"lastRunUtc":"2026-05-31T00:00:00Z","mostUsedProvider":"Ollama","mostUsedPack":"backend-docs","estimatedTokensUsed":30,"estimatedKnownCostUsd":null,"unknownCostCount":1,"providersConfigured":0,"failedProviderChecks":0}""",
                 var path when path == $"/api/projects/{projectId}/dogfood/status" => $$"""{"projectId":"{{projectId}}","projectName":"Sample","checklist":{"items":[],"status":"Ready","nextActions":[]},"score":100}""",
@@ -160,6 +169,13 @@ public sealed class ApiClientTests
         var quality = await client.GetAiPackQualityAsync(projectId, "backend-docs");
         var dogfood = await client.GetProjectDogfoodStatusAsync(projectId);
         var diagnostics = await client.GetDiagnosticsSummaryAsync();
+        var dogfoodSessions = await client.GetDogfoodSessionsAsync();
+        var dogfoodSession = await client.StartDogfoodSessionAsync([]);
+        var issues = await client.GetFrictionIssuesAsync();
+        var issue = await client.ReportFrictionIssueAsync(new DogfoodSessionIssueDto(Guid.NewGuid(), null, null, "/", "Other", "Low", "Issue", "Desc", null, null, "Open", DateTimeOffset.UtcNow, null));
+        var nextActions = await client.GetNextActionsAsync();
+        var pathValidation = await client.ValidateProjectPathAsync("C:\\Sample");
+        var logs = await client.GetLogsAsync();
 
         Assert.True(sawAuth);
         Assert.Single(providers);
@@ -175,6 +191,13 @@ public sealed class ApiClientTests
         Assert.True(quality.IsRecommended);
         Assert.Equal(100, dogfood.Score);
         Assert.Equal("2.2", diagnostics.AppVersion);
+        Assert.Empty(dogfoodSessions);
+        Assert.NotEqual(Guid.Empty, dogfoodSession.Id);
+        Assert.Empty(issues);
+        Assert.Equal("Open", issue.Status);
+        Assert.Single(nextActions);
+        Assert.True(pathValidation.CanRegister);
+        Assert.Empty(logs);
     }
 
     [Fact]

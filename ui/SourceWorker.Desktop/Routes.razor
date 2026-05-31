@@ -1,0 +1,40 @@
+@using SourceWorker.UI.Layout
+
+<CascadingValue Value="startup">
+    @if (startup.Status != DesktopStartupStatus.Ready)
+    {
+        <DesktopStartupPage State="@startup" OnRetry="@StartDesktop" />
+    }
+    else
+    {
+        <Router AppAssembly="typeof(Routes).Assembly" AdditionalAssemblies="new[] { typeof(SourceWorker.UI.Pages.Home).Assembly }">
+            <Found Context="routeData">
+                <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+            <NotFound>
+                <LayoutView Layout="typeof(AppShell)">
+                    <h1>Not Found</h1>
+                    <p>The page could not be found.</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+        <DesktopConnectionStatus />
+    }
+</CascadingValue>
+
+@code {
+    [Inject] private IDesktopStartupService Startup { get; set; } = default!;
+    private DesktopStartupState startup = DesktopStartupState.StartingShell();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StartDesktop();
+    }
+
+    private async Task StartDesktop()
+    {
+        startup = await Startup.StartAsync();
+        StateHasChanged();
+    }
+}

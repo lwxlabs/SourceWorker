@@ -350,6 +350,68 @@ public interface IDiagnosticsService
     Task<DiagnosticsExport> ExportAsync(CancellationToken cancellationToken);
 }
 
+public interface IDogfoodSessionRepository
+{
+    Task<DogfoodSession> SaveAsync(DogfoodSession session, CancellationToken cancellationToken);
+    Task<DogfoodSession?> GetAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DogfoodSession>> ListAsync(CancellationToken cancellationToken);
+}
+
+public interface IDogfoodIssueRepository
+{
+    Task<DogfoodSessionIssue> SaveAsync(DogfoodSessionIssue issue, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DogfoodSessionIssue>> ListAsync(CancellationToken cancellationToken);
+    Task<DogfoodSessionIssue?> GetAsync(Guid id, CancellationToken cancellationToken);
+}
+
+public interface IDogfoodSessionService
+{
+    Task<DogfoodSession> StartAsync(IReadOnlyList<DogfoodSessionProject> projects, CancellationToken cancellationToken);
+    Task<DogfoodSession?> GetAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DogfoodSession>> ListAsync(CancellationToken cancellationToken);
+    Task<DogfoodSession> CompleteStepAsync(Guid sessionId, string stepId, CancellationToken cancellationToken);
+    Task<DogfoodSession> FinishAsync(Guid sessionId, CancellationToken cancellationToken);
+    Task<DiagnosticsExport> ExportAsync(Guid sessionId, CancellationToken cancellationToken);
+}
+
+public interface IFrictionIssueService
+{
+    Task<DogfoodSessionIssue> ReportAsync(DogfoodSessionIssue issue, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DogfoodSessionIssue>> ListAsync(CancellationToken cancellationToken);
+    Task<DogfoodSessionIssue?> UpdateStatusAsync(Guid issueId, string status, CancellationToken cancellationToken);
+    Task<DiagnosticsExport> ExportIssuesAsync(CancellationToken cancellationToken);
+}
+
+public interface INextActionService
+{
+    Task<IReadOnlyList<NextAction>> GetGlobalAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<NextAction>> GetProjectAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public interface IProjectPathValidationService
+{
+    Task<ProjectPathValidationResult> ValidateAsync(string path, CancellationToken cancellationToken);
+    Task<IReadOnlyList<RecentProjectPath>> GetRecentAsync(CancellationToken cancellationToken);
+}
+
+public interface IProjectAiSettingsRepository
+{
+    Task<ProjectAiSettings> GetAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<ProjectAiSettings> SaveAsync(ProjectAiSettings settings, CancellationToken cancellationToken);
+}
+
+public interface IQuickAskService
+{
+    Task<QuickAskResult> PreviewAsync(QuickAskRequest request, CancellationToken cancellationToken);
+    Task<QuickAskResult> RunAsync(QuickAskRequest request, CancellationToken cancellationToken);
+}
+
+public interface ILogRepository
+{
+    Task<LogEntry> AddAsync(LogEntry entry, CancellationToken cancellationToken);
+    Task<IReadOnlyList<LogEntry>> ListAsync(CancellationToken cancellationToken);
+}
+
 public interface ISecretStore
 {
     Task SaveAsync(string name, string value, CancellationToken cancellationToken);

@@ -96,6 +96,34 @@ Starting with MVP 2.0, use the AppHost to start everything:
 dotnet run --project src/services/SourceWorker.AppHost -- --open
 ```
 
+## Desktop App
+
+MVP 2.4 adds the Windows-first desktop host:
+
+```powershell
+dotnet run --project ui/SourceWorker.Desktop
+```
+
+Published exe:
+
+```powershell
+.\artifacts\desktop\win-x64\SourceWorker.Desktop.exe
+```
+
+Publish:
+
+```powershell
+.\tools\publish\Publish-Desktop-Windows.ps1
+```
+
+Create shortcut:
+
+```powershell
+.\tools\publish\Create-DesktopShortcut.ps1
+```
+
+`SourceWorker.Desktop` is the normal user-facing app. It reuses `SourceWorker.UI`, starts `SourceWorker.LocalApi` internally, waits for `/health`, reads the token, configures `SourceWorker.ApiClient`, and shows startup progress/errors inside the desktop window. AppHost remains a development/browser fallback.
+
 ## Local API
 
 Start the API:
@@ -170,6 +198,25 @@ MVP 2.1 adds protected AI preview endpoints:
 - `GET /api/projects/{id}/dogfood/status`
 - `GET /api/diagnostics/summary`
 - `POST /api/diagnostics/export`
+- `POST /api/projects/validate-path`
+- `GET /api/projects/recent-paths`
+- `GET /api/projects/{id}/ai/settings`
+- `PUT /api/projects/{id}/ai/settings`
+- `POST /api/projects/{id}/ai/quick-ask/preview`
+- `POST /api/projects/{id}/ai/quick-ask/run`
+- `GET /api/dogfood/sessions`
+- `POST /api/dogfood/sessions`
+- `GET /api/dogfood/sessions/{sessionId}`
+- `POST /api/dogfood/sessions/{sessionId}/steps/{stepId}/complete`
+- `POST /api/dogfood/sessions/{sessionId}/finish`
+- `POST /api/dogfood/sessions/{sessionId}/export`
+- `GET /api/dogfood/issues`
+- `POST /api/dogfood/issues`
+- `PUT /api/dogfood/issues/{issueId}/status`
+- `POST /api/dogfood/issues/export`
+- `GET /api/next-actions`
+- `GET /api/projects/{id}/next-actions`
+- `GET /api/logs`
 
 AI endpoints are preview-only. They do not write files. API keys are masked in responses and are not written to `.ai-context`.
 
@@ -187,6 +234,7 @@ Projects:
 - `ui/SourceWorker.ApiClient`: typed Local API client.
 - `ui/SourceWorker.UI`: reusable Razor components/pages.
 - `ui/SourceWorker.Dashboard`: first Blazor Web App host.
+- `ui/SourceWorker.Desktop`: Windows-first MAUI Blazor Hybrid host.
 
 Routes:
 
@@ -203,15 +251,31 @@ Routes:
 - `/projects/{projectId}/ai`
 - `/projects/{projectId}/ai/runs`
 - `/dogfood`
+- `/dogfood/sessions`
+- `/dogfood/sessions/new`
+- `/dogfood/sessions/{sessionId}`
+- `/dogfood/issues`
 - `/projects/onboarding`
 - `/projects/{projectId}/onboarding`
 - `/settings/diagnostics`
+- `/settings/logs`
+
+Desktop-only shell pieces:
+
+- startup progress and startup error page
+- Local API lifecycle state
+- bottom desktop status bar
+- single-instance mutex
+- native project path browse seam
+- in-app notification abstraction
 
 The UI is interactive for MVP 1.9. It supports project registration, scanning with job progress, doc/pack exports, and safe cleanup with confirmation. It is Local API-driven and does not access Localite, scanner, infrastructure, application services, or project files directly.
 
 MVP 2.1 adds AI preview UI. Users can configure OpenAI, Ollama, or OpenAI-compatible providers, choose a context pack, preview the final prompt, see safety warnings and rough token/cost estimates, run an AI request, and view/copy the output. AI results are preview-only and are not applied to files.
 
 MVP 2.2 adds dogfood readiness and AI hardening for daily use: provider validation, provider diagnostics, model catalog/pricing metadata, prompt sections, included-file token estimates, pack quality scoring, AI usage summaries, diagnostics summary/export preview, and onboarding/dogfood dashboard routes.
+
+MVP 2.3 adds the first practical dogfood feedback loop: dogfood sessions, friction issue capture/export, next recommended actions, project path validation, project-level AI defaults, Quick Ask on the project dashboard, and a lightweight local logs page. The UI remains Local API-driven and AI output remains preview-only.
 
 ## AI Provider Preview
 
@@ -260,6 +324,7 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 - `.ai-context/packs/backend-docs.pack.yaml`
 - `.ai-context/packs/onboarding.pack.yaml`
 - `.ai-context/packs/current-branch.pack.yaml`
+- `.ai-context/packs/dogfood-feedback.pack.yaml`
 - `.ai-context/exports/backend-docs-compact.yaml`
 - `.ai-context/diagrams/*.mmd`
 - `instructions/Result/Backend/README.md`
@@ -287,5 +352,7 @@ Targeted verification:
 - AI application logic: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai`
 - AI ApiClient changes: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient`
 - AI Local API endpoints: `dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Ai`
+- Dogfood application logic: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Dogfood`
+- Dogfood Local API endpoints: `dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Dogfood`
 - UI-only changes: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`
 - Docs-only: no tests required

@@ -1,29 +1,75 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceWorker.Contracts;
 
-namespace SourceWorker.AppHost;
+namespace SourceWorker.Hosting;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddSourceWorkerHosting(this IServiceCollection services)
+    {
+        services.AddHttpClient();
+        services.AddSingleton<IRuntimePathResolver, RuntimePathResolver>();
+        services.AddSingleton<IProcessLauncher, ProcessLauncher>();
+        services.AddSingleton<IEndpointProbe, EndpointProbe>();
+        services.AddSingleton<ILocalBrowserLauncher, LocalBrowserLauncher>();
+        services.AddSingleton<ILocalApiLifecycleService, LocalApiLifecycleService>();
+        services.AddSingleton<IAppHostOrchestrator, AppHostOrchestrator>();
+        return services;
+    }
+}
+
+public sealed class RuntimePathResolver : IRuntimePathResolver
+{
+    public string FindSolutionRoot()
+    {
+        var current = Directory.GetCurrentDirectory();
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (File.Exists(Path.Combine(current, "SourceWorker.slnx")) || File.Exists(Path.Combine(current, "SourceWorker.sln")))
+            {
+                return current;
+            }
+
+            current = Path.GetDirectoryName(current);
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    public string GetApiTokenPath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(appData, "SourceWorker", "api-token.txt");
+    }
+
+    public string? ReadApiToken()
+    {
+        var path = GetApiTokenPath();
+        return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
+    }
+}
 
 public sealed class ProcessLauncher(ILogger<ProcessLauncher> logger) : IProcessLauncher
 {
-    private readonly List<Process> _managedProcesses = new();
+    private readonly List<Process> managedProcesses = [];
 
-    public async Task<ManagedProcessInfo> StartProcessAsync(string name, string command, string arguments, IDictionary<string, string>? environmentVariables = null)
+    public Task<ManagedProcessInfo> StartProcessAsync(string name, string command, string arguments, IDictionary<string, string>? environmentVariables = null)
     {
         logger.LogInformation("Starting process {Name}: {Command} {Arguments}", name, command, arguments);
-
         var startInfo = new ProcessStartInfo
         {
             FileName = command,
             Arguments = arguments,
             UseShellExecute = false,
-            CreateNoWindow = false, // Keep it visible for now or use true if requested
+            CreateNoWindow = true,
             RedirectStandardOutput = false,
             RedirectStandardError = false
         };
 
-        if (environmentVariables != null)
+        if (environmentVariables is not null)
         {
             foreach (var (key, value) in environmentVariables)
             {
@@ -33,25 +79,20 @@ public sealed class ProcessLauncher(ILogger<ProcessLauncher> logger) : IProcessL
 
         var process = new Process { StartInfo = startInfo };
         process.Start();
-        _managedProcesses.Add(process);
+        managedProcesses.Add(process);
 
-        return new ManagedProcessInfo(
-            name,
-            process.Id,
-            ManagedProcessStatus.Running,
-            null,
-            DateTimeOffset.UtcNow
-        );
+        return Task.FromResult(new ManagedProcessInfo(name, process.Id, ManagedProcessStatus.Running, null, DateTimeOffset.UtcNow));
     }
 
     public Task StopProcessAsync(int processId)
     {
-        var process = _managedProcesses.FirstOrDefault(p => p.Id == processId);
-        if (process != null && !process.HasExited)
+        var process = managedProcesses.FirstOrDefault(p => p.Id == processId);
+        if (process is not null && !process.HasExited)
         {
             logger.LogInformation("Stopping process {Pid}", processId);
-            process.Kill(true);
+            process.Kill(entireProcessTree: true);
         }
+
         return Task.CompletedTask;
     }
 

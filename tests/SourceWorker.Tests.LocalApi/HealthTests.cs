@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
 using SourceWorker.Contracts;
+using SourceWorker.Domain;
 
 namespace SourceWorker.Tests.LocalApi;
 
@@ -97,5 +98,35 @@ public sealed class HealthTests
         (await client.GetAsync($"/api/projects/{created.Project.Id}/dogfood/status")).EnsureSuccessStatusCode();
         (await client.GetAsync("/api/diagnostics/summary")).EnsureSuccessStatusCode();
         (await client.PostAsync("/api/diagnostics/export", null)).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Dogfood_endpoints_work()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "sourceworker-api-dogfood-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        using var client = factory.CreateClient();
+
+        (await client.PostAsJsonAsync("/api/projects/validate-path", new { path = root })).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/projects/recent-paths")).EnsureSuccessStatusCode();
+        var sessionResponse = await client.PostAsJsonAsync("/api/dogfood/sessions", new { projects = new[] { new { projectId = (Guid?)null, name = "SourceWorker", path = (string?)null, isRegistered = false, isScanned = false } } });
+        sessionResponse.EnsureSuccessStatusCode();
+        var session = await sessionResponse.Content.ReadFromJsonAsync<DogfoodSession>();
+        Assert.NotNull(session);
+        (await client.GetAsync("/api/dogfood/sessions")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/dogfood/sessions/{session!.Id}")).EnsureSuccessStatusCode();
+        (await client.PostAsync($"/api/dogfood/sessions/{session.Id}/steps/choose-projects/complete", null)).EnsureSuccessStatusCode();
+        (await client.PostAsync($"/api/dogfood/sessions/{session.Id}/finish", null)).EnsureSuccessStatusCode();
+        (await client.PostAsync($"/api/dogfood/sessions/{session.Id}/export", null)).EnsureSuccessStatusCode();
+        var issue = new DogfoodSessionIssue(Guid.NewGuid(), session.Id, null, "/dogfood", DogfoodFrictionCategory.Other, DogfoodSeverity.Low, "Tiny friction", "Something was odd.", null, null, "Open", DateTimeOffset.UtcNow);
+        var issueResponse = await client.PostAsJsonAsync("/api/dogfood/issues", issue);
+        issueResponse.EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/dogfood/issues")).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync($"/api/dogfood/issues/{issue.Id}/status", new { status = "Fixed" })).EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/dogfood/issues/export", null)).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/next-actions")).EnsureSuccessStatusCode();
+        (await client.GetAsync("/api/logs")).EnsureSuccessStatusCode();
     }
 }

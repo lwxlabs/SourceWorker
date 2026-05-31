@@ -60,6 +60,25 @@ public interface ISourceWorkerApiClient
     Task<DogfoodProjectReadinessDto> GetProjectDogfoodStatusAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<DiagnosticsSummaryDto> GetDiagnosticsSummaryAsync(CancellationToken cancellationToken = default);
     Task<DiagnosticsExportDto> ExportDiagnosticsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DogfoodSessionDto>> GetDogfoodSessionsAsync(CancellationToken cancellationToken = default);
+    Task<DogfoodSessionDto> StartDogfoodSessionAsync(IReadOnlyList<DogfoodSessionProjectDto> projects, CancellationToken cancellationToken = default);
+    Task<DogfoodSessionDto?> GetDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<DogfoodSessionDto> CompleteDogfoodStepAsync(Guid sessionId, string stepId, CancellationToken cancellationToken = default);
+    Task<DogfoodSessionDto> FinishDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<DiagnosticsExportDto> ExportDogfoodSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DogfoodSessionIssueDto>> GetFrictionIssuesAsync(CancellationToken cancellationToken = default);
+    Task<DogfoodSessionIssueDto> ReportFrictionIssueAsync(DogfoodSessionIssueDto issue, CancellationToken cancellationToken = default);
+    Task<DogfoodSessionIssueDto?> UpdateFrictionIssueStatusAsync(Guid issueId, string status, CancellationToken cancellationToken = default);
+    Task<DiagnosticsExportDto> ExportFrictionIssuesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<NextActionDto>> GetNextActionsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<NextActionDto>> GetProjectNextActionsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<ProjectPathValidationResultDto> ValidateProjectPathAsync(string path, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RecentProjectPathDto>> GetRecentProjectPathsAsync(CancellationToken cancellationToken = default);
+    Task<ProjectAiSettingsDto> GetProjectAiSettingsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<ProjectAiSettingsDto> UpdateProjectAiSettingsAsync(ProjectAiSettingsDto settings, CancellationToken cancellationToken = default);
+    Task<QuickAskResultDto> PreviewQuickAskAsync(Guid projectId, QuickAskRequestDto request, CancellationToken cancellationToken = default);
+    Task<QuickAskResultDto> RunQuickAskAsync(Guid projectId, QuickAskRequestDto request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LogEntryDto>> GetLogsAsync(CancellationToken cancellationToken = default);
 }
 
 public interface ITokenProvider

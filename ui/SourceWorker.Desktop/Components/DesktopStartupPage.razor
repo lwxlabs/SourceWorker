@@ -1,0 +1,39 @@
+@inject IDesktopStartupDiagnosticsService Diagnostics
+@inject IDesktopRuntimeStateService Runtime
+@inject IDesktopClipboardService Clipboard
+
+<div class="desktop-startup">
+    <div class="desktop-startup-panel">
+        <div class="desktop-startup-title">
+            <div>
+                <h1>SourceWorker</h1>
+                <p class="text-muted">Windows desktop app starting the local engine.</p>
+            </div>
+            <span class="desktop-status-pill">@State.Status</span>
+        </div>
+
+        @if (State.Status == DesktopStartupStatus.Failed)
+        {
+            <DesktopStartupError State="@State" OnRetry="@Retry" OnCopyDiagnostics="@CopyDiagnostics" />
+        }
+        else
+        {
+            <DesktopStartupProgress State="@State" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public DesktopStartupState State { get; set; } = DesktopStartupState.StartingShell();
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private async Task Retry()
+    {
+        await OnRetry.InvokeAsync();
+    }
+
+    private async Task CopyDiagnostics()
+    {
+        await Clipboard.SetTextAsync(Diagnostics.BuildDiagnostics(State, Runtime.GetState()));
+    }
+}

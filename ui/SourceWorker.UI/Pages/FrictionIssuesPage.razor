@@ -1,0 +1,71 @@
+@page "/dogfood/issues"
+@inject ISourceWorkerApiClient Api
+
+<h1>Friction Issues</h1>
+
+<Cards Title="Report Friction">
+    <div class="grid two">
+        <label>Page/route <input @bind="pageRoute" /></label>
+        <label>Category <input @bind="category" /></label>
+        <label>Severity <input @bind="severity" /></label>
+        <label>Title <input @bind="title" /></label>
+    </div>
+    <label>Description <textarea rows="4" @bind="description"></textarea></label>
+    <button @onclick="Report">Report friction</button>
+    <button @onclick="Export">Export issues</button>
+</Cards>
+
+@if (issues is null)
+{
+    <LoadingState />
+}
+else if (issues.Count == 0)
+{
+    <EmptyState Message="No friction captured yet. Report confusing or annoying product moments here." />
+}
+else
+{
+    <Cards Title="Open Issues">
+        @foreach (var issue in issues)
+        {
+            <div class="list-row">
+                <strong>@issue.Severity</strong>
+                <span>@issue.Title - @issue.Status - @issue.Category</span>
+                <button @onclick='() => SetStatus(issue.Id, "Fixed")'>Fixed</button>
+                <button @onclick='() => SetStatus(issue.Id, "Ignored")'>Ignore</button>
+            </div>
+            <p>@issue.Description</p>
+        }
+    </Cards>
+}
+
+@if (export is not null)
+{
+    <Cards Title="@export.FileName">
+        <pre style="white-space: pre-wrap;">@export.Content</pre>
+    </Cards>
+}
+
+@code {
+    private IReadOnlyList<DogfoodSessionIssueDto>? issues;
+    private DiagnosticsExportDto? export;
+    private string pageRoute = "/dogfood/issues";
+    private string category = "Other";
+    private string severity = "Medium";
+    private string title = "";
+    private string description = "";
+
+    protected override async Task OnInitializedAsync() => issues = await Api.GetFrictionIssuesAsync();
+
+    private async Task Report()
+    {
+        await Api.ReportFrictionIssueAsync(new DogfoodSessionIssueDto(Guid.NewGuid(), null, null, pageRoute, category, severity, title, description, null, null, "Open", DateTimeOffset.UtcNow, null));
+        issues = await Api.GetFrictionIssuesAsync();
+    }
+    private async Task SetStatus(Guid id, string status)
+    {
+        await Api.UpdateFrictionIssueStatusAsync(id, status);
+        issues = await Api.GetFrictionIssuesAsync();
+    }
+    private async Task Export() => export = await Api.ExportFrictionIssuesAsync();
+}

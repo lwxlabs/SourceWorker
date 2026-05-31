@@ -57,6 +57,24 @@ public sealed record GetDogfoodStatusQuery : IRequest<DogfoodProjectReadiness>;
 public sealed record GetProjectDogfoodStatusQuery(Guid ProjectId) : IRequest<DogfoodProjectReadiness>;
 public sealed record GetDiagnosticsSummaryQuery : IRequest<DiagnosticsSummary>;
 public sealed record ExportDiagnosticsCommand : IRequest<DiagnosticsExport>;
+public sealed record GetDogfoodSessionsQuery : IRequest<IReadOnlyList<DogfoodSession>>;
+public sealed record StartDogfoodSessionCommand(IReadOnlyList<DogfoodSessionProject> Projects) : IRequest<DogfoodSession>;
+public sealed record GetDogfoodSessionQuery(Guid SessionId) : IRequest<DogfoodSession?>;
+public sealed record CompleteDogfoodStepCommand(Guid SessionId, string StepId) : IRequest<DogfoodSession>;
+public sealed record FinishDogfoodSessionCommand(Guid SessionId) : IRequest<DogfoodSession>;
+public sealed record ExportDogfoodSessionCommand(Guid SessionId) : IRequest<DiagnosticsExport>;
+public sealed record ReportFrictionIssueCommand(DogfoodSessionIssue Issue) : IRequest<DogfoodSessionIssue>;
+public sealed record GetFrictionIssuesQuery : IRequest<IReadOnlyList<DogfoodSessionIssue>>;
+public sealed record UpdateFrictionIssueStatusCommand(Guid IssueId, string Status) : IRequest<DogfoodSessionIssue?>;
+public sealed record ExportFrictionIssuesCommand : IRequest<DiagnosticsExport>;
+public sealed record GetNextActionsQuery(Guid? ProjectId = null) : IRequest<IReadOnlyList<NextAction>>;
+public sealed record ValidateProjectPathCommand(string Path) : IRequest<ProjectPathValidationResult>;
+public sealed record GetRecentProjectPathsQuery : IRequest<IReadOnlyList<RecentProjectPath>>;
+public sealed record GetProjectAiSettingsQuery(Guid ProjectId) : IRequest<ProjectAiSettings>;
+public sealed record UpdateProjectAiSettingsCommand(ProjectAiSettings Settings) : IRequest<ProjectAiSettings>;
+public sealed record PreviewQuickAskCommand(QuickAskRequest Request) : IRequest<QuickAskResult>;
+public sealed record RunQuickAskCommand(QuickAskRequest Request) : IRequest<QuickAskResult>;
+public sealed record GetLogsQuery : IRequest<IReadOnlyList<LogEntry>>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -513,6 +531,25 @@ public sealed class ExportDiagnosticsCommandHandler(IDiagnosticsService diagnost
 {
     public Task<DiagnosticsExport> Handle(ExportDiagnosticsCommand request, CancellationToken cancellationToken) => diagnostics.ExportAsync(cancellationToken);
 }
+
+public sealed class GetDogfoodSessionsQueryHandler(IDogfoodSessionService service) : IRequestHandler<GetDogfoodSessionsQuery, IReadOnlyList<DogfoodSession>> { public Task<IReadOnlyList<DogfoodSession>> Handle(GetDogfoodSessionsQuery request, CancellationToken cancellationToken) => service.ListAsync(cancellationToken); }
+public sealed class StartDogfoodSessionCommandHandler(IDogfoodSessionService service) : IRequestHandler<StartDogfoodSessionCommand, DogfoodSession> { public Task<DogfoodSession> Handle(StartDogfoodSessionCommand request, CancellationToken cancellationToken) => service.StartAsync(request.Projects, cancellationToken); }
+public sealed class GetDogfoodSessionQueryHandler(IDogfoodSessionService service) : IRequestHandler<GetDogfoodSessionQuery, DogfoodSession?> { public Task<DogfoodSession?> Handle(GetDogfoodSessionQuery request, CancellationToken cancellationToken) => service.GetAsync(request.SessionId, cancellationToken); }
+public sealed class CompleteDogfoodStepCommandHandler(IDogfoodSessionService service) : IRequestHandler<CompleteDogfoodStepCommand, DogfoodSession> { public Task<DogfoodSession> Handle(CompleteDogfoodStepCommand request, CancellationToken cancellationToken) => service.CompleteStepAsync(request.SessionId, request.StepId, cancellationToken); }
+public sealed class FinishDogfoodSessionCommandHandler(IDogfoodSessionService service) : IRequestHandler<FinishDogfoodSessionCommand, DogfoodSession> { public Task<DogfoodSession> Handle(FinishDogfoodSessionCommand request, CancellationToken cancellationToken) => service.FinishAsync(request.SessionId, cancellationToken); }
+public sealed class ExportDogfoodSessionCommandHandler(IDogfoodSessionService service) : IRequestHandler<ExportDogfoodSessionCommand, DiagnosticsExport> { public Task<DiagnosticsExport> Handle(ExportDogfoodSessionCommand request, CancellationToken cancellationToken) => service.ExportAsync(request.SessionId, cancellationToken); }
+public sealed class ReportFrictionIssueCommandHandler(IFrictionIssueService service) : IRequestHandler<ReportFrictionIssueCommand, DogfoodSessionIssue> { public Task<DogfoodSessionIssue> Handle(ReportFrictionIssueCommand request, CancellationToken cancellationToken) => service.ReportAsync(request.Issue, cancellationToken); }
+public sealed class GetFrictionIssuesQueryHandler(IFrictionIssueService service) : IRequestHandler<GetFrictionIssuesQuery, IReadOnlyList<DogfoodSessionIssue>> { public Task<IReadOnlyList<DogfoodSessionIssue>> Handle(GetFrictionIssuesQuery request, CancellationToken cancellationToken) => service.ListAsync(cancellationToken); }
+public sealed class UpdateFrictionIssueStatusCommandHandler(IFrictionIssueService service) : IRequestHandler<UpdateFrictionIssueStatusCommand, DogfoodSessionIssue?> { public Task<DogfoodSessionIssue?> Handle(UpdateFrictionIssueStatusCommand request, CancellationToken cancellationToken) => service.UpdateStatusAsync(request.IssueId, request.Status, cancellationToken); }
+public sealed class ExportFrictionIssuesCommandHandler(IFrictionIssueService service) : IRequestHandler<ExportFrictionIssuesCommand, DiagnosticsExport> { public Task<DiagnosticsExport> Handle(ExportFrictionIssuesCommand request, CancellationToken cancellationToken) => service.ExportIssuesAsync(cancellationToken); }
+public sealed class GetNextActionsQueryHandler(INextActionService service) : IRequestHandler<GetNextActionsQuery, IReadOnlyList<NextAction>> { public Task<IReadOnlyList<NextAction>> Handle(GetNextActionsQuery request, CancellationToken cancellationToken) => request.ProjectId is Guid id ? service.GetProjectAsync(id, cancellationToken) : service.GetGlobalAsync(cancellationToken); }
+public sealed class ValidateProjectPathCommandHandler(IProjectPathValidationService service) : IRequestHandler<ValidateProjectPathCommand, ProjectPathValidationResult> { public Task<ProjectPathValidationResult> Handle(ValidateProjectPathCommand request, CancellationToken cancellationToken) => service.ValidateAsync(request.Path, cancellationToken); }
+public sealed class GetRecentProjectPathsQueryHandler(IProjectPathValidationService service) : IRequestHandler<GetRecentProjectPathsQuery, IReadOnlyList<RecentProjectPath>> { public Task<IReadOnlyList<RecentProjectPath>> Handle(GetRecentProjectPathsQuery request, CancellationToken cancellationToken) => service.GetRecentAsync(cancellationToken); }
+public sealed class GetProjectAiSettingsQueryHandler(IProjectAiSettingsRepository repo) : IRequestHandler<GetProjectAiSettingsQuery, ProjectAiSettings> { public Task<ProjectAiSettings> Handle(GetProjectAiSettingsQuery request, CancellationToken cancellationToken) => repo.GetAsync(request.ProjectId, cancellationToken); }
+public sealed class UpdateProjectAiSettingsCommandHandler(IProjectAiSettingsRepository repo) : IRequestHandler<UpdateProjectAiSettingsCommand, ProjectAiSettings> { public Task<ProjectAiSettings> Handle(UpdateProjectAiSettingsCommand request, CancellationToken cancellationToken) => repo.SaveAsync(request.Settings, cancellationToken); }
+public sealed class PreviewQuickAskCommandHandler(IQuickAskService service) : IRequestHandler<PreviewQuickAskCommand, QuickAskResult> { public Task<QuickAskResult> Handle(PreviewQuickAskCommand request, CancellationToken cancellationToken) => service.PreviewAsync(request.Request, cancellationToken); }
+public sealed class RunQuickAskCommandHandler(IQuickAskService service) : IRequestHandler<RunQuickAskCommand, QuickAskResult> { public Task<QuickAskResult> Handle(RunQuickAskCommand request, CancellationToken cancellationToken) => service.RunAsync(request.Request, cancellationToken); }
+public sealed class GetLogsQueryHandler(ILogRepository logs) : IRequestHandler<GetLogsQuery, IReadOnlyList<LogEntry>> { public Task<IReadOnlyList<LogEntry>> Handle(GetLogsQuery request, CancellationToken cancellationToken) => logs.ListAsync(cancellationToken); }
 
 public static class ProjectMappings
 {

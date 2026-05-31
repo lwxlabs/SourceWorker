@@ -1,0 +1,17 @@
+<div>
+    <p><strong>@State.CurrentStep</strong></p>
+    <div class="desktop-steps">
+        @foreach (var step in State.Steps)
+        {
+            <div class="desktop-step">
+                <span class="desktop-dot"></span>
+                <span>@step</span>
+            </div>
+        }
+    </div>
+    <p class="text-muted">Startup duration: @State.Duration.TotalSeconds.ToString("0.0")s</p>
+</div>
+
+@code {
+    [Parameter] public DesktopStartupState State { get; set; } = DesktopStartupState.StartingShell();
+}

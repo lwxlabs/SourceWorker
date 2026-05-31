@@ -165,3 +165,18 @@ public sealed record DogfoodChecklistDto(IReadOnlyList<DogfoodChecklistItemDto> 
 public sealed record DogfoodProjectReadinessDto(Guid? ProjectId, string? ProjectName, DogfoodChecklistDto Checklist, int Score);
 public sealed record DiagnosticsSummaryDto(string AppVersion, string ApiVersion, StorageInfo Storage, ApiRuntimeInfoDto Runtime, IReadOnlyList<AiProviderStatusDto> ProviderStatuses, int ProjectCount, int JobCount, int AiRunCount, IReadOnlyList<string> RecentErrors, DateTimeOffset GeneratedUtc);
 public sealed record DiagnosticsExportDto(string FileName, string Content, DateTimeOffset GeneratedUtc);
+public sealed record DogfoodSessionDto(Guid Id, DateTimeOffset StartedUtc, DateTimeOffset? CompletedUtc, IReadOnlyList<DogfoodSessionProjectDto> Projects, IReadOnlyList<DogfoodSessionStepDto> Steps, IReadOnlyList<DogfoodSessionIssueDto> Issues, IReadOnlyList<DogfoodSessionNoteDto> Notes, string Outcome, IReadOnlyList<string> GeneratedRecommendations);
+public sealed record DogfoodSessionProjectDto(Guid? ProjectId, string Name, string? Path, bool IsRegistered, bool IsScanned);
+public sealed record DogfoodSessionStepDto(string Id, string Label, bool IsCompleted, DateTimeOffset? CompletedUtc, string? Detail);
+public sealed record DogfoodSessionIssueDto(Guid Id, Guid? SessionId, Guid? ProjectId, string PageRoute, string Category, string Severity, string Title, string Description, string? ExpectedBehavior, string? ActualBehavior, string Status, DateTimeOffset CreatedUtc, string? OperationId);
+public sealed record DogfoodSessionNoteDto(Guid Id, string Text, DateTimeOffset CreatedUtc);
+public sealed record StartDogfoodSessionRequestDto(IReadOnlyList<DogfoodSessionProjectDto> Projects);
+public sealed record UpdateIssueStatusRequestDto(string Status);
+public sealed record NextActionDto(string Id, string Kind, string Priority, string Source, NextActionTargetDto Target, string Title, string Description, string? Href);
+public sealed record NextActionTargetDto(Guid? ProjectId, string? ProjectName);
+public sealed record ProjectPathValidationResultDto(string Path, bool Exists, bool IsDirectory, bool IsGitRepository, bool HasSolutionFile, bool IsSystemPath, bool CanRead, bool CanRegister, IReadOnlyList<string> Warnings, IReadOnlyList<string> Errors, string SuggestedName);
+public sealed record RecentProjectPathDto(string Path, string SuggestedName, DateTimeOffset LastUsedUtc);
+public sealed record ProjectAiSettingsDto(Guid ProjectId, string? DefaultProviderId, string? DefaultModel, string DefaultContextPack, string DefaultPromptTemplate, int MaxOutputTokens, bool? StorePrompt, bool? StoreOutput, int FreshnessWarningThreshold);
+public sealed record QuickAskRequestDto(Guid ProjectId, string Question, string? ProviderId, string? PackId, string? TemplateId, int? MaxOutputTokens, bool ConfirmSafetyWarnings);
+public sealed record QuickAskResultDto(AiPromptPreviewResponse Preview, AiRunDetailDto? Run);
+public sealed record LogEntryDto(Guid Id, string Level, string Source, string Message, DateTimeOffset CreatedUtc, string? CorrelationId, Guid? ProjectId);

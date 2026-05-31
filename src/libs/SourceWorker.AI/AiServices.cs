@@ -25,6 +25,11 @@ public static class DependencyInjection
         services.AddSingleton<IAiContextPackQualityService, AiContextPackQualityService>();
         services.AddSingleton<IDogfoodReadinessService, DogfoodReadinessService>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
+        services.AddSingleton<IDogfoodSessionService, DogfoodSessionService>();
+        services.AddSingleton<IFrictionIssueService, FrictionIssueService>();
+        services.AddSingleton<INextActionService, NextActionService>();
+        services.AddSingleton<IProjectPathValidationService, ProjectPathValidationService>();
+        services.AddSingleton<IQuickAskService, QuickAskService>();
         return services;
     }
 }
@@ -421,5 +426,190 @@ public sealed class DiagnosticsService(IAppVersionService version, IStorageInfoS
         var summary = await GetSummaryAsync(cancellationToken);
         var json = System.Text.Json.JsonSerializer.Serialize(summary, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true });
         return new DiagnosticsExport($"sourceworker-diagnostics-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.json", json, DateTimeOffset.UtcNow);
+    }
+}
+
+public sealed class DogfoodSessionService(IDogfoodSessionRepository sessions, IDogfoodIssueRepository issues) : IDogfoodSessionService
+{
+    private static readonly DogfoodSessionStep[] DefaultSteps =
+    [
+        new("choose-projects", "Choose projects", false, null),
+        new("register-missing", "Register missing projects", false, null),
+        new("scan-each", "Scan each project", false, null),
+        new("check-freshness", "Check context freshness", false, null),
+        new("open-docs", "Open generated docs", false, null),
+        new("open-packs", "Open context packs", false, null),
+        new("preview-ai-handoff", "Preview ai-handoff pack", false, null),
+        new("preview-backend-docs", "Preview backend-docs pack", false, null),
+        new("run-ai-preview", "Run one AI preview per selected project", false, null),
+        new("check-diagnostics", "Check diagnostics", false, null),
+        new("capture-friction", "Capture friction/issues", false, null),
+        new("finish", "Finish with recommendations", false, null)
+    ];
+
+    public Task<IReadOnlyList<DogfoodSession>> ListAsync(CancellationToken cancellationToken) => sessions.ListAsync(cancellationToken);
+    public Task<DogfoodSession?> GetAsync(Guid id, CancellationToken cancellationToken) => sessions.GetAsync(id, cancellationToken);
+
+    public Task<DogfoodSession> StartAsync(IReadOnlyList<DogfoodSessionProject> projects, CancellationToken cancellationToken)
+    {
+        var session = new DogfoodSession(Guid.NewGuid(), DateTimeOffset.UtcNow, null, projects, DefaultSteps, [], [], DogfoodOutcome.InProgress, ["Scan selected projects.", "Preview ai-handoff and backend-docs packs.", "Capture any friction immediately."]);
+        return sessions.SaveAsync(session, cancellationToken);
+    }
+
+    public async Task<DogfoodSession> CompleteStepAsync(Guid sessionId, string stepId, CancellationToken cancellationToken)
+    {
+        var session = await sessions.GetAsync(sessionId, cancellationToken) ?? throw new InvalidOperationException("Dogfood session was not found.");
+        var steps = session.Steps.Select(s => s.Id == stepId ? s with { IsCompleted = true, CompletedUtc = DateTimeOffset.UtcNow } : s).ToArray();
+        return await sessions.SaveAsync(session with { Steps = steps, GeneratedRecommendations = Recommend(steps, await issues.ListAsync(cancellationToken)) }, cancellationToken);
+    }
+
+    public async Task<DogfoodSession> FinishAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var session = await sessions.GetAsync(sessionId, cancellationToken) ?? throw new InvalidOperationException("Dogfood session was not found.");
+        return await sessions.SaveAsync(session with { CompletedUtc = DateTimeOffset.UtcNow, Outcome = DogfoodOutcome.Completed, GeneratedRecommendations = Recommend(session.Steps, await issues.ListAsync(cancellationToken)) }, cancellationToken);
+    }
+
+    public async Task<DiagnosticsExport> ExportAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var session = await sessions.GetAsync(sessionId, cancellationToken) ?? throw new InvalidOperationException("Dogfood session was not found.");
+        var builder = new StringBuilder();
+        builder.AppendLine($"# Dogfood Session {session.StartedUtc:yyyy-MM-dd HH:mm}");
+        builder.AppendLine();
+        builder.AppendLine("## Projects");
+        foreach (var project in session.Projects) builder.AppendLine($"- {project.Name}: {project.Path ?? "not set"}");
+        builder.AppendLine();
+        builder.AppendLine("## Steps");
+        foreach (var step in session.Steps) builder.AppendLine($"- [{(step.IsCompleted ? "x" : " ")}] {step.Label}");
+        builder.AppendLine();
+        builder.AppendLine("## Recommendations");
+        foreach (var rec in session.GeneratedRecommendations) builder.AppendLine($"- {rec}");
+        builder.AppendLine();
+        builder.AppendLine("## Next Codex Task Suggestion");
+        builder.AppendLine("Improve the highest-severity dogfood issue and keep AI output preview-only.");
+        return new DiagnosticsExport($"dogfood-session-{session.StartedUtc:yyyyMMdd}.md", builder.ToString(), DateTimeOffset.UtcNow);
+    }
+
+    private static IReadOnlyList<string> Recommend(IReadOnlyList<DogfoodSessionStep> steps, IReadOnlyList<DogfoodSessionIssue> issues)
+    {
+        var recs = new List<string>();
+        if (steps.Any(s => !s.IsCompleted)) recs.Add($"Complete next dogfood step: {steps.First(s => !s.IsCompleted).Label}.");
+        if (issues.Any(i => i.Status == "Open")) recs.Add("Triage open friction issues before adding new product surface.");
+        if (issues.Any(i => i.Severity >= DogfoodSeverity.High)) recs.Add("Fix high-severity dogfood friction first.");
+        if (recs.Count == 0) recs.Add("Run the same dogfood flow against Insights, Localite, and LwX.Flow.");
+        return recs;
+    }
+}
+
+public sealed class FrictionIssueService(IDogfoodIssueRepository issues) : IFrictionIssueService
+{
+    public Task<IReadOnlyList<DogfoodSessionIssue>> ListAsync(CancellationToken cancellationToken) => issues.ListAsync(cancellationToken);
+    public Task<DogfoodSessionIssue> ReportAsync(DogfoodSessionIssue issue, CancellationToken cancellationToken)
+        => issues.SaveAsync(issue with { Id = issue.Id == Guid.Empty ? Guid.NewGuid() : issue.Id, CreatedUtc = issue.CreatedUtc == default ? DateTimeOffset.UtcNow : issue.CreatedUtc, Status = string.IsNullOrWhiteSpace(issue.Status) ? "Open" : issue.Status }, cancellationToken);
+
+    public async Task<DogfoodSessionIssue?> UpdateStatusAsync(Guid issueId, string status, CancellationToken cancellationToken)
+    {
+        var issue = await issues.GetAsync(issueId, cancellationToken);
+        return issue is null ? null : await issues.SaveAsync(issue with { Status = status }, cancellationToken);
+    }
+
+    public async Task<DiagnosticsExport> ExportIssuesAsync(CancellationToken cancellationToken)
+    {
+        var all = await issues.ListAsync(cancellationToken);
+        var builder = new StringBuilder("# Dogfood Issues\n\n");
+        foreach (var issue in all.OrderByDescending(i => i.CreatedUtc))
+        {
+            builder.AppendLine($"## {issue.Title}");
+            builder.AppendLine($"- Status: {issue.Status}");
+            builder.AppendLine($"- Category: {issue.Category}");
+            builder.AppendLine($"- Severity: {issue.Severity}");
+            builder.AppendLine($"- Page: {issue.PageRoute}");
+            builder.AppendLine();
+            builder.AppendLine(issue.Description);
+            builder.AppendLine();
+        }
+        return new DiagnosticsExport("issues.md", builder.ToString(), DateTimeOffset.UtcNow);
+    }
+}
+
+public sealed class NextActionService(IProjectRepository projects, IScanRunRepository scans, IAiProviderConfigurationRepository providers, IDogfoodIssueRepository issues) : INextActionService
+{
+    public async Task<IReadOnlyList<NextAction>> GetGlobalAsync(CancellationToken cancellationToken)
+    {
+        var projectList = await projects.ListAsync(cancellationToken);
+        var providerList = await providers.ListAsync(cancellationToken);
+        var actions = new List<NextAction>();
+        if (projectList.Count == 0) actions.Add(Action("register-project", NextActionKind.RegisterProject, NextActionPriority.Critical, "Register your first project.", "Start by registering SourceWorker or another repo.", "/projects/onboarding"));
+        else actions.Add(Action("start-dogfood", NextActionKind.StartDogfoodSession, NextActionPriority.High, "Start a dogfood session.", "Run the daily-use checklist across real repos.", "/dogfood/sessions/new"));
+        if (providerList.Count == 0) actions.Add(Action("configure-ai", NextActionKind.ConfigureAiProvider, NextActionPriority.Medium, "Configure AI provider.", "Set up Ollama or OpenAI for preview-only runs.", "/settings/ai"));
+        if ((await issues.ListAsync(cancellationToken)).Any(i => i.Status == "Open")) actions.Add(Action("review-issues", NextActionKind.ResolveFailedJob, NextActionPriority.High, "Review open dogfood issues.", "Triage friction captured during dogfooding.", "/dogfood/issues"));
+        return actions;
+    }
+
+    public async Task<IReadOnlyList<NextAction>> GetProjectAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(projectId, cancellationToken);
+        if (project is null) return await GetGlobalAsync(cancellationToken);
+        var latest = await scans.GetLatestAsync(projectId, cancellationToken);
+        var actions = new List<NextAction>();
+        if (latest is null) actions.Add(Action("scan", NextActionKind.RunFirstScan, NextActionPriority.Critical, "Run first scan.", "Scanning generates context, docs, and packs.", $"/projects/{projectId}"));
+        else
+        {
+            actions.Add(Action("open-docs", NextActionKind.OpenBackendDocs, NextActionPriority.Medium, "Open backend docs.", "Review generated architecture and flow docs.", $"/projects/{projectId}/docs", project));
+            actions.Add(Action("preview-ai", NextActionKind.PreviewAiHandoffPack, NextActionPriority.Medium, "Preview ai-handoff pack.", "Use the safe AI preview flow.", $"/projects/{projectId}/ai", project));
+        }
+        if ((await providers.ListAsync(cancellationToken)).Count == 0) actions.Add(Action("configure-ai", NextActionKind.ConfigureAiProvider, NextActionPriority.High, "Configure AI provider.", "AI preview needs Ollama or OpenAI.", "/settings/ai", project));
+        return actions;
+    }
+
+    private static NextAction Action(string id, NextActionKind kind, NextActionPriority priority, string title, string description, string? href, Project? project = null)
+        => new(id, kind, priority, NextActionSource.DogfoodReadiness, new NextActionTarget(project?.Id, project?.Name), title, description, href);
+}
+
+public sealed class ProjectPathValidationService : IProjectPathValidationService
+{
+    private readonly List<RecentProjectPath> recent = [];
+
+    public Task<IReadOnlyList<RecentProjectPath>> GetRecentAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<RecentProjectPath>>(recent.OrderByDescending(r => r.LastUsedUtc).Take(10).ToArray());
+
+    public Task<ProjectPathValidationResult> ValidateAsync(string path, CancellationToken cancellationToken)
+    {
+        var warnings = new List<string>();
+        var errors = new List<string>();
+        var full = string.IsNullOrWhiteSpace(path) ? path : Path.GetFullPath(path);
+        var exists = Directory.Exists(full);
+        if (!exists) errors.Add("Path does not exist.");
+        var isSystem = full.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.Windows), StringComparison.OrdinalIgnoreCase);
+        if (isSystem) errors.Add("System folders cannot be registered.");
+        var canRead = false;
+        try { canRead = exists && Directory.EnumerateFileSystemEntries(full).Take(1).Any() || exists; } catch { errors.Add("Permission denied or path cannot be read."); }
+        var hasGit = exists && Directory.Exists(Path.Combine(full, ".git"));
+        var hasSln = exists && Directory.EnumerateFiles(full, "*.sln", SearchOption.TopDirectoryOnly).Any();
+        if (exists && !hasGit) warnings.Add("No .git folder detected.");
+        if (exists && !hasSln) warnings.Add("No solution file detected; registration is still allowed.");
+        var name = exists ? new DirectoryInfo(full).Name : Path.GetFileName(full.TrimEnd('\\', '/'));
+        var result = new ProjectPathValidationResult(full, exists, exists, hasGit, hasSln, isSystem, canRead, errors.Count == 0, warnings, errors, name);
+        if (result.CanRegister) recent.RemoveAll(r => r.Path.Equals(full, StringComparison.OrdinalIgnoreCase));
+        if (result.CanRegister) recent.Add(new RecentProjectPath(full, name, DateTimeOffset.UtcNow));
+        return Task.FromResult(result);
+    }
+}
+
+public sealed class QuickAskService(IProjectAiSettingsRepository settings, IAiPromptPreviewService preview, IAiRunService runs, IAiProviderConfigurationRepository providers) : IQuickAskService
+{
+    public async Task<QuickAskResult> PreviewAsync(QuickAskRequest request, CancellationToken cancellationToken)
+    {
+        var defaults = await settings.GetAsync(request.ProjectId, cancellationToken);
+        var provider = request.ProviderId ?? defaults.DefaultProviderId ?? (await providers.ListAsync(cancellationToken)).FirstOrDefault()?.Kind.ToString() ?? throw new InvalidOperationException("AI provider is not configured.");
+        var pack = request.PackId ?? defaults.DefaultContextPack;
+        var template = request.TemplateId ?? defaults.DefaultPromptTemplate;
+        var max = request.MaxOutputTokens ?? defaults.MaxOutputTokens;
+        return new QuickAskResult(await preview.PreviewAsync(request.ProjectId, provider, pack, request.Question, max, template, cancellationToken), null);
+    }
+
+    public async Task<QuickAskResult> RunAsync(QuickAskRequest request, CancellationToken cancellationToken)
+    {
+        var p = await PreviewAsync(request, cancellationToken);
+        var run = await runs.StartAsync(new AiRunInput(request.ProjectId, p.Preview.ProviderId, p.Preview.ProviderKind, p.Preview.Model, p.Preview.PackId, request.Question, request.ConfirmSafetyWarnings, request.MaxOutputTokens ?? 1200), cancellationToken);
+        return p with { Run = run };
     }
 }

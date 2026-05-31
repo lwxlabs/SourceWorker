@@ -2,8 +2,8 @@
 
 <header class="sw-topbar">
     <div>
-        <strong>Local Dashboard</strong>
-        <span class="muted">MVP 1.8 Hardening</span>
+        <strong>SourceWorker</strong>
+        <span class="muted">@Options.LaunchMode</span>
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
         @if (status != null)
@@ -22,6 +22,7 @@
 </header>
 
 @code {
+    [Inject] private SourceWorkerApiClientOptions Options { get; set; } = default!;
     private ApiConnectionStatus? status;
 
     protected override async Task OnInitializedAsync()

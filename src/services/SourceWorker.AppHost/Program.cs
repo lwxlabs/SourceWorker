@@ -1,15 +1,11 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using SourceWorker.AppHost;
+using SourceWorker.Hosting;
 
 var serviceCollection = new ServiceCollection();
 
 serviceCollection.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
-serviceCollection.AddHttpClient();
-serviceCollection.AddSingleton<IProcessLauncher, ProcessLauncher>();
-serviceCollection.AddSingleton<IEndpointProbe, EndpointProbe>();
-serviceCollection.AddSingleton<ILocalBrowserLauncher, LocalBrowserLauncher>();
-serviceCollection.AddSingleton<IAppHostOrchestrator, AppHostOrchestrator>();
+serviceCollection.AddSourceWorkerHosting();
 
 var serviceProvider = serviceCollection.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();

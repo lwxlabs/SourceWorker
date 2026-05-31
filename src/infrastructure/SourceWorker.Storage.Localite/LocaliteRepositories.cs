@@ -30,6 +30,10 @@ public static class LocaliteStorage
         services.AddSingleton<ITestInfoRepository, LocaliteTestInfoRepository>();
         services.AddSingleton<IAiProviderConfigurationRepository, LocaliteAiProviderConfigurationRepository>();
         services.AddSingleton<IAiRunRepository, LocaliteAiRunRepository>();
+        services.AddSingleton<IDogfoodSessionRepository, LocaliteDogfoodSessionRepository>();
+        services.AddSingleton<IDogfoodIssueRepository, LocaliteDogfoodIssueRepository>();
+        services.AddSingleton<IProjectAiSettingsRepository, LocaliteProjectAiSettingsRepository>();
+        services.AddSingleton<ILogRepository, LocaliteLogRepository>();
         return services;
     }
 }
@@ -200,7 +204,11 @@ internal static class Tables
     public const string AiProviderConfigurations = "AiProviderConfigurationRecord";
     public const string AiRuns = "AiRunRecord";
     public const string AiSettings = "AiSettingsRecord";
-    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns, AiSettings];
+    public const string DogfoodSessions = "DogfoodSessionRecord";
+    public const string DogfoodIssues = "DogfoodIssueRecord";
+    public const string ProjectAiSettings = "ProjectAiSettingsRecord";
+    public const string Logs = "LogEntryRecord";
+    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns, AiSettings, DogfoodSessions, DogfoodIssues, ProjectAiSettings, Logs];
 }
 
 internal sealed record ProjectRecord(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
@@ -352,4 +360,52 @@ public sealed class LocaliteAiRunRepository(LocaliteTableStore store) : IAiRunRe
 
     public Task DeleteAsync(Guid runId, CancellationToken cancellationToken) => store.DeleteAsync(Tables.AiRuns, runId, cancellationToken);
     public Task DeleteByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.DeleteByProjectAsync(Tables.AiRuns, projectId, cancellationToken);
+}
+
+public sealed class LocaliteDogfoodSessionRepository(LocaliteTableStore store) : IDogfoodSessionRepository
+{
+    public async Task<DogfoodSession> SaveAsync(DogfoodSession session, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.DogfoodSessions, session.Id, null, session.StartedUtc.ToString("O"), session, cancellationToken);
+        return session;
+    }
+
+    public Task<DogfoodSession?> GetAsync(Guid id, CancellationToken cancellationToken) => store.GetAsync<DogfoodSession>(Tables.DogfoodSessions, id, cancellationToken);
+    public async Task<IReadOnlyList<DogfoodSession>> ListAsync(CancellationToken cancellationToken) => (await store.ListAsync<DogfoodSession>(Tables.DogfoodSessions, null, cancellationToken)).OrderByDescending(s => s.StartedUtc).ToArray();
+}
+
+public sealed class LocaliteDogfoodIssueRepository(LocaliteTableStore store) : IDogfoodIssueRepository
+{
+    public async Task<DogfoodSessionIssue> SaveAsync(DogfoodSessionIssue issue, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.DogfoodIssues, issue.Id, issue.ProjectId, issue.CreatedUtc.ToString("O"), issue, cancellationToken);
+        return issue;
+    }
+
+    public Task<DogfoodSessionIssue?> GetAsync(Guid id, CancellationToken cancellationToken) => store.GetAsync<DogfoodSessionIssue>(Tables.DogfoodIssues, id, cancellationToken);
+    public async Task<IReadOnlyList<DogfoodSessionIssue>> ListAsync(CancellationToken cancellationToken) => (await store.ListAsync<DogfoodSessionIssue>(Tables.DogfoodIssues, null, cancellationToken)).OrderByDescending(i => i.CreatedUtc).ToArray();
+}
+
+public sealed class LocaliteProjectAiSettingsRepository(LocaliteTableStore store) : IProjectAiSettingsRepository
+{
+    public async Task<ProjectAiSettings> GetAsync(Guid projectId, CancellationToken cancellationToken)
+        => await store.GetAsync<ProjectAiSettings>(Tables.ProjectAiSettings, projectId, cancellationToken) ?? new ProjectAiSettings(projectId, null, null, "ai-handoff", "general-project-question", 1200, null, null, 70);
+
+    public async Task<ProjectAiSettings> SaveAsync(ProjectAiSettings settings, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.ProjectAiSettings, settings.ProjectId, settings.ProjectId, "ai-settings", settings, cancellationToken);
+        return settings;
+    }
+}
+
+public sealed class LocaliteLogRepository(LocaliteTableStore store) : ILogRepository
+{
+    public async Task<LogEntry> AddAsync(LogEntry entry, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.Logs, entry.Id, entry.ProjectId, entry.CreatedUtc.ToString("O"), entry, cancellationToken);
+        return entry;
+    }
+
+    public async Task<IReadOnlyList<LogEntry>> ListAsync(CancellationToken cancellationToken)
+        => (await store.ListAsync<LogEntry>(Tables.Logs, null, cancellationToken)).OrderByDescending(l => l.CreatedUtc).Take(200).ToArray();
 }

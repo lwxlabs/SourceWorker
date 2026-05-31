@@ -15,6 +15,23 @@
 
 @if (ProjectId is null)
 {
+    <Cards Title="Validate Path">
+        <input @bind="pathToValidate" placeholder="C:\path\to\project" />
+        <button @onclick="ValidatePath">Validate path</button>
+        @if (pathValidation is not null)
+        {
+            <div class="list-row"><strong>Suggested name</strong><span>@pathValidation.SuggestedName</span></div>
+            <div class="list-row"><strong>Can register</strong><span>@pathValidation.CanRegister</span></div>
+            @foreach (var warning in pathValidation.Warnings)
+            {
+                <div class="list-row"><strong>Warning</strong><span>@warning</span></div>
+            }
+            @foreach (var error in pathValidation.Errors)
+            {
+                <div class="list-row"><strong>Error</strong><span>@error</span></div>
+            }
+        }
+    </Cards>
     <ProjectRegistrationForm OnSuccess="Registered" />
 }
 else
@@ -36,6 +53,8 @@ else
 @code {
     [Parameter] public Guid? ProjectId { get; set; }
     private DogfoodProjectReadinessDto? readiness;
+    private string pathToValidate = "";
+    private ProjectPathValidationResultDto? pathValidation;
     protected override async Task OnParametersSetAsync()
     {
         if (ProjectId is Guid id) readiness = await Api.GetProjectDogfoodStatusAsync(id);
@@ -43,5 +62,10 @@ else
     private Task Registered()
     {
         return Task.CompletedTask;
+    }
+
+    private async Task ValidatePath()
+    {
+        pathValidation = await Api.ValidateProjectPathAsync(pathToValidate);
     }
 }

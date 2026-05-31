@@ -32,6 +32,20 @@
         <a href="/projects/@ProjectId/docs">Open backend docs</a>
         <a href="/projects/@ProjectId/packs">Open packs</a>
     </div>
+
+    <Cards Title="Quick Ask">
+        <p>Preview-only. AI output does not modify files.</p>
+        <textarea rows="3" @bind="quickAsk" placeholder="Ask about this project..."></textarea>
+        <div style="display:flex; gap:0.5rem;">
+            <button @onclick="PreviewQuickAsk">Preview</button>
+            <button @onclick="RunQuickAsk" disabled="@(quickPreview is null)">Run AI</button>
+        </div>
+        @if (quickPreview is not null)
+        {
+            <div class="list-row"><strong>Tokens</strong><span>@quickPreview.Preview.TokenEstimate.TotalTokens</span></div>
+            <pre style="white-space: pre-wrap;">@(quickPreview.Run?.OutputText ?? quickPreview.Preview.PromptText)</pre>
+        }
+    </Cards>
 }
 
 <div class="grid two">
@@ -56,6 +70,9 @@
     private IReadOnlyList<RouteInfo> routes = [];
     private IReadOnlyList<CodeFlow> flows = [];
     private IReadOnlyList<TestInfo> tests = [];
+    private IReadOnlyList<NextActionDto> nextActions = [];
+    private string quickAsk = "";
+    private QuickAskResultDto? quickPreview;
     
     private DateTimeOffset lastLoaded = DateTimeOffset.Now;
 
@@ -78,11 +95,22 @@
             routes = await Api.GetRoutesAsync(ProjectId);
             flows = await Api.GetFlowsAsync(ProjectId);
             tests = await Api.GetTestsAsync(ProjectId);
+            nextActions = await Api.GetProjectNextActionsAsync(ProjectId);
             lastLoaded = DateTimeOffset.Now;
         }
         catch (Exception)
         {
             // Error handling could be improved
         }
+    }
+
+    private async Task PreviewQuickAsk()
+    {
+        quickPreview = await Api.PreviewQuickAskAsync(ProjectId, new QuickAskRequestDto(ProjectId, quickAsk, null, null, null, null, false));
+    }
+
+    private async Task RunQuickAsk()
+    {
+        quickPreview = await Api.RunQuickAskAsync(ProjectId, new QuickAskRequestDto(ProjectId, quickAsk, null, null, null, null, true));
     }
 }
