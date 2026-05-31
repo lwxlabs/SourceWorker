@@ -50,7 +50,8 @@ public sealed partial class BasicProjectScanner(IGitInspector gitInspector) : IP
         var folderRoles = DetectFolderRoles(project.RootPath);
         var deletedFiles = previousHashes.Keys.Except(files.Select(f => f.RelativePath), StringComparer.OrdinalIgnoreCase).Order().ToArray();
 
-        var run = new ScanRun(scanId, project.Id, started, DateTimeOffset.UtcNow, ScanRunStatus.Completed, files.Count, todos.Count);
+        var changedCount = files.Count(f => f.ChangeKind is FileChangeKind.New or FileChangeKind.Changed or FileChangeKind.Deleted);
+        var run = new ScanRun(scanId, project.Id, started, DateTimeOffset.UtcNow, ScanRunStatus.Completed, files.Count, todos.Count, files.Count, 0, changedCount, technologies.Count);
         var detected = technologies.Select(pair => new DetectedTechnology(Guid.NewGuid(), project.Id, scanId, pair.Key, pair.Value)).OrderBy(t => t.Kind).ToArray();
         var git = await gitInspector.InspectAsync(project, cancellationToken);
         var primarySolution = solutionFiles.FirstOrDefault();

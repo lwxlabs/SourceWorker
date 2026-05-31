@@ -63,16 +63,17 @@ public sealed class BasicProjectScannerTests
         var scanner = new BasicProjectScanner(new EmptyGitInspector());
         var scan = await scanner.ScanAsync(project, CancellationToken.None);
 
-        await new BasicRecipeRunner(scanner, new MarkdownContextWriter()).RunBackendDocsCompactAsync(scan, CancellationToken.None);
+        await new BasicRecipeRunner(scanner, new MarkdownContextWriter(), new EmptyInstructionRepository()).RunBackendDocsCompactAsync(scan, CancellationToken.None);
 
         var output = Path.Combine(root, "instructions", "Result", "Backend");
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "recipes", "backend-docs-compact.yaml")));
         Assert.True(File.Exists(Path.Combine(output, "README.md")));
         Assert.True(File.Exists(Path.Combine(output, "01-project-structure.md")));
         Assert.True(File.Exists(Path.Combine(output, "02-architecture.md")));
-        Assert.True(File.Exists(Path.Combine(output, "03-workers-and-services.md")));
-        Assert.True(File.Exists(Path.Combine(output, "04-configuration.md")));
+        Assert.True(File.Exists(Path.Combine(output, "03-important-files-and-flows.md")));
+        Assert.True(File.Exists(Path.Combine(output, "04-configuration-and-secrets.md")));
         Assert.True(File.Exists(Path.Combine(output, "05-tasks-and-risks.md")));
+        Assert.True(File.Exists(Path.Combine(output, "06-verification-checklist.md")));
     }
 
     private static async Task<string> CreateSampleProject()
@@ -91,5 +92,11 @@ public sealed class BasicProjectScannerTests
     {
         public Task<GitSnapshot> InspectAsync(Project project, CancellationToken cancellationToken)
             => Task.FromResult(new GitSnapshot(Guid.NewGuid(), project.Id, null, null, false, DateTimeOffset.UtcNow));
+    }
+
+    private sealed class EmptyInstructionRepository : IProjectInstructionRepository
+    {
+        public Task<ProjectInstructionDocument?> GetLatestAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<ProjectInstructionDocument?>(null);
+        public Task<ProjectInstructionDocument> SaveAsync(ProjectInstructionDocument document, CancellationToken cancellationToken) => Task.FromResult(document);
     }
 }

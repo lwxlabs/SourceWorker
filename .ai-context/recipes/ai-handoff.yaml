@@ -1,0 +1,24 @@
+id: "ai-handoff"
+name: "AI Handoff"
+description: "Paste-ready assistant context."
+language: "en"
+outputPath: ".ai-context"
+targetPlatform: "local"
+mermaidEnabled: "true"
+requireClassAndMethodNames: "true"
+requireSourceReferences: "true"
+includedSections:
+  - "overview"
+  - "structure"
+  - "rules"
+  - "tasks"
+sourceScopes:
+  - "."
+rules:
+  []
+skipItems:
+  []
+verificationChecklist:
+  []
+generatedFiles:
+  []

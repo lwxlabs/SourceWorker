@@ -1,0 +1,23 @@
+id: "todo-plan"
+name: "Todo Plan"
+description: "TODO and verification oriented plan."
+language: "en"
+outputPath: ".ai-context/todo-plan"
+targetPlatform: "local"
+mermaidEnabled: "false"
+requireClassAndMethodNames: "false"
+requireSourceReferences: "true"
+includedSections:
+  - "todo"
+  - "skip"
+  - "verification"
+sourceScopes:
+  - "."
+rules:
+  []
+skipItems:
+  []
+verificationChecklist:
+  []
+generatedFiles:
+  []

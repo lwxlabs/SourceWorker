@@ -1,7 +1,19 @@
 namespace SourceWorker.Domain;
 
 public sealed record Project(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt = null);
-public sealed record ScanRun(Guid Id, Guid ProjectId, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt, ScanRunStatus Status, int FilesIndexed, int TodosFound);
+public sealed record ScanRun(
+    Guid Id,
+    Guid ProjectId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    ScanRunStatus Status,
+    int FilesIndexed,
+    int TodosFound,
+    int TotalFilesSeen = 0,
+    int IgnoredFileCount = 0,
+    int ChangedFileCount = 0,
+    int DetectedTechnologyCount = 0,
+    string? ErrorMessage = null);
 public sealed record IndexedFile(
     Guid Id,
     Guid ProjectId,
@@ -47,3 +59,97 @@ public enum WorkerJobStatus { Queued, Running, Completed, Failed, Cancelled }
 public sealed record SolutionFile(string Name, string RelativePath);
 public sealed record ProjectFile(string Name, string RelativePath, string Sdk, IReadOnlyList<string> ProjectReferences, bool IsTestProject);
 public sealed record FolderRole(string RelativePath, string Role, string Description);
+
+public sealed record ProjectInstructionDocument(
+    Guid Id,
+    Guid ProjectId,
+    string SourceFilePath,
+    string Title,
+    DateTimeOffset ImportedAt,
+    IReadOnlyList<ProjectInstructionSection> Sections,
+    IReadOnlyList<ProjectInstructionSourcePath> SourcePaths,
+    IReadOnlyList<ProjectInstructionRule> Rules,
+    IReadOnlyList<ProjectInstructionTodo> Todos,
+    IReadOnlyList<ProjectInstructionSkipItem> SkipItems,
+    IReadOnlyList<ProjectInstructionVerificationItem> VerificationItems);
+
+public sealed record ProjectInstructionSection(string Title, string NormalizedTitle, int Level, IReadOnlyList<ProjectInstructionItem> Items, string RawContent);
+public sealed record ProjectInstructionItem(string Text, bool IsCheckbox, bool? IsChecked, int IndentLevel, int LineNumber);
+public sealed record ProjectInstructionSourcePath(string OriginalPath, string NormalizedPath, bool Exists, SourcePathType Type, bool IsInsideProject, string? WarningMessage);
+public sealed record ProjectInstructionRule(string Text, string SourceSection);
+public sealed record ProjectInstructionTodo(string Text, bool IsCompleted, string SourceSection);
+public sealed record ProjectInstructionSkipItem(string Text, string SourceSection);
+public sealed record ProjectInstructionVerificationItem(string Text, bool IsCompleted, string SourceSection);
+
+public sealed record ProjectRecipe(
+    string Id,
+    string Name,
+    string Description,
+    string Language,
+    string OutputPath,
+    string TargetPlatform,
+    IReadOnlyList<string> IncludedSections,
+    IReadOnlyList<string> SourceScopes,
+    IReadOnlyList<string> Rules,
+    IReadOnlyList<string> SkipItems,
+    IReadOnlyList<string> VerificationChecklist,
+    IReadOnlyList<string> GeneratedFiles,
+    bool MermaidEnabled,
+    bool RequireClassAndMethodNames,
+    bool RequireSourceReferences,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> ExtraSections);
+
+public sealed record SourcePathValidationReport(Guid ProjectId, IReadOnlyList<ProjectInstructionSourcePath> Paths, IReadOnlyList<string> Warnings);
+
+public sealed record DoctorReport(
+    string ProjectRoot,
+    bool ProjectRootFound,
+    bool GitRepoFound,
+    IReadOnlyList<string> SolutionFiles,
+    IReadOnlyList<string> ProjectFiles,
+    IReadOnlyList<string> TestProjects,
+    bool ContextFolderExists,
+    bool ImportedInstructionsFound,
+    IReadOnlyList<string> Recipes,
+    IReadOnlyList<ProjectInstructionSourcePath> MissingSourcePaths,
+    bool IsContextStale,
+    DateTimeOffset? LastScanTime,
+    IReadOnlyList<string> Warnings);
+
+public enum SourcePathType { File, Folder, Unknown }
+public enum GeneratedArtifactType { ContextFile, RecipeFile, BackendDocs, InstructionFile, ValidationFile, Other }
+public enum GeneratedArtifactStatus { Generated, ManuallyModified, Stale, Missing }
+
+public sealed record GeneratedArtifact(
+    Guid Id,
+    Guid ProjectId,
+    Guid? ScanRunId,
+    string? RecipeId,
+    string RelativePath,
+    string AbsolutePath,
+    GeneratedArtifactType Type,
+    string ContentHash,
+    DateTimeOffset GeneratedUtc,
+    string SourceInputHash,
+    GeneratedArtifactStatus Status,
+    string GeneratorName,
+    string? Notes);
+
+public sealed record ContextFreshnessReport(
+    Guid ProjectId,
+    bool HasStaleContext,
+    IReadOnlyList<string> StaleContextFiles,
+    IReadOnlyList<string> MissingGeneratedFiles,
+    IReadOnlyList<string> ManuallyModifiedFiles,
+    IReadOnlyList<string> FilesChangedSinceLastGeneration,
+    int FreshnessScore,
+    IReadOnlyList<string> RecommendedActions);
+
+public sealed record ChangeSetReport(
+    Guid ProjectId,
+    Guid? ScanRunId,
+    IReadOnlyList<string> NewFiles,
+    IReadOnlyList<string> ChangedFiles,
+    IReadOnlyList<string> DeletedFiles,
+    int UnchangedCount,
+    int IgnoredCount);

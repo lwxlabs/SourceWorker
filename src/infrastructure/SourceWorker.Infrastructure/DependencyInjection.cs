@@ -16,6 +16,15 @@ public static class DependencyInjection
         services.AddSingleton<IGitInspector, BasicGitInspector>();
         services.AddSingleton<IProjectScanner, BasicProjectScanner>();
         services.AddSingleton<IContextWriter, MarkdownContextWriter>();
+        services.AddSingleton<IProjectInstructionParser, ProjectInstructionParser>();
+        services.AddSingleton<ISourcePathValidator, SourcePathValidator>();
+        services.AddSingleton<IInstructionContextWriter, InstructionContextWriter>();
+        services.AddSingleton<IDoctorService, DoctorService>();
+        services.AddSingleton<IContextFreshnessService, ContextFreshnessService>();
+        services.AddSingleton<IContextStatusService, ContextFreshnessService>();
+        services.AddSingleton<IChangeSetService, ChangeSetService>();
+        services.AddSingleton<IRecipeFactory, RecipeFactory>();
+        services.AddSingleton<IRecipeRepository, FileRecipeRepository>();
         services.AddSingleton<IRecipeRunner, BasicRecipeRunner>();
         return services;
     }

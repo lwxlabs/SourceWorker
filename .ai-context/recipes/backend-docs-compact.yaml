@@ -1,6 +1,25 @@
-id: backend-docs-compact
-name: Backend Docs Compact
-version: 1
-generatedAt: "2026-05-31T14:30:45.5499454+00:00"
+id: "backend-docs-compact"
+name: "Backend Docs Compact"
+description: "Compact backend handoff documentation."
+language: "en"
 outputPath: "instructions/Result/Backend"
-source: scanner
+targetPlatform: "local"
+mermaidEnabled: "false"
+requireClassAndMethodNames: "true"
+requireSourceReferences: "true"
+includedSections:
+  - "structure"
+  - "architecture"
+  - "configuration"
+  - "tasks"
+sourceScopes:
+  - "src"
+  - "tests"
+rules:
+  []
+skipItems:
+  []
+verificationChecklist:
+  []
+generatedFiles:
+  []

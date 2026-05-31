@@ -1,40 +1,49 @@
+using System.Security.Cryptography;
 using System.Text;
 using SourceWorker.Application;
 using SourceWorker.Domain;
 
 namespace SourceWorker.Context;
 
-public sealed class MarkdownContextWriter : IContextWriter
+public sealed class MarkdownContextWriter(IProjectInstructionRepository? instructions = null, ISourcePathValidator? validator = null, IGeneratedArtifactRepository? artifacts = null, IContextFreshnessService? freshnessService = null) : IContextWriter
 {
     public async Task<ContextWriteResult> WriteBasicContextAsync(ProjectScanResult scanResult, CancellationToken cancellationToken)
     {
+        var imported = instructions is null ? null : await instructions.GetLatestAsync(scanResult.Project.Id, cancellationToken);
+        var validation = imported is null || validator is null
+            ? []
+            : validator.Validate(scanResult.Project.RootPath, imported.SourcePaths.Select(p => p.OriginalPath));
         var output = Path.Combine(scanResult.Project.RootPath, ".ai-context");
         Directory.CreateDirectory(output);
         Directory.CreateDirectory(Path.Combine(output, "scans"));
         Directory.CreateDirectory(Path.Combine(output, "branches"));
+        Directory.CreateDirectory(Path.Combine(output, "instructions"));
 
+        var freshness = freshnessService is null
+            ? new ContextFreshnessReport(scanResult.Project.Id, false, [], [], [], [], 100, [])
+            : await freshnessService.CheckAsync(scanResult.Project, cancellationToken);
         var files = new Dictionary<string, string>
         {
-            ["CONTEXT.md"] = RootContext(scanResult),
-            ["index.yaml"] = Index(scanResult),
+            ["CONTEXT.md"] = RootContext(scanResult, imported),
+            ["index.yaml"] = Index(scanResult, imported, validation),
             ["project.md"] = Project(scanResult),
             ["architecture.md"] = Architecture(scanResult),
-            ["current-state.md"] = CurrentState(scanResult),
+            ["current-state.md"] = CurrentState(scanResult, freshness),
             ["tasks.md"] = Tasks(scanResult),
-            ["ai-handoff.md"] = Handoff(scanResult),
+            ["ai-handoff.md"] = Handoff(scanResult, imported, validation, freshness),
             ["scans/latest-scan.md"] = LatestScan(scanResult),
             ["branches/current.md"] = CurrentBranch(scanResult)
         };
 
         foreach (var file in files)
         {
-            await File.WriteAllTextAsync(Path.Combine(output, file.Key), file.Value, cancellationToken);
+            await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, file.Key, file.Value, GeneratedArtifactType.ContextFile, "SourceWorker.Context", cancellationToken);
         }
 
         return new ContextWriteResult(output, files.Keys.ToArray());
     }
 
-    private static string RootContext(ProjectScanResult scan)
+    private static string RootContext(ProjectScanResult scan, ProjectInstructionDocument? imported)
         => $"""
         # {scan.Project.Name}
 
@@ -47,6 +56,7 @@ public sealed class MarkdownContextWriter : IContextWriter
         - Projects found: {scan.Projects.Count}
         - Test projects found: {scan.Projects.Count(p => p.IsTestProject)}
         - TODO/FIXME/REVIEW items: {scan.Todos.Count}
+        - Imported instructions: {(imported is null ? "none" : imported.Title)}
 
         Start with `project.md`, then `architecture.md`, `current-state.md`, and `tasks.md`.
         """;
@@ -115,7 +125,7 @@ public sealed class MarkdownContextWriter : IContextWriter
         {ListOrNone(scan.Projects.Where(p => p.RelativePath.StartsWith("src/infrastructure/", StringComparison.OrdinalIgnoreCase)).Select(p => $"- `{p.RelativePath}`"))}
         """;
 
-    private static string CurrentState(ProjectScanResult scan)
+    private static string CurrentState(ProjectScanResult scan, ContextFreshnessReport freshness)
         => $"""
         # Current State
 
@@ -137,6 +147,8 @@ public sealed class MarkdownContextWriter : IContextWriter
         - New files: {scan.Files.Count(f => f.ChangeKind == FileChangeKind.New)}
         - Changed files: {scan.Files.Count(f => f.ChangeKind == FileChangeKind.Changed)}
         - Deleted files: {scan.DeletedFiles.Count}
+        - Context freshness score: {freshness.FreshnessScore}
+        - Has stale context: {freshness.HasStaleContext}
 
         ## Known Limitations
 
@@ -169,11 +181,20 @@ public sealed class MarkdownContextWriter : IContextWriter
         return builder.ToString();
     }
 
-    private static string Handoff(ProjectScanResult scan)
+    private static string Handoff(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, ContextFreshnessReport freshness)
         => $"""
         # AI Handoff
 
+        ## Project Overview
+
         SourceWorker scanned `{scan.Project.RootPath}` and generated this local context. The project appears to use {TechnologySummary(scan)}.
+
+        ## Detected Solution And Project Structure
+
+        - Solution: {scan.SolutionPath ?? "none detected"}
+        - Projects: {scan.Projects.Count}
+        - Test projects: {scan.Projects.Count(p => p.IsTestProject)}
+        - Architecture: {DetectArchitectureStyle(scan)}
 
         ## Important Files
 
@@ -184,6 +205,45 @@ public sealed class MarkdownContextWriter : IContextWriter
         - Branch: {scan.Git.Branch ?? "unknown"}
         - Commit: {scan.Git.CommitSha ?? "unknown"}
         - Dirty working tree: {scan.Git.IsDirty}
+
+        ## Context Freshness
+
+        - Score: {freshness.FreshnessScore}
+        - Has stale context: {freshness.HasStaleContext}
+        - Missing generated files: {freshness.MissingGeneratedFiles.Count}
+        - Manually modified files: {freshness.ManuallyModifiedFiles.Count}
+
+        ## Detected Technologies
+
+        {ListOrNone(scan.Technologies.Select(t => $"- {t.Kind}: `{t.Evidence}`"))}
+
+        ## Imported Instruction Summary
+
+        {(imported is null ? "- No instruction document imported." : $"- `{Path.GetFileName(imported.SourceFilePath)}` imported as `{imported.Title}`")}
+
+        ## Active Recipe
+
+        - `backend-docs-compact`
+
+        ## Important Source Paths
+
+        {ListOrNone((validation.Count > 0 ? validation : imported?.SourcePaths ?? []).Select(p => $"- `{p.OriginalPath}` -> `{p.NormalizedPath}` ({(p.Exists ? "found" : "missing")}){(p.WarningMessage is null ? "" : $" - {p.WarningMessage}")}"))}
+
+        ## Important Rules And Mindset
+
+        {ListOrNone((imported?.Rules ?? []).Select(r => $"- {r.Text}"))}
+
+        ## Todo Summary
+
+        {ListOrNone((imported?.Todos ?? []).Select(t => $"- {(t.IsCompleted ? "[x]" : "[ ]")} {t.Text}").Concat(scan.Todos.Take(20).Select(t => $"- {t.Kind} `{t.RelativePath}:{t.LineNumber}` {t.Text}")))}
+
+        ## Skip Later
+
+        {ListOrNone((imported?.SkipItems ?? []).Select(s => $"- {s.Text}"))}
+
+        ## Verification Checklist
+
+        {ListOrNone((imported?.VerificationItems ?? []).Select(v => $"- {(v.IsCompleted ? "[x]" : "[ ]")} {v.Text}"))}
 
         ## How To Work In This Repo
 
@@ -203,6 +263,16 @@ public sealed class MarkdownContextWriter : IContextWriter
         - Verify project references and folder roles are correct.
         - Improve ignore handling if generated or vendor files appear in `index.yaml`.
         - Use `backend-docs-compact` output as the first rule-based documentation recipe.
+
+        ## AI Assistant Rules
+
+        - Do not guess.
+        - Analyze files before changing code.
+        - Do not break existing code.
+        - Preserve current architecture.
+        - Keep changes compileable.
+        - Run tests after changes.
+        - Do not do skip-later items.
         """;
 
     private static string LatestScan(ProjectScanResult scan)
@@ -234,14 +304,55 @@ public sealed class MarkdownContextWriter : IContextWriter
         - Captured at: {scan.Git.CapturedAt:O}
         """;
 
-    private static string Index(ProjectScanResult scan)
+    private static string Index(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("version: 1");
-        builder.AppendLine($"projectId: {scan.Project.Id}");
-        builder.AppendLine($"scanRunId: {scan.ScanRun.Id}");
-        builder.AppendLine($"solutionName: \"{Escape(scan.SolutionName ?? string.Empty)}\"");
-        builder.AppendLine($"solutionPath: \"{Escape(scan.SolutionPath ?? string.Empty)}\"");
+        builder.AppendLine("formatVersion: 2");
+        builder.AppendLine("project:");
+        builder.AppendLine($"  id: \"{scan.Project.Id}\"");
+        builder.AppendLine($"  name: \"{Escape(scan.Project.Name)}\"");
+        builder.AppendLine($"  rootPath: \"{Escape(scan.Project.RootPath)}\"");
+        builder.AppendLine("lastScan:");
+        builder.AppendLine($"  id: \"{scan.ScanRun.Id}\"");
+        builder.AppendLine($"  startedUtc: \"{scan.ScanRun.StartedAt:O}\"");
+        builder.AppendLine($"  finishedUtc: \"{scan.ScanRun.CompletedAt:O}\"");
+        builder.AppendLine($"  status: {scan.ScanRun.Status}");
+        builder.AppendLine("git:");
+        builder.AppendLine($"  branch: \"{Escape(scan.Git.Branch ?? string.Empty)}\"");
+        builder.AppendLine($"  hasUncommittedChanges: {scan.Git.IsDirty.ToString().ToLowerInvariant()}");
+        builder.AppendLine("contextFiles:");
+        foreach (var path in new[] { "CONTEXT.md", "project.md", "architecture.md", "current-state.md", "tasks.md", "ai-handoff.md", "scans/latest-scan.md", "branches/current.md" })
+        {
+            builder.AppendLine($"  - path: \"{path}\"");
+            builder.AppendLine("    type: ContextFile");
+            builder.AppendLine("    status: Generated");
+        }
+        builder.AppendLine("recipes:");
+        builder.AppendLine("  - id: \"backend-docs-compact\"");
+        builder.AppendLine("    path: \".ai-context/recipes/backend-docs-compact.yaml\"");
+        builder.AppendLine("    outputPath: \"instructions/Result/Backend\"");
+        builder.AppendLine("stale:");
+        builder.AppendLine("  hasStaleContext: false");
+        builder.AppendLine("  staleFiles: []");
+        builder.AppendLine("  missingGeneratedFiles: []");
+        builder.AppendLine("  manuallyModifiedFiles: []");
+        if (imported is not null)
+        {
+            builder.AppendLine("instructions:");
+            builder.AppendLine($"  imported: \".ai-context/instructions/imported-instructions.md\"");
+            builder.AppendLine($"  sourcePathValidation: \".ai-context/instructions/source-path-validation.md\"");
+            builder.AppendLine($"  sourceFile: \"{Escape(imported.SourceFilePath)}\"");
+            builder.AppendLine($"  missingSourcePaths: {validation.Count(p => !p.Exists || !p.IsInsideProject)}");
+            builder.AppendLine("  sourcePaths:");
+            foreach (var path in validation)
+            {
+                builder.AppendLine($"    - original: \"{Escape(path.OriginalPath)}\"");
+                builder.AppendLine($"      normalized: \"{Escape(path.NormalizedPath)}\"");
+                builder.AppendLine($"      exists: {path.Exists.ToString().ToLowerInvariant()}");
+                builder.AppendLine($"      insideProject: {path.IsInsideProject.ToString().ToLowerInvariant()}");
+                if (path.WarningMessage is not null) builder.AppendLine($"      warning: \"{Escape(path.WarningMessage)}\"");
+            }
+        }
         builder.AppendLine("files:");
         foreach (var file in scan.Files.OrderBy(f => f.RelativePath))
         {
@@ -257,6 +368,39 @@ public sealed class MarkdownContextWriter : IContextWriter
 
         return builder.ToString();
     }
+
+    private async Task WriteGeneratedAsync(Project project, Guid scanRunId, string? recipeId, string root, string relativePath, string body, GeneratedArtifactType type, string generatorName, CancellationToken cancellationToken)
+    {
+        var bodyHash = Hash(body);
+        var content = Metadata(project.Id, scanRunId, recipeId, bodyHash, bodyHash, "Generated") + body;
+        var absolute = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
+        await File.WriteAllTextAsync(absolute, content, cancellationToken);
+        if (artifacts is not null)
+        {
+            var projectRelative = Path.GetRelativePath(project.RootPath, absolute).Replace('\\', '/');
+            await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), project.Id, scanRunId, recipeId, projectRelative, absolute, type, bodyHash, DateTimeOffset.UtcNow, bodyHash, GeneratedArtifactStatus.Generated, generatorName, null), cancellationToken);
+        }
+    }
+
+    public static string Metadata(Guid projectId, Guid? scanRunId, string? recipeId, string inputHash, string contentHash, string status)
+        => $"""
+        <!--
+        GeneratedBy: SourceWorker
+        FormatVersion: 2
+        ProjectId: {projectId}
+        ScanRunId: {scanRunId}
+        RecipeId: {recipeId}
+        GeneratedUtc: {DateTimeOffset.UtcNow:O}
+        InputHash: {inputHash}
+        ContentHash: {contentHash}
+        Status: {status}
+        -->
+
+        """;
+
+    public static string Hash(string content)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 
     private static string DetectArchitectureStyle(ProjectScanResult scan)
         => scan.FolderRoles.Any(f => f.Role == "core") && scan.FolderRoles.Any(f => f.Role == "infrastructure")

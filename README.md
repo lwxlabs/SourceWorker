@@ -18,6 +18,19 @@ No AI provider, desktop UI, MCP server, cloud sync, licensing, or secret storage
 - `src/services/SourceWorker.LocalApi` exposes local HTTP endpoints.
 - `src/services/SourceWorker.Worker` provides the in-process queue and project scan worker.
 
+## CLI
+
+```powershell
+dotnet run --project src/services/SourceWorker.Cli -- scan C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- scan C:\path\to\project --instructions C:\path\to\todo-louie.md
+dotnet run --project src/services/SourceWorker.Cli -- import-instructions C:\path\to\project C:\path\to\todo-louie.md
+dotnet run --project src/services/SourceWorker.Cli -- doctor C:\path\to\project --json
+dotnet run --project src/services/SourceWorker.Cli -- changes C:\path\to\project --json
+dotnet run --project src/services/SourceWorker.Cli -- context-status C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- recipes C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
+```
+
 ## Scanner MVP
 
 The scanner walks a project folder, applies basic `.gitignore` handling, skips common generated directories, detects `.sln`/`.csproj`, README/markdown files, TODO/FIXME/REVIEW comments, and basic technologies: .NET, ASP.NET Core, Blazor, MAUI, Docker, and GitHub Actions.
@@ -41,5 +54,7 @@ Scanning writes:
 ```
 
 The first rule-based recipe, `backend-docs-compact`, also writes compact backend documentation to `instructions/Result/Backend/`.
+
+Generated markdown includes SourceWorker metadata comments with format version, project id, scan run id, recipe id, generated UTC, input hash, content hash, and status. Doctor/context-status use these records to detect missing or manually modified generated files.
 
 See [docs/first-mvp.md](docs/first-mvp.md) for run commands.

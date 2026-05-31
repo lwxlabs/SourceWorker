@@ -13,6 +13,26 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<StartProjectScanCommand, SourceWorker.Contracts.StartScanResponse>, StartProjectScanCommandHandler>();
         services.AddScoped<IRequestHandler<GetJobStatusQuery, SourceWorker.Contracts.JobStatusDto?>, GetJobStatusQueryHandler>();
         services.AddScoped<IRequestHandler<GenerateBasicContextCommand, SourceWorker.Contracts.ContextGenerationResponse>, GenerateBasicContextCommandHandler>();
+        services.AddScoped<IRequestHandler<ImportProjectInstructionsCommand, SourceWorker.Contracts.ImportInstructionsResponse>, ImportProjectInstructionsCommandHandler>();
+        services.AddScoped<IRequestHandler<DoctorProjectQuery, SourceWorker.Domain.DoctorReport>, DoctorProjectQueryHandler>();
+        services.AddScoped<IRequestHandler<GetRecipesQuery, IReadOnlyList<SourceWorker.Contracts.RecipeListItemDto>>, GetRecipesQueryHandler>();
+        services.AddScoped<IRequestHandler<RunRecipeCommand, SourceWorker.Contracts.RunRecipeResponse>, RunRecipeCommandHandler>();
+        services.AddScoped<IRequestHandler<GetProjectChangesQuery, SourceWorker.Domain.ChangeSetReport>, GetProjectChangesQueryHandler>();
+        services.AddScoped<IRequestHandler<GetContextStatusQuery, SourceWorker.Domain.ContextFreshnessReport>, GetContextStatusQueryHandler>();
+        services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
+    }
+}
+
+public sealed class ProjectInstructionImporter(IProjectInstructionParser parser, ISourcePathValidator validator) : IProjectInstructionImporter
+{
+    public async Task<SourceWorker.Domain.ProjectInstructionDocument> ImportAsync(SourceWorker.Domain.Project project, string instructionFilePath, CancellationToken cancellationToken)
+    {
+        var path = Path.GetFullPath(instructionFilePath);
+        if (!File.Exists(path)) throw new FileNotFoundException("Instruction file was not found.", path);
+        var markdown = await File.ReadAllTextAsync(path, cancellationToken);
+        var parsed = parser.Parse(project.Id, project.RootPath, path, markdown);
+        var validated = validator.Validate(project.RootPath, parsed.SourcePaths.Select(p => p.OriginalPath));
+        return parsed with { SourcePaths = validated };
     }
 }

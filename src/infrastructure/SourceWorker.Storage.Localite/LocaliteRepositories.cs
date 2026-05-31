@@ -20,7 +20,10 @@ public static class LocaliteStorage
         services.AddSingleton<IProjectRepository, LocaliteProjectRepository>();
         services.AddSingleton<IScanRunRepository, LocaliteScanRunRepository>();
         services.AddSingleton<IFileIndexRepository, LocaliteFileIndexRepository>();
+        services.AddSingleton<IIndexedFileRepository, LocaliteIndexedFileRepository>();
+        services.AddSingleton<IGeneratedArtifactRepository, LocaliteGeneratedArtifactRepository>();
         services.AddSingleton<IJobRepository, LocaliteJobRepository>();
+        services.AddSingleton<IProjectInstructionRepository, LocaliteProjectInstructionRepository>();
         return services;
     }
 }
@@ -87,12 +90,66 @@ public sealed class LocaliteScanRunRepository(LocaliteJsonStore store) : IScanRu
     public async Task<ScanRun?> GetAsync(Guid id, CancellationToken cancellationToken)
         => (await store.GetListAsync<ScanRun>(Key, cancellationToken)).FirstOrDefault(run => run.Id == id);
 
+    public async Task<IReadOnlyList<ScanRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.GetListAsync<ScanRun>(Key, cancellationToken))
+            .Where(run => run.ProjectId == projectId)
+            .OrderByDescending(run => run.StartedAt)
+            .ToArray();
+
+    public async Task<ScanRun?> GetLatestAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await GetByProjectAsync(projectId, cancellationToken)).FirstOrDefault();
+
     public async Task<ScanRun> UpdateAsync(ScanRun scanRun, CancellationToken cancellationToken)
     {
         var runs = (await store.GetListAsync<ScanRun>(Key, cancellationToken)).Where(run => run.Id != scanRun.Id).Append(scanRun).ToArray();
         await store.SetListAsync(Key, runs, cancellationToken);
         return scanRun;
     }
+}
+
+public sealed class LocaliteIndexedFileRepository(LocaliteJsonStore store) : IIndexedFileRepository
+{
+    public async Task SaveForScanAsync(Guid projectId, Guid scanRunId, IReadOnlyList<IndexedFile> files, CancellationToken cancellationToken)
+    {
+        await store.SetListAsync(Key(scanRunId), files, cancellationToken);
+        var scans = (await store.GetListAsync<Guid>(ProjectKey(projectId), cancellationToken)).Where(id => id != scanRunId).Append(scanRunId).ToArray();
+        await store.SetListAsync(ProjectKey(projectId), scans, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<IndexedFile>> GetByScanRunAsync(Guid scanRunId, CancellationToken cancellationToken)
+        => store.GetListAsync<IndexedFile>(Key(scanRunId), cancellationToken);
+
+    public async Task<IReadOnlyList<IndexedFile>> GetLatestByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var scanIds = await store.GetListAsync<Guid>(ProjectKey(projectId), cancellationToken);
+        var latest = scanIds.LastOrDefault();
+        return latest == Guid.Empty ? [] : await GetByScanRunAsync(latest, cancellationToken);
+    }
+
+    private static string Key(Guid scanRunId) => $"indexed-files:{scanRunId}";
+    private static string ProjectKey(Guid projectId) => $"indexed-files:project:{projectId}";
+}
+
+public sealed class LocaliteGeneratedArtifactRepository(LocaliteJsonStore store) : IGeneratedArtifactRepository
+{
+    public async Task<GeneratedArtifact> UpsertAsync(GeneratedArtifact artifact, CancellationToken cancellationToken)
+    {
+        var artifacts = (await store.GetListAsync<GeneratedArtifact>(Key(artifact.ProjectId), cancellationToken))
+            .Where(existing => !existing.RelativePath.Equals(artifact.RelativePath, StringComparison.OrdinalIgnoreCase))
+            .Append(artifact)
+            .OrderBy(a => a.RelativePath)
+            .ToArray();
+        await store.SetListAsync(Key(artifact.ProjectId), artifacts, cancellationToken);
+        return artifact;
+    }
+
+    public Task<IReadOnlyList<GeneratedArtifact>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => store.GetListAsync<GeneratedArtifact>(Key(projectId), cancellationToken);
+
+    public async Task<GeneratedArtifact?> GetByPathAsync(Guid projectId, string relativePath, CancellationToken cancellationToken)
+        => (await GetByProjectAsync(projectId, cancellationToken)).FirstOrDefault(a => a.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
+
+    private static string Key(Guid projectId) => $"generated-artifacts:{projectId}";
 }
 
 public sealed class LocaliteFileIndexRepository(LocaliteJsonStore store) : IFileIndexRepository
@@ -139,4 +196,25 @@ public sealed class LocaliteJobRepository(LocaliteJsonStore store) : IJobReposit
         });
         return Task.CompletedTask;
     }
+}
+
+public sealed class LocaliteProjectInstructionRepository(LocaliteJsonStore store) : IProjectInstructionRepository
+{
+    public async Task<ProjectInstructionDocument?> GetLatestAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.GetListAsync<ProjectInstructionDocument>(Key(projectId), cancellationToken))
+            .OrderByDescending(document => document.ImportedAt)
+            .FirstOrDefault();
+
+    public async Task<ProjectInstructionDocument> SaveAsync(ProjectInstructionDocument document, CancellationToken cancellationToken)
+    {
+        var documents = (await store.GetListAsync<ProjectInstructionDocument>(Key(document.ProjectId), cancellationToken))
+            .Where(existing => existing.Id != document.Id)
+            .Append(document)
+            .OrderByDescending(existing => existing.ImportedAt)
+            .ToArray();
+        await store.SetListAsync(Key(document.ProjectId), documents, cancellationToken);
+        return document;
+    }
+
+    private static string Key(Guid projectId) => $"instructions:{projectId}";
 }

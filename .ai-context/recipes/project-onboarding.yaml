@@ -1,0 +1,23 @@
+id: "project-onboarding"
+name: "Project Onboarding"
+description: "Short onboarding context for a new developer."
+language: "en"
+outputPath: ".ai-context/onboarding"
+targetPlatform: "local"
+mermaidEnabled: "false"
+requireClassAndMethodNames: "false"
+requireSourceReferences: "true"
+includedSections:
+  - "overview"
+  - "setup"
+  - "architecture"
+sourceScopes:
+  - "."
+rules:
+  []
+skipItems:
+  []
+verificationChecklist:
+  []
+generatedFiles:
+  []
