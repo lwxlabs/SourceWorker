@@ -1,0 +1,25 @@
+<Cards Title="Pack">
+    @if (Pack is null)
+    {
+        <EmptyState Message="Select a pack." />
+    }
+    else
+    {
+        <h3>@Pack.Pack.Name</h3>
+        <p>@Pack.Pack.Description</p>
+        <span class="pill @(Pack.IsValid ? "ok" : "warn")">@(Pack.IsValid ? "valid" : "missing files")</span>
+        @foreach (var item in Pack.Pack.Items)
+        {
+            <div class="list-row compact"><code>@item.RelativePath</code></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Content))
+        {
+            <MarkdownViewer Content="@Content" />
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public ContextPackManifest? Pack { get; set; }
+    [Parameter] public string? Content { get; set; }
+}

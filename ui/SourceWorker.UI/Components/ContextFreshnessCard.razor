@@ -1,0 +1,23 @@
+<Cards Title="Context Freshness">
+    @if (Status is null)
+    {
+        <EmptyState Message="Select a project to view freshness." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Score" Value="@Status.FreshnessScore.ToString()" />
+            <MetricCard Label="Stale" Value="@Status.HasStaleContext.ToString()" />
+            <MetricCard Label="Manual" Value="@Status.ManuallyModifiedFiles.Count.ToString()" />
+            <MetricCard Label="Missing" Value="@Status.MissingGeneratedFiles.Count.ToString()" />
+        </div>
+        @foreach (var action in Status.RecommendedActions)
+        {
+            <p class="muted">@action</p>
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public ContextFreshnessReport? Status { get; set; }
+}

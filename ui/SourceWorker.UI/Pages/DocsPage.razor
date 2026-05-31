@@ -1,0 +1,8 @@
+@page "/projects/{ProjectId:guid}/docs"
+
+<h1>Backend Docs</h1>
+<BackendDocsViewer ProjectId="@ProjectId" />
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+}

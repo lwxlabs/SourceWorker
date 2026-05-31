@@ -1,0 +1,18 @@
+<Cards Title="Context Files">
+    @foreach (var group in Files.GroupBy(f => f.Kind).OrderBy(g => g.Key))
+    {
+        <h3>@group.Key</h3>
+        @foreach (var file in group.OrderBy(f => f.RelativePath))
+        {
+            <a class="file-row" href="@($"{BaseUrl}?file={Uri.EscapeDataString(file.RelativePath)}")">
+                <span>@file.RelativePath</span>
+                <small>@file.SizeBytes bytes</small>
+            </a>
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<ContextBrowserFile> Files { get; set; } = [];
+    [Parameter] public string BaseUrl { get; set; } = "";
+}

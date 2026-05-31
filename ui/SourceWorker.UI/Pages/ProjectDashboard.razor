@@ -1,0 +1,53 @@
+@page "/projects/{ProjectId:guid}"
+@inject ISourceWorkerApiClient Api
+
+<h1>@(project?.Name ?? "Project")</h1>
+@if (project is not null)
+{
+    <p class="path">@project.RootPath</p>
+    <nav class="tabs">
+        <a href="/projects/@ProjectId/context">Context</a>
+        <a href="/projects/@ProjectId/docs">Docs</a>
+        <a href="/projects/@ProjectId/packs">Packs</a>
+        <a href="/projects/@ProjectId/code">Code</a>
+        <a href="/projects/@ProjectId/artifacts">Artifacts</a>
+    </nav>
+}
+
+<div class="grid two">
+    <ContextFreshnessCard Status="@freshness" />
+    <DoctorSummaryCard Report="@doctor" />
+    <ArtifactStatusCard Report="@artifacts" />
+    <OutputRoutesCard Outputs="@outputs" />
+    <ContextPacksCard Packs="@packs" />
+    <CodeIntelligenceSummaryCard Symbols="@symbols" Routes="@routes" Flows="@flows" Tests="@tests" />
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private ProjectDto? project;
+    private DoctorReport? doctor;
+    private ContextFreshnessReport? freshness;
+    private ArtifactLifecycleReport? artifacts;
+    private GeneratedOutputSet? outputs;
+    private IReadOnlyList<ContextPackManifest> packs = [];
+    private IReadOnlyList<CodeSymbol> symbols = [];
+    private IReadOnlyList<RouteInfo> routes = [];
+    private IReadOnlyList<CodeFlow> flows = [];
+    private IReadOnlyList<TestInfo> tests = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        project = (await Api.GetProjectsAsync()).FirstOrDefault(p => p.Id == ProjectId);
+        doctor = await Api.GetDoctorAsync(ProjectId);
+        freshness = await Api.GetContextStatusAsync(ProjectId);
+        artifacts = await Api.GetArtifactsAsync(ProjectId);
+        outputs = await Api.GetOutputsAsync(ProjectId);
+        packs = await Api.GetPacksAsync(ProjectId);
+        symbols = await Api.GetSymbolsAsync(ProjectId);
+        routes = await Api.GetRoutesAsync(ProjectId);
+        flows = await Api.GetFlowsAsync(ProjectId);
+        tests = await Api.GetTestsAsync(ProjectId);
+    }
+}

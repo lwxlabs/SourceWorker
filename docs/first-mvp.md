@@ -131,6 +131,35 @@ Minimal endpoints:
 
 The API uses an in-process queue for scan jobs. It does not expose AI, MCP, cloud, licensing, or desktop UI features yet.
 
+## Dashboard
+
+Start the read-only Blazor dashboard:
+
+```powershell
+dotnet run --project src/services/SourceWorker.LocalApi
+dotnet run --project ui/SourceWorker.Dashboard
+```
+
+Projects:
+
+- `ui/SourceWorker.ApiClient`: typed Local API client.
+- `ui/SourceWorker.UI`: reusable Razor components/pages.
+- `ui/SourceWorker.Dashboard`: first Blazor Web App host.
+
+Routes:
+
+- `/`
+- `/projects`
+- `/projects/{projectId}`
+- `/projects/{projectId}/context`
+- `/projects/{projectId}/docs`
+- `/projects/{projectId}/packs`
+- `/projects/{projectId}/code`
+- `/projects/{projectId}/artifacts`
+- `/settings`
+
+The UI is read-only and Local API-driven. It does not access Localite, scanner, infrastructure, application services, or project files directly.
+
 ## Generated Context
 
 `index.yaml` uses format version 5 and includes project identity, latest scan, Git state, table-backed Localite storage metadata, context files, recipes, imported instructions, stale status, artifact lifecycle counts, cleanup recommendations, code intelligence counts, flow counts, context browser availability, output routes, packs, exports, and internal docs state.

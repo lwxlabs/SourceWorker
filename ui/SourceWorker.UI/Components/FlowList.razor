@@ -1,0 +1,19 @@
+<Cards Title="Flows">
+    @foreach (var flow in Flows)
+    {
+        <details class="detail-row">
+            <summary><strong>@flow.Name</strong> <span>@flow.FlowType</span> <span class="pill">@flow.Confidence</span></summary>
+            <p>@flow.Trigger</p>
+            <ol>
+                @foreach (var step in flow.Steps.OrderBy(s => s.Order))
+                {
+                    <li>@step.Text</li>
+                }
+            </ol>
+        </details>
+    }
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<CodeFlow> Flows { get; set; } = [];
+}

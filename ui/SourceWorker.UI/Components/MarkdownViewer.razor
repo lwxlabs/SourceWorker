@@ -1,0 +1,14 @@
+<article class="markdown-viewer">
+    @if (string.IsNullOrWhiteSpace(Content))
+    {
+        <EmptyState Message="Select a markdown file to preview." />
+    }
+    else
+    {
+        <pre>@Content</pre>
+    }
+</article>
+
+@code {
+    [Parameter] public string? Content { get; set; }
+}

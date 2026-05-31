@@ -1,0 +1,20 @@
+<Cards Title="Artifacts">
+    @if (Report is null)
+    {
+        <EmptyState Message="Artifact status unavailable." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Total" Value="@Report.Artifacts.Count.ToString()" />
+            <MetricCard Label="Manual" Value="@Report.ManuallyModifiedArtifacts.Count.ToString()" />
+            <MetricCard Label="Missing" Value="@Report.MissingArtifacts.Count.ToString()" />
+            <MetricCard Label="Deprecated" Value="@Report.DeprecatedArtifacts.Count.ToString()" />
+        </div>
+        <span class="pill @(Report.CleanupRecommended ? "warn" : "ok")">cleanup @(Report.CleanupRecommended ? "recommended" : "not needed")</span>
+    }
+</Cards>
+
+@code {
+    [Parameter] public ArtifactLifecycleReport? Report { get; set; }
+}

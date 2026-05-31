@@ -1,0 +1,37 @@
+@page "/projects/{ProjectId:guid}/packs"
+@inject ISourceWorkerApiClient Api
+
+<h1>Context Packs</h1>
+
+<div class="split">
+    <Cards Title="Packs">
+        @foreach (var pack in packs)
+        {
+            <a class="file-row" href="@($"/projects/{ProjectId}/packs?pack={pack.Pack.Id}")">
+                <span>@pack.Pack.Name</span>
+                <small>@(pack.IsValid ? "valid" : "missing files")</small>
+            </a>
+        }
+    </Cards>
+    <PackViewer Pack="@selected" Content="@content" />
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [SupplyParameterFromQuery(Name = "pack")] public string? PackId { get; set; }
+
+    private IReadOnlyList<ContextPackManifest> packs = [];
+    private ContextPackManifest? selected;
+    private string? content;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        packs = await Api.GetPacksAsync(ProjectId);
+        var id = string.IsNullOrWhiteSpace(PackId) ? packs.FirstOrDefault()?.Pack.Id : PackId;
+        if (id is not null)
+        {
+            selected = await Api.GetPackAsync(ProjectId, id);
+            content = await Api.GetPackContentAsync(ProjectId, id);
+        }
+    }
+}

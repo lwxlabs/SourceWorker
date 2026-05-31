@@ -1,0 +1,20 @@
+<Cards Title="Storage">
+    @if (Info is null)
+    {
+        <EmptyState Message="Storage info unavailable." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Provider" Value="@Info.Schema.Provider" />
+            <MetricCard Label="Schema" Value="@Info.Schema.SchemaVersion.ToString()" />
+            <MetricCard Label="Projects" Value="@Info.ProjectCount.ToString()" />
+            <MetricCard Label="Artifacts" Value="@Info.GeneratedArtifactCount.ToString()" />
+        </div>
+        <p class="path">@Info.Schema.StoragePath</p>
+    }
+</Cards>
+
+@code {
+    [Parameter] public StorageInfo? Info { get; set; }
+}

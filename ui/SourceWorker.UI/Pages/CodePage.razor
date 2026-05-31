@@ -1,0 +1,43 @@
+@page "/projects/{ProjectId:guid}/code"
+@inject ISourceWorkerApiClient Api
+
+<h1>Code Intelligence</h1>
+
+<div class="grid two">
+    <CodeIntelligenceSummaryCard Symbols="@symbols" Routes="@routes" Flows="@flows" Tests="@tests" />
+    <Cards Title="Configuration And Services">
+        <MetricCard Label="Services" Value="@services.Count.ToString()" />
+        <MetricCard Label="Configuration" Value="@configs.Count.ToString()" />
+    </Cards>
+</div>
+
+<FlowList Flows="@flows" />
+<RouteList Routes="@routes" />
+<SymbolList Symbols="@symbols" />
+
+<Cards Title="Tests">
+    @foreach (var test in tests.Take(100))
+    {
+        <div class="list-row"><strong>@($"{test.ClassName}.{test.MethodName}")</strong><code>@test.RelativePath:@test.LineNumber</code></div>
+    }
+</Cards>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private IReadOnlyList<CodeSymbol> symbols = [];
+    private IReadOnlyList<RouteInfo> routes = [];
+    private IReadOnlyList<CodeFlow> flows = [];
+    private IReadOnlyList<ServiceRegistration> services = [];
+    private IReadOnlyList<ConfigurationUsage> configs = [];
+    private IReadOnlyList<TestInfo> tests = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        symbols = await Api.GetSymbolsAsync(ProjectId);
+        routes = await Api.GetRoutesAsync(ProjectId);
+        flows = await Api.GetFlowsAsync(ProjectId);
+        services = await Api.GetServiceRegistrationsAsync(ProjectId);
+        configs = await Api.GetConfigurationUsagesAsync(ProjectId);
+        tests = await Api.GetTestsAsync(ProjectId);
+    }
+}

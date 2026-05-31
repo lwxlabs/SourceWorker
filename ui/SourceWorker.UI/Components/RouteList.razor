@@ -1,0 +1,13 @@
+<Cards Title="Routes">
+    @foreach (var route in Routes)
+    {
+        <div class="list-row">
+            <strong>@route.HttpMethod @route.RoutePattern</strong>
+            <code>@route.RelativePath:@route.LineNumber</code>
+        </div>
+    }
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<RouteInfo> Routes { get; set; } = [];
+}

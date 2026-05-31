@@ -1,0 +1,34 @@
+@inject ISourceWorkerApiClient Api
+
+<div class="split">
+    <nav class="doc-tabs">
+        @foreach (var file in Files)
+        {
+            <a href="@($"/projects/{ProjectId}/docs?file={Uri.EscapeDataString(file)}")">@Path.GetFileName(file)</a>
+        }
+    </nav>
+    <MarkdownViewer Content="@content" />
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [SupplyParameterFromQuery(Name = "file")] public string? SelectedFile { get; set; }
+
+    private readonly string[] Files =
+    [
+        ".ai-context/docs/backend/README.md",
+        ".ai-context/docs/backend/01-project-structure.md",
+        ".ai-context/docs/backend/02-architecture.md",
+        ".ai-context/docs/backend/03-important-files-and-flows.md",
+        ".ai-context/docs/backend/04-configuration-and-secrets.md",
+        ".ai-context/docs/backend/05-tasks-and-risks.md",
+        ".ai-context/docs/backend/06-verification-checklist.md"
+    ];
+    private string? content;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var file = string.IsNullOrWhiteSpace(SelectedFile) ? Files[0] : SelectedFile;
+        content = await Api.ReadContextAsync(ProjectId, file);
+    }
+}

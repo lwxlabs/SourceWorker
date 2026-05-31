@@ -1,0 +1,17 @@
+@if (Kind == "loading")
+{
+    <div class="state">Loading...</div>
+}
+else if (Kind == "error")
+{
+    <div class="state error">@Message</div>
+}
+else
+{
+    <div class="state empty">@Message</div>
+}
+
+@code {
+    [Parameter] public string Kind { get; set; } = "empty";
+    [Parameter] public string Message { get; set; } = "Nothing to show yet.";
+}

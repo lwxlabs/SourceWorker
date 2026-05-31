@@ -1,0 +1,20 @@
+@if (Projects.Count == 0)
+{
+    <EmptyState Message="No projects registered in the Local API yet." />
+}
+else
+{
+    <div class="project-list">
+        @foreach (var project in Projects.OrderBy(p => p.Name))
+        {
+            <a class="project-row" href="/projects/@project.Id">
+                <strong>@project.Name</strong>
+                <span>@project.RootPath</span>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ProjectDto> Projects { get; set; } = [];
+}

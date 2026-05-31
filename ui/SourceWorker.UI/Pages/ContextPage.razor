@@ -1,0 +1,26 @@
+@page "/projects/{ProjectId:guid}/context"
+@inject ISourceWorkerApiClient Api
+
+<h1>Context Browser</h1>
+
+<div class="split">
+    <ContextFileTree Files="@files" BaseUrl="@($"/projects/{ProjectId}/context")" />
+    <MarkdownViewer Content="@content" />
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [SupplyParameterFromQuery(Name = "file")] public string? SelectedFile { get; set; }
+
+    private IReadOnlyList<ContextBrowserFile> files = [];
+    private string? content;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        files = await Api.GetContextFilesAsync(ProjectId);
+        if (!string.IsNullOrWhiteSpace(SelectedFile))
+        {
+            content = await Api.ReadContextAsync(ProjectId, SelectedFile);
+        }
+    }
+}

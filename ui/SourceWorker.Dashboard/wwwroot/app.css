@@ -1,0 +1,197 @@
+:root {
+    color-scheme: light;
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --line: #d8dde6;
+    --text: #18202b;
+    --muted: #647084;
+    --accent: #0f766e;
+    --warn: #a16207;
+    --bad: #b42318;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+a { color: inherit; text-decoration: none; }
+
+.sw-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.sw-sidebar {
+    border-right: 1px solid var(--line);
+    background: #101820;
+    color: #fff;
+    padding: 18px;
+}
+
+.sw-brand {
+    display: block;
+    font-weight: 700;
+    font-size: 20px;
+    margin-bottom: 24px;
+}
+
+.sw-sidebar nav {
+    display: grid;
+    gap: 8px;
+}
+
+.sw-sidebar nav a {
+    padding: 10px 12px;
+    border-radius: 6px;
+    color: #e7eef8;
+}
+
+.sw-sidebar nav a:hover { background: rgba(255,255,255,.1); }
+
+.sw-main { min-width: 0; }
+
+.sw-topbar {
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+}
+
+.sw-content {
+    max-width: 1500px;
+    padding: 24px;
+}
+
+h1 { margin: 0 0 8px; font-size: 28px; }
+h2 { margin: 0 0 14px; font-size: 17px; }
+h3 { margin: 16px 0 8px; font-size: 14px; color: var(--muted); }
+
+.lead, .muted { color: var(--muted); }
+.path { color: var(--muted); font-family: Consolas, monospace; overflow-wrap: anywhere; }
+
+.grid {
+    display: grid;
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.card-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.metric {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    background: #fafbfc;
+}
+
+.metric span { display: block; color: var(--muted); font-size: 12px; }
+.metric strong { display: block; font-size: 20px; margin-top: 4px; }
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.pill.ok { color: var(--accent); border-color: #99d6ce; background: #edfdfa; }
+.pill.warn { color: var(--warn); border-color: #f4d58d; background: #fffbeb; }
+.warn-text { color: var(--warn); }
+
+.project-list, .doc-tabs {
+    display: grid;
+    gap: 8px;
+}
+
+.project-row, .file-row, .list-row {
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+}
+
+.project-row:hover, .file-row:hover { border-color: var(--accent); }
+.list-row { grid-template-columns: minmax(120px, auto) minmax(80px, auto) minmax(0, 1fr); align-items: center; }
+.list-row.compact { grid-template-columns: 100px minmax(0, 1fr) 60px; }
+
+code, pre {
+    font-family: Consolas, "Courier New", monospace;
+}
+
+code { overflow-wrap: anywhere; color: #334155; }
+
+.split {
+    display: grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 16px;
+}
+
+.markdown-viewer pre {
+    margin: 0;
+    padding: 16px;
+    min-height: 360px;
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.tabs a, .doc-tabs a {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #fff;
+}
+
+.state {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 18px;
+    color: var(--muted);
+}
+
+.state.error { color: var(--bad); border-color: #f0b4ad; }
+
+@media (max-width: 900px) {
+    .sw-shell, .split, .grid.two { grid-template-columns: 1fr; }
+    .sw-sidebar { position: static; }
+    .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

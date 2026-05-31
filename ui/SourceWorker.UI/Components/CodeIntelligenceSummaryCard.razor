@@ -1,0 +1,15 @@
+<Cards Title="Code Intelligence">
+    <div class="metric-grid">
+        <MetricCard Label="Symbols" Value="@Symbols.Count.ToString()" />
+        <MetricCard Label="Routes" Value="@Routes.Count.ToString()" />
+        <MetricCard Label="Flows" Value="@Flows.Count.ToString()" />
+        <MetricCard Label="Tests" Value="@Tests.Count.ToString()" />
+    </div>
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<CodeSymbol> Symbols { get; set; } = [];
+    [Parameter] public IReadOnlyList<RouteInfo> Routes { get; set; } = [];
+    [Parameter] public IReadOnlyList<CodeFlow> Flows { get; set; } = [];
+    [Parameter] public IReadOnlyList<TestInfo> Tests { get; set; } = [];
+}

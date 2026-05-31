@@ -1,0 +1,34 @@
+@page "/"
+@inject ISourceWorkerApiClient Api
+
+<h1>SourceWorker Dashboard</h1>
+<p class="lead">Read-only cockpit for the local context engine.</p>
+
+<div class="grid two">
+    <HealthCard Health="@health" />
+    <StorageInfoCard Info="@storage" />
+</div>
+
+<Cards Title="Projects">
+    <ProjectPicker Projects="@projects" />
+</Cards>
+
+@code {
+    private HealthResponse? health;
+    private StorageInfo? storage;
+    private IReadOnlyList<ProjectDto> projects = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            health = await Api.GetHealthAsync();
+            storage = await Api.GetStorageInfoAsync();
+            projects = await Api.GetProjectsAsync();
+        }
+        catch
+        {
+            projects = [];
+        }
+    }
+}

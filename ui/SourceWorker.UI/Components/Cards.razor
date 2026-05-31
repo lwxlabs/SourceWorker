@@ -1,0 +1,12 @@
+@if (Title is not null)
+{
+    <section class="card-panel">
+        <h2>@Title</h2>
+        @ChildContent
+    </section>
+}
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

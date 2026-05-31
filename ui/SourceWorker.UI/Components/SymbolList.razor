@@ -1,0 +1,20 @@
+<Cards Title="Symbols">
+    @foreach (var group in Symbols.GroupBy(s => s.RelativePath).OrderBy(g => g.Key))
+    {
+        <details class="detail-row">
+            <summary><strong>@group.Key</strong> <span>@group.Count() symbols</span></summary>
+            @foreach (var symbol in group.Take(80))
+            {
+                <div class="list-row compact">
+                    <span>@symbol.Kind</span>
+                    <strong>@symbol.FullName</strong>
+                    <code>@symbol.LineNumber</code>
+                </div>
+            }
+        </details>
+    }
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<CodeSymbol> Symbols { get; set; } = [];
+}

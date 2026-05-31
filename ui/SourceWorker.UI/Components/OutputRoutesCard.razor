@@ -1,0 +1,21 @@
+<Cards Title="Outputs">
+    @if (Outputs is null)
+    {
+        <EmptyState Message="No output profile loaded." />
+    }
+    else
+    {
+        @foreach (var destination in Outputs.Destinations)
+        {
+            <div class="list-row">
+                <strong>@destination.Id</strong>
+                <span>@destination.Type</span>
+                <code>@destination.Path</code>
+            </div>
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public GeneratedOutputSet? Outputs { get; set; }
+}

@@ -1,0 +1,15 @@
+@page "/projects"
+@inject ISourceWorkerApiClient Api
+
+<h1>Projects</h1>
+
+<ProjectPicker Projects="@projects" />
+
+@code {
+    private IReadOnlyList<ProjectDto> projects = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        projects = await Api.GetProjectsAsync();
+    }
+}

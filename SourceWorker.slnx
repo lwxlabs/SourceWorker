@@ -27,4 +27,9 @@
     <Project Path="tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj" />
     <Project Path="tests/SourceWorker.Tests.Scanner/SourceWorker.Tests.Scanner.csproj" />
   </Folder>
+  <Folder Name="/ui/">
+    <Project Path="ui/SourceWorker.ApiClient/SourceWorker.ApiClient.csproj" />
+    <Project Path="ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj" />
+    <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
+  </Folder>
 </Solution>

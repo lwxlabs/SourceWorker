@@ -1,6 +1,6 @@
 # SourceWorker
 
-SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, and extracts lightweight C# code intelligence for symbols, routes, configuration usage, services, tests, and functional flows.
+SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a first read-only Blazor dashboard over the Local API.
 
 No AI provider, desktop UI, MCP server, cloud sync, licensing, or secret storage is included yet.
 
@@ -17,6 +17,9 @@ No AI provider, desktop UI, MCP server, cloud sync, licensing, or secret storage
 - `src/services/SourceWorker.Cli` exposes `scan`, `status`, and `handoff`.
 - `src/services/SourceWorker.LocalApi` exposes local HTTP endpoints.
 - `src/services/SourceWorker.Worker` provides the in-process queue and project scan worker.
+- `ui/SourceWorker.ApiClient` is the typed Local API client boundary for UI hosts.
+- `ui/SourceWorker.UI` contains reusable Razor components and pages for future browser/desktop hosts.
+- `ui/SourceWorker.Dashboard` is the first Blazor Web App host. It is read-only and Local API-driven.
 
 ## CLI
 
@@ -44,6 +47,17 @@ dotnet run --project src/services/SourceWorker.Cli -- export-docs C:\path\to\pro
 dotnet run --project src/services/SourceWorker.Cli -- recipes C:\path\to\project
 dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
 ```
+
+## Dashboard
+
+Start the Local API and dashboard:
+
+```powershell
+dotnet run --project src/services/SourceWorker.LocalApi
+dotnet run --project ui/SourceWorker.Dashboard
+```
+
+The dashboard is read-only for MVP 1.7. It shows projects, health, storage, doctor/context freshness, artifacts, outputs, packs, context files, generated backend docs, symbols, routes, flows, tests, and settings. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
 
 ## Scanner MVP
 

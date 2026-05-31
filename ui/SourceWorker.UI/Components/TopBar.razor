@@ -1,0 +1,25 @@
+@inject ISourceWorkerApiClient Api
+
+<header class="sw-topbar">
+    <div>
+        <strong>Local Dashboard</strong>
+        <span class="muted">Read-only Local API view</span>
+    </div>
+    <span class="pill @(connected ? "ok" : "warn")">@(connected ? "API OK" : "API Offline")</span>
+</header>
+
+@code {
+    private bool connected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            connected = (await Api.GetHealthAsync())?.Status.Equals("ok", StringComparison.OrdinalIgnoreCase) == true;
+        }
+        catch
+        {
+            connected = false;
+        }
+    }
+}

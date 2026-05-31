@@ -1,0 +1,15 @@
+<Cards Title="Local API">
+    @if (Health is null)
+    {
+        <span class="pill warn">Unavailable</span>
+    }
+    else
+    {
+        <span class="pill ok">@Health.Status</span>
+        <p class="muted">@Health.Service</p>
+    }
+</Cards>
+
+@code {
+    [Parameter] public HealthResponse? Health { get; set; }
+}

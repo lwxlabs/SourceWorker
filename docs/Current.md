@@ -4,7 +4,7 @@ Date: 2026-05-31
 
 SourceWorker is a local-first project context engine. It intentionally does not include AI providers, MAUI/Desktop UI, MCP, cloud sync, licensing, or terminal agent execution.
 
-MVP 1.6 adds output routing and context packs. SourceWorker now separates imported/user-authored instructions from generated internal docs, AI-ready packs, export profiles, and external Markdown exports.
+MVP 1.7 adds the first read-only Blazor dashboard. SourceWorker now has a browser UI over the Local API for projects, context health, generated docs, packs, outputs, artifacts, code intelligence, and settings.
 
 ## Architecture
 
@@ -16,6 +16,9 @@ MVP 1.6 adds output routing and context packs. SourceWorker now separates import
 - `SourceWorker.Storage.Localite` now uses explicit table-backed SQLite storage under the Localite infrastructure boundary.
 - `SourceWorker.Cli` is thin command routing.
 - `SourceWorker.LocalApi` exposes minimal engine endpoints.
+- `SourceWorker.ApiClient` is the UI boundary for Local API access. It has no Blazor dependency.
+- `SourceWorker.UI` contains reusable Razor components/pages intended for both the web dashboard and future MAUI Blazor Hybrid host.
+- `SourceWorker.Dashboard` is the first Blazor Web App host. It is read-only and does not reference storage, scanner, infrastructure, or application services.
 
 ## Commands
 
@@ -57,6 +60,49 @@ MVP 1.6 adds output routing and context packs. SourceWorker now separates import
 - `run-recipe <projectPath> <recipeId> --force`
 - `status`
 - `handoff <projectPath>`
+
+## Dashboard
+
+Projects:
+
+- `ui/SourceWorker.ApiClient`
+- `ui/SourceWorker.UI`
+- `ui/SourceWorker.Dashboard`
+
+Routes:
+
+- `/`
+- `/projects`
+- `/projects/{projectId}`
+- `/projects/{projectId}/context`
+- `/projects/{projectId}/docs`
+- `/projects/{projectId}/packs`
+- `/projects/{projectId}/code`
+- `/projects/{projectId}/artifacts`
+- `/settings`
+
+Dashboard behavior:
+
+- shows Local API connection status
+- lists projects from Local API
+- shows project dashboard metrics
+- shows context freshness and doctor summaries
+- shows artifact lifecycle counts
+- shows output routes and pack manifests
+- browses generated context files grouped by API-provided kind
+- previews `.ai-context/docs/backend` through Local API
+- previews context packs
+- shows symbols, routes, flows, service/config/test counts
+- shows storage provider/path/schema in settings
+
+Architecture rules currently enforced:
+
+- UI uses `SourceWorker.ApiClient`.
+- UI does not reference `SourceWorker.Storage.Localite`.
+- UI does not reference `SourceWorker.Infrastructure`.
+- UI does not reference `SourceWorker.Scanner`.
+- UI does not read files directly.
+- No dashboard write actions yet.
 
 ## Localite Table-Backed Storage
 
@@ -286,6 +332,8 @@ Current tests cover:
 - output routing and context pack commands
 - Local API output/pack/export endpoints
 - internal docs plus external docs mirror
+- typed API client deserialization
+- read-only dashboard build and route smoke checks
 
 ## Latest Verification
 
@@ -310,18 +358,30 @@ dotnet run --project src/services/SourceWorker.Cli -- context-status C:\Users\lo
 dotnet run --project src/services/SourceWorker.Cli -- artifacts C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
 dotnet run --project src/services/SourceWorker.Cli -- cleanup-preview C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
 dotnet run --project src/services/SourceWorker.Cli -- storage-info
+dotnet run --project src/services/SourceWorker.LocalApi
+dotnet run --project ui/SourceWorker.Dashboard
 ```
 
 Latest `storage-info` after verification showed table-backed Localite storage at `C:\Users\louie\AppData\Local\SourceWorker\sourceworker.localite.db`, schema version 1, with persisted project, scan run, indexed file, generated artifact, and instruction records.
 
+Dashboard runtime smoke verification passed on local test ports for:
+
+- `/`
+- `/projects`
+- `/settings`
+- `/projects/{projectId}`
+- `/projects/{projectId}/context`
+- `/projects/{projectId}/docs`
+- `/projects/{projectId}/packs`
+- `/projects/{projectId}/code`
+- `/projects/{projectId}/artifacts`
+
 ## Next Recommended Step
 
-Now that storage, artifact lifecycle, code intelligence, output routing, and context packs are stable enough for product work, the next best step is either a simple read-only dashboard or a safe AI provider preview. If continuing engine-first, improve precision before either:
+Now that the read-only dashboard exists, the next best step is local API product hardening before write actions or AI:
 
-- add per-project storage isolation for tests and future multi-project use;
-- improve `.gitignore` compatibility and C# parsing accuracy;
-- add Roslyn-backed symbol extraction behind the existing interfaces if deterministic regex parsing becomes too shallow;
-- add richer query/filter APIs for symbols, routes, flows, artifacts, TODOs, and generated context files;
-- add stronger stale detection based on source input hashes per artifact and per recipe;
-- add pack token estimation and pack freshness scoring;
-- then build either a minimal dashboard over the read-only context browser endpoints or an AI provider preview that consumes structured scan/code intelligence data and context packs instead of raw folders.
+- local API token placeholder becomes real local token auth;
+- CORS policy for dashboard origins;
+- random/available local API port discovery;
+- dashboard-friendly project filtering so test temp projects do not dominate the project list;
+- then MVP 1.8 dashboard write actions: scan, run recipe, export docs, pack export, cleanup preview/run.

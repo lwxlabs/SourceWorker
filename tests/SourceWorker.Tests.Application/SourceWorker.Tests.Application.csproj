@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\core\SourceWorker.Application\SourceWorker.Application.csproj" />
     <ProjectReference Include="..\..\src\infrastructure\SourceWorker.Infrastructure\SourceWorker.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\services\SourceWorker.Worker\SourceWorker.Worker.csproj" />
+    <ProjectReference Include="..\..\ui\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
   </ItemGroup>
 
 </Project>

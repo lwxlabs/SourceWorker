@@ -1,0 +1,26 @@
+@page "/settings"
+@inject ISourceWorkerApiClient Api
+@inject SourceWorkerApiClientOptions Options
+
+<h1>Settings</h1>
+
+<div class="grid two">
+    <HealthCard Health="@health" />
+    <StorageInfoCard Info="@storage" />
+</div>
+
+<Cards Title="Local API">
+    <div class="list-row"><strong>Base URL</strong><code>@Options.BaseUrl</code></div>
+    <div class="list-row"><strong>Token placeholder</strong><span>@(string.IsNullOrWhiteSpace(Options.BearerToken) ? "not configured" : "configured")</span></div>
+</Cards>
+
+@code {
+    private HealthResponse? health;
+    private StorageInfo? storage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        health = await Api.GetHealthAsync();
+        storage = await Api.GetStorageInfoAsync();
+    }
+}

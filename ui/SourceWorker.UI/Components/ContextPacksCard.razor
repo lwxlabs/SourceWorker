@@ -1,0 +1,21 @@
+<Cards Title="Context Packs">
+    @if (Packs.Count == 0)
+    {
+        <EmptyState Message="No packs found." />
+    }
+    else
+    {
+        @foreach (var pack in Packs)
+        {
+            <div class="list-row">
+                <strong>@pack.Pack.Name</strong>
+                <span>@pack.Pack.Items.Count files</span>
+                <span class="pill @(pack.IsValid ? "ok" : "warn")">@(pack.IsValid ? "valid" : "missing files")</span>
+            </div>
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public IReadOnlyList<ContextPackManifest> Packs { get; set; } = [];
+}

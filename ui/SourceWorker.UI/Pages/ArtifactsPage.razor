@@ -1,0 +1,27 @@
+@page "/projects/{ProjectId:guid}/artifacts"
+@inject ISourceWorkerApiClient Api
+
+<h1>Artifacts</h1>
+
+<ArtifactStatusCard Report="@report" />
+
+<Cards Title="Generated Artifacts">
+    @foreach (var artifact in (report?.Artifacts ?? []).OrderBy(a => a.RelativePath))
+    {
+        <div class="list-row">
+            <strong>@artifact.Status</strong>
+            <span>@artifact.Type</span>
+            <code>@artifact.RelativePath</code>
+        </div>
+    }
+</Cards>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private ArtifactLifecycleReport? report;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        report = await Api.GetArtifactsAsync(ProjectId);
+    }
+}

@@ -1,0 +1,23 @@
+<Cards Title="Doctor">
+    @if (Report is null)
+    {
+        <EmptyState Message="Doctor report unavailable." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Solutions" Value="@Report.SolutionFiles.Count.ToString()" />
+            <MetricCard Label="Projects" Value="@Report.ProjectFiles.Count.ToString()" />
+            <MetricCard Label="Tests" Value="@Report.TestProjects.Count.ToString()" />
+            <MetricCard Label="Recipes" Value="@Report.Recipes.Count.ToString()" />
+        </div>
+        @foreach (var warning in Report.Warnings.Take(5))
+        {
+            <p class="warn-text">@warning</p>
+        }
+    }
+</Cards>
+
+@code {
+    [Parameter] public DoctorReport? Report { get; set; }
+}
