@@ -23,6 +23,19 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetArtifactsQuery, SourceWorker.Domain.ArtifactLifecycleReport>, GetArtifactsQueryHandler>();
         services.AddScoped<IRequestHandler<GetCleanupPreviewQuery, SourceWorker.Domain.CleanupPreviewReport>, GetCleanupPreviewQueryHandler>();
         services.AddScoped<IRequestHandler<CleanupGeneratedCommand, SourceWorker.Domain.CleanupResult>, CleanupGeneratedCommandHandler>();
+        services.AddScoped<IRequestHandler<GetSymbolsQuery, IReadOnlyList<SourceWorker.Domain.CodeSymbol>>, GetSymbolsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetFlowsQuery, IReadOnlyList<SourceWorker.Domain.CodeFlow>>, GetFlowsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetRoutesQuery, IReadOnlyList<SourceWorker.Domain.RouteInfo>>, GetRoutesQueryHandler>();
+        services.AddScoped<IRequestHandler<GetContextBrowserQuery, SourceWorker.Domain.ContextBrowserSummary>, GetContextBrowserQueryHandler>();
+        services.AddScoped<IRequestHandler<GetContextFilesQuery, IReadOnlyList<SourceWorker.Domain.ContextBrowserFile>>, GetContextFilesQueryHandler>();
+        services.AddScoped<IRequestHandler<ReadContextFileQuery, string>, ReadContextFileQueryHandler>();
+        services.AddScoped<IRequestHandler<SearchContextQuery, SourceWorker.Domain.ContextBrowserQueryResult>, SearchContextQueryHandler>();
+        services.AddScoped<IRequestHandler<GetOutputsQuery, SourceWorker.Domain.GeneratedOutputSet>, GetOutputsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetPacksQuery, IReadOnlyList<SourceWorker.Domain.ContextPackManifest>>, GetPacksQueryHandler>();
+        services.AddScoped<IRequestHandler<GetPackQuery, SourceWorker.Domain.ContextPackManifest?>, GetPackQueryHandler>();
+        services.AddScoped<IRequestHandler<ReadPackContentQuery, string>, ReadPackContentQueryHandler>();
+        services.AddScoped<IRequestHandler<ExportPackCommand, string>, ExportPackCommandHandler>();
+        services.AddScoped<IRequestHandler<ExportDocsCommand, SourceWorker.Domain.ExportRun>, ExportDocsCommandHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

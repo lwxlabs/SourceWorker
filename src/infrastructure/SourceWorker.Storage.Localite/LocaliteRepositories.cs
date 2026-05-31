@@ -21,6 +21,13 @@ public static class LocaliteStorage
         services.AddSingleton<IGeneratedArtifactRepository, LocaliteGeneratedArtifactRepository>();
         services.AddSingleton<IProjectInstructionRepository, LocaliteProjectInstructionRepository>();
         services.AddSingleton<IJobRepository, LocaliteJobRepository>();
+        services.AddSingleton<ICodeSymbolRepository, LocaliteCodeSymbolRepository>();
+        services.AddSingleton<ICodeFlowRepository, LocaliteCodeFlowRepository>();
+        services.AddSingleton<IRouteInfoRepository, LocaliteRouteInfoRepository>();
+        services.AddSingleton<IServiceRegistrationRepository, LocaliteServiceRegistrationRepository>();
+        services.AddSingleton<IConfigurationUsageRepository, LocaliteConfigurationUsageRepository>();
+        services.AddSingleton<IBackgroundWorkerInfoRepository, LocaliteBackgroundWorkerInfoRepository>();
+        services.AddSingleton<ITestInfoRepository, LocaliteTestInfoRepository>();
         return services;
     }
 }
@@ -169,7 +176,17 @@ internal static class Tables
     public const string WorkerJobs = "WorkerJobRecord";
     public const string WorkerJobSteps = "WorkerJobStepRecord";
     public const string DoctorReports = "DoctorReportRecord";
-    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports];
+    public const string CodeSymbols = "CodeSymbolRecord";
+    public const string CodeFileSummaries = "CodeFileSummaryRecord";
+    public const string CodeProjectSummaries = "CodeProjectSummaryRecord";
+    public const string CodeFlows = "CodeFlowRecord";
+    public const string CodeFlowSteps = "CodeFlowStepRecord";
+    public const string Routes = "RouteInfoRecord";
+    public const string ConfigurationUsages = "ConfigurationUsageRecord";
+    public const string ServiceRegistrations = "ServiceRegistrationRecord";
+    public const string BackgroundWorkers = "BackgroundWorkerInfoRecord";
+    public const string Tests = "TestInfoRecord";
+    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests];
 }
 
 internal sealed record ProjectRecord(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
@@ -244,6 +261,42 @@ public sealed class LocaliteStorageSchemaService(LocaliteTableStore store) : ILo
 public sealed class LocaliteStorageInfoService(LocaliteTableStore store) : IStorageInfoService, IStorageHealthService
 {
     public async Task<StorageInfo> GetInfoAsync(CancellationToken cancellationToken)
-        => new(await store.SchemaInfoAsync(cancellationToken), await store.CountAsync(Tables.Projects, cancellationToken), await store.CountAsync(Tables.ScanRuns, cancellationToken), await store.CountAsync(Tables.IndexedFiles, cancellationToken), await store.CountAsync(Tables.GeneratedArtifacts, cancellationToken), await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true);
+        => new(await store.SchemaInfoAsync(cancellationToken), await store.CountAsync(Tables.Projects, cancellationToken), await store.CountAsync(Tables.ScanRuns, cancellationToken), await store.CountAsync(Tables.IndexedFiles, cancellationToken), await store.CountAsync(Tables.GeneratedArtifacts, cancellationToken), await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true, await store.CountAsync(Tables.CodeSymbols, cancellationToken), await store.CountAsync(Tables.CodeFlows, cancellationToken), await store.CountAsync(Tables.Routes, cancellationToken), await store.CountAsync(Tables.ServiceRegistrations, cancellationToken), await store.CountAsync(Tables.ConfigurationUsages, cancellationToken), await store.CountAsync(Tables.Tests, cancellationToken));
     public Task<bool> CheckAsync(CancellationToken cancellationToken) => Task.FromResult(File.Exists(store.StoragePath));
+}
+
+public sealed class LocaliteCodeSymbolRepository(LocaliteTableStore store) : ICodeSymbolRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeSymbol> symbols, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.CodeSymbols, projectId, cancellationToken); foreach (var item in symbols) await store.UpsertAsync(Tables.CodeSymbols, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<CodeSymbol>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<CodeSymbol>(Tables.CodeSymbols, projectId, cancellationToken);
+}
+public sealed class LocaliteCodeFlowRepository(LocaliteTableStore store) : ICodeFlowRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeFlow> flows, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.CodeFlows, projectId, cancellationToken); foreach (var item in flows) await store.UpsertAsync(Tables.CodeFlows, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<CodeFlow>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<CodeFlow>(Tables.CodeFlows, projectId, cancellationToken);
+}
+public sealed class LocaliteRouteInfoRepository(LocaliteTableStore store) : IRouteInfoRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<RouteInfo> routes, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.Routes, projectId, cancellationToken); foreach (var item in routes) await store.UpsertAsync(Tables.Routes, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<RouteInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<RouteInfo>(Tables.Routes, projectId, cancellationToken);
+}
+public sealed class LocaliteServiceRegistrationRepository(LocaliteTableStore store) : IServiceRegistrationRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ServiceRegistration> registrations, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.ServiceRegistrations, projectId, cancellationToken); foreach (var item in registrations) await store.UpsertAsync(Tables.ServiceRegistrations, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<ServiceRegistration>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<ServiceRegistration>(Tables.ServiceRegistrations, projectId, cancellationToken);
+}
+public sealed class LocaliteConfigurationUsageRepository(LocaliteTableStore store) : IConfigurationUsageRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ConfigurationUsage> usages, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.ConfigurationUsages, projectId, cancellationToken); foreach (var item in usages) await store.UpsertAsync(Tables.ConfigurationUsages, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<ConfigurationUsage>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<ConfigurationUsage>(Tables.ConfigurationUsages, projectId, cancellationToken);
+}
+public sealed class LocaliteBackgroundWorkerInfoRepository(LocaliteTableStore store) : IBackgroundWorkerInfoRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<BackgroundWorkerInfo> workers, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.BackgroundWorkers, projectId, cancellationToken); foreach (var item in workers) await store.UpsertAsync(Tables.BackgroundWorkers, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<BackgroundWorkerInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<BackgroundWorkerInfo>(Tables.BackgroundWorkers, projectId, cancellationToken);
+}
+public sealed class LocaliteTestInfoRepository(LocaliteTableStore store) : ITestInfoRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.Tests, projectId, cancellationToken); foreach (var item in tests) await store.UpsertAsync(Tables.Tests, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<TestInfo>(Tables.Tests, projectId, cancellationToken);
 }

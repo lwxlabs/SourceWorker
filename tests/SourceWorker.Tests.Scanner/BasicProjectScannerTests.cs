@@ -53,6 +53,7 @@ public sealed class BasicProjectScannerTests
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "ai-handoff.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "scans", "latest-scan.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "branches", "current.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "instructions", "README.md")));
     }
 
     [Fact]
@@ -63,9 +64,11 @@ public sealed class BasicProjectScannerTests
         var scanner = new BasicProjectScanner(new EmptyGitInspector());
         var scan = await scanner.ScanAsync(project, CancellationToken.None);
 
-        await new BasicRecipeRunner(scanner, new MarkdownContextWriter(), new EmptyInstructionRepository()).RunBackendDocsCompactAsync(scan, CancellationToken.None);
+        var artifactRepository = new MemoryGeneratedArtifactRepository();
+        await new BasicRecipeRunner(scanner, new MarkdownContextWriter(), new EmptyInstructionRepository(), artifactRepository, exportProfiles: new ExportProfileService(artifactRepository), packWriter: new ContextPackService(artifactRepository)).RunBackendDocsCompactAsync(scan, CancellationToken.None);
 
-        var output = Path.Combine(root, "instructions", "Result", "Backend");
+        var output = Path.Combine(root, ".ai-context", "docs", "backend");
+        var external = Path.Combine(root, "instructions", "Result", "Backend");
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "recipes", "backend-docs-compact.yaml")));
         Assert.True(File.Exists(Path.Combine(output, "README.md")));
         Assert.True(File.Exists(Path.Combine(output, "01-project-structure.md")));
@@ -74,6 +77,10 @@ public sealed class BasicProjectScannerTests
         Assert.True(File.Exists(Path.Combine(output, "04-configuration-and-secrets.md")));
         Assert.True(File.Exists(Path.Combine(output, "05-tasks-and-risks.md")));
         Assert.True(File.Exists(Path.Combine(output, "06-verification-checklist.md")));
+        Assert.True(File.Exists(Path.Combine(external, "README.md")));
+        Assert.True(File.Exists(Path.Combine(external, "06-verification-checklist.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "exports", "backend-docs-compact.yaml")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "packs", "backend-docs.pack.yaml")));
     }
 
     private static async Task<string> CreateSampleProject()
@@ -98,5 +105,22 @@ public sealed class BasicProjectScannerTests
     {
         public Task<ProjectInstructionDocument?> GetLatestAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<ProjectInstructionDocument?>(null);
         public Task<ProjectInstructionDocument> SaveAsync(ProjectInstructionDocument document, CancellationToken cancellationToken) => Task.FromResult(document);
+    }
+
+    private sealed class MemoryGeneratedArtifactRepository : IGeneratedArtifactRepository
+    {
+        private readonly List<GeneratedArtifact> artifacts = [];
+        public Task<GeneratedArtifact> UpsertAsync(GeneratedArtifact artifact, CancellationToken cancellationToken)
+        {
+            artifacts.RemoveAll(a => a.ProjectId == artifact.ProjectId && a.RelativePath.Equals(artifact.RelativePath, StringComparison.OrdinalIgnoreCase));
+            artifacts.Add(artifact);
+            return Task.FromResult(artifact);
+        }
+
+        public Task<IReadOnlyList<GeneratedArtifact>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<GeneratedArtifact>>(artifacts.Where(a => a.ProjectId == projectId).ToArray());
+
+        public Task<GeneratedArtifact?> GetByPathAsync(Guid projectId, string relativePath, CancellationToken cancellationToken)
+            => Task.FromResult(artifacts.FirstOrDefault(a => a.ProjectId == projectId && a.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase)));
     }
 }

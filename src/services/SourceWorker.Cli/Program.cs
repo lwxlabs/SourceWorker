@@ -161,6 +161,12 @@ switch (args[0].ToLowerInvariant())
             Console.WriteLine($"Jobs: {info.JobCount}");
             Console.WriteLine($"Instructions: {info.InstructionCount}");
             Console.WriteLine($"Recipes: {info.RecipeCount}");
+            Console.WriteLine($"Code symbols: {info.CodeSymbolCount}");
+            Console.WriteLine($"Code flows: {info.CodeFlowCount}");
+            Console.WriteLine($"Routes: {info.RouteCount}");
+            Console.WriteLine($"Service registrations: {info.ServiceRegistrationCount}");
+            Console.WriteLine($"Configuration usages: {info.ConfigurationUsageCount}");
+            Console.WriteLine($"Tests: {info.TestInfoCount}");
         }
 
         return 0;
@@ -212,6 +218,95 @@ switch (args[0].ToLowerInvariant())
         foreach (var warning in result.Warnings) Console.WriteLine($"Warning: {warning}");
         return 0;
     }
+    case "symbols" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetSymbolsQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else foreach (var group in result.GroupBy(s => s.RelativePath).OrderBy(g => g.Key)) { Console.WriteLine(group.Key); foreach (var s in group.Take(50)) Console.WriteLine($"  {s.Kind} {s.FullName}:{s.LineNumber}"); }
+        return 0;
+    }
+    case "flows" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetFlowsQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else foreach (var f in result) Console.WriteLine($"{f.Confidence} {f.FlowType} {f.Name} - {f.Trigger}");
+        return 0;
+    }
+    case "routes" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetRoutesQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else foreach (var r in result) Console.WriteLine($"{r.HttpMethod} {r.RoutePattern} {r.RelativePath}:{r.LineNumber}");
+        return 0;
+    }
+    case "context-files" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetContextFilesQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else foreach (var f in result) Console.WriteLine($"{f.RelativePath} ({f.SizeBytes} bytes)");
+        return 0;
+    }
+    case "read-context" when args.Length >= 3:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        Console.WriteLine(await flow.Send(new ReadContextFileQuery(project.Id, args[2])));
+        return 0;
+    }
+    case "outputs" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetOutputsQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else
+        {
+            Console.WriteLine($"Recipe: {result.RecipeId}");
+            foreach (var destination in result.Destinations) Console.WriteLine($"{destination.Id} {destination.Type} {destination.Path} primary={destination.Primary}");
+            foreach (var file in result.Files) Console.WriteLine($"{file.Status} {file.ArtifactType} {file.RelativePath}");
+        }
+        return 0;
+    }
+    case "packs" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetPacksQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else foreach (var pack in result) Console.WriteLine($"{pack.Pack.Id} - {pack.Pack.Name} ({pack.Pack.Items.Count} files, valid={pack.IsValid})");
+        return 0;
+    }
+    case "pack-show" when args.Length >= 3:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new GetPackQuery(project.Id, args[2])) ?? throw new InvalidOperationException($"Pack '{args[2]}' was not found.");
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase)) Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        else
+        {
+            Console.WriteLine($"{result.Pack.Id} - {result.Pack.Name}");
+            Console.WriteLine($"Valid: {result.IsValid}");
+            foreach (var item in result.Pack.Items) Console.WriteLine($"- {item.RelativePath}");
+            foreach (var missing in result.MissingFiles) Console.WriteLine($"Missing: {missing}");
+        }
+        return 0;
+    }
+    case "pack-export" when args.Length >= 5:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var output = OptionValue(args, "--out") ?? throw new InvalidOperationException("--out is required.");
+        var written = await flow.Send(new ExportPackCommand(project.Id, args[2], output));
+        Console.WriteLine($"Exported pack: {written}");
+        return 0;
+    }
+    case "export-docs" when args.Length >= 3:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var run = await flow.Send(new ExportDocsCommand(project.Id, args[2]));
+        Console.WriteLine($"Exported docs: {run.ExportProfileId}");
+        foreach (var file in run.ExportedFiles) Console.WriteLine(file);
+        return 0;
+    }
     default:
         PrintUsage();
         return 1;
@@ -233,6 +328,16 @@ static void PrintUsage()
     Console.WriteLine("sourceworker changes <path> [--json]");
     Console.WriteLine("sourceworker context-status <path>");
     Console.WriteLine("sourceworker storage-info [--json]");
+    Console.WriteLine("sourceworker symbols <path> [--json]");
+    Console.WriteLine("sourceworker flows <path> [--json]");
+    Console.WriteLine("sourceworker routes <path> [--json]");
+    Console.WriteLine("sourceworker context-files <path> [--json]");
+    Console.WriteLine("sourceworker read-context <path> <relativePath>");
+    Console.WriteLine("sourceworker outputs <path> [--json]");
+    Console.WriteLine("sourceworker packs <path> [--json]");
+    Console.WriteLine("sourceworker pack-show <path> <packId> [--json]");
+    Console.WriteLine("sourceworker pack-export <path> <packId> --out <outputFile>");
+    Console.WriteLine("sourceworker export-docs <path> <exportProfileId>");
     Console.WriteLine("sourceworker artifacts <path> [--json]");
     Console.WriteLine("sourceworker cleanup-preview <path> [--json]");
     Console.WriteLine("sourceworker cleanup-generated <path> [--dry-run] [--force]");

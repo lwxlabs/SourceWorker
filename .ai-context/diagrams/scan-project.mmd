@@ -1,0 +1,12 @@
+flowchart TD
+    A[CLI/API receives scan request]
+    B[Application command runs scan]
+    A --> B
+    C[Scanner indexes files and technologies]
+    B --> C
+    D[Localite persists scan data]
+    C --> D
+    E[Context writer updates .ai-context]
+    D --> E
+    F[Recipe runner writes backend docs]
+    E --> F

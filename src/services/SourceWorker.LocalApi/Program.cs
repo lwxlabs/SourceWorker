@@ -69,6 +69,26 @@ app.MapGet("/api/projects/{id:guid}/cleanup-preview", async (Guid id, IRequestFl
 app.MapPost("/api/projects/{id:guid}/cleanup-generated", async (Guid id, CleanupGeneratedRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new CleanupGeneratedCommand(id, request.DryRun, request.Force), cancellationToken)));
 
+app.MapGet("/api/projects/{id:guid}/symbols", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetSymbolsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/flows", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetFlowsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/routes", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetRoutesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/service-registrations", async (Guid id, IServiceRegistrationRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/configuration-usages", async (Guid id, IConfigurationUsageRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/tests", async (Guid id, ITestInfoRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-browser", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextBrowserQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-browser/files", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextFilesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-browser/files/{*relativePath}", async (Guid id, string relativePath, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadContextFileQuery(id, relativePath), cancellationToken), "text/plain"));
+app.MapGet("/api/projects/{id:guid}/context-browser/search", async (Guid id, string query, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new SearchContextQuery(id, query), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/outputs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetOutputsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/packs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetPacksQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/packs/{packId}", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) =>
+{
+    var pack = await flow.Send(new GetPackQuery(id, packId), cancellationToken);
+    return pack is null ? Results.NotFound() : Results.Ok(pack);
+});
+app.MapGet("/api/projects/{id:guid}/packs/{packId}/content", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadPackContentQuery(id, packId), cancellationToken), "text/markdown"));
+app.MapPost("/api/projects/{id:guid}/exports/{exportProfileId}/run", async (Guid id, string exportProfileId, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new ExportDocsCommand(id, exportProfileId), cancellationToken)));
+
 app.Run();
 
 public partial class Program;

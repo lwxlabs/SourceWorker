@@ -15,6 +15,9 @@ public static class DependencyInjection
         services.AddSourceWorkerLocaliteStorage();
         services.AddSingleton<IGitInspector, BasicGitInspector>();
         services.AddSingleton<IProjectScanner, BasicProjectScanner>();
+        services.AddSingleton<IFlowExtractor, RuleBasedFlowExtractor>();
+        services.AddSingleton<IFlowDiagramGenerator, FlowDiagramGenerator>();
+        services.AddSingleton<ICSharpCodeIntelligenceScanner, CSharpCodeIntelligenceScanner>();
         services.AddSingleton<IContextWriter, MarkdownContextWriter>();
         services.AddSingleton<IProjectInstructionParser, ProjectInstructionParser>();
         services.AddSingleton<ISourcePathValidator, SourcePathValidator>();
@@ -26,6 +29,17 @@ public static class DependencyInjection
         services.AddSingleton<IGeneratedArtifactLifecycleService, GeneratedArtifactLifecycleService>();
         services.AddSingleton<IArtifactStatusService, GeneratedArtifactLifecycleService>();
         services.AddSingleton<IGeneratedArtifactCleanupService, GeneratedArtifactCleanupService>();
+        services.AddSingleton<IContextBrowserService, ContextBrowserService>();
+        services.AddSingleton<IContextSearchService, ContextBrowserService>();
+        services.AddSingleton<IOutputProfileService, OutputProfileService>();
+        services.AddSingleton<IOutputRoutingService, OutputProfileService>();
+        services.AddSingleton<IGeneratedOutputService, GeneratedOutputService>();
+        services.AddSingleton<IExportProfileService, ExportProfileService>();
+        services.AddSingleton<IExportRunner, ExportRunner>();
+        services.AddSingleton<IContextPackService, ContextPackService>();
+        services.AddSingleton<IContextPackWriter, ContextPackService>();
+        services.AddSingleton<IContextPackReader, ContextPackService>();
+        services.AddSingleton<IContextPackValidator, ContextPackService>();
         services.AddSingleton<IRecipeFactory, RecipeFactory>();
         services.AddSingleton<IRecipeRepository, FileRecipeRepository>();
         services.AddSingleton<IRecipeRunner, BasicRecipeRunner>();

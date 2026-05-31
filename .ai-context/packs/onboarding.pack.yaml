@@ -1,0 +1,15 @@
+id: onboarding
+name: Project Onboarding Pack
+description: Project structure, architecture, tasks, and backend docs overview.
+audience: developer
+purpose: Onboard quickly into the repository.
+maxRecommendedUse: compact
+tokenEstimate: 0
+freshnessStatus: fresh
+sourceScanRunId: "35e631a0-295c-43e4-95c8-46f15f8945b0"
+generatedUtc: "2026-05-31T17:33:46.3181435+00:00"
+files:
+  - .ai-context/project.md
+  - .ai-context/architecture.md
+  - .ai-context/docs/backend/README.md
+missingFiles:

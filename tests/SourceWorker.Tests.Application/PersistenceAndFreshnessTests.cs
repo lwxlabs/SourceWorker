@@ -15,7 +15,7 @@ public sealed class PersistenceAndFreshnessTests
         Directory.CreateDirectory(Path.Combine(root, "src"));
         await File.WriteAllTextAsync(Path.Combine(root, "Sample.sln"), "");
         await File.WriteAllTextAsync(Path.Combine(root, "src", "Sample.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>");
-        await File.WriteAllTextAsync(Path.Combine(root, "src", "Program.cs"), "// TODO: sample");
+        await File.WriteAllTextAsync(Path.Combine(root, "src", "Program.cs"), "public class Program { public void Run() { } } // TODO: sample");
 
         var sp = new ServiceCollection()
             .AddSourceWorkerApplication()
@@ -34,6 +34,8 @@ public sealed class PersistenceAndFreshnessTests
         Assert.NotNull(latest);
         Assert.NotEmpty(await files.GetByScanRunAsync(latest!.Id, CancellationToken.None));
         Assert.NotEmpty(await artifacts.GetByProjectAsync(project.Id, CancellationToken.None));
+        Assert.NotEmpty(await sp.GetRequiredService<ICodeSymbolRepository>().GetByProjectAsync(project.Id, CancellationToken.None));
+        Assert.NotEmpty(await sp.GetRequiredService<ICodeFlowRepository>().GetByProjectAsync(project.Id, CancellationToken.None));
 
         var backendReadme = Path.Combine(root, "instructions", "Result", "Backend", "README.md");
         await File.AppendAllTextAsync(backendReadme, "\nmanual edit");

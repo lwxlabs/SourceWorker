@@ -34,9 +34,21 @@ public sealed class HealthTests
         (await client.GetAsync($"/api/projects/{created.Project.Id}/changes")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/context-status")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/scan-runs")).EnsureSuccessStatusCode();
+        await client.PostAsync($"/api/projects/{created.Project.Id}/scan", null);
         (await client.GetAsync("/api/storage/info")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/artifacts")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/cleanup-preview")).EnsureSuccessStatusCode();
         (await client.PostAsJsonAsync($"/api/projects/{created.Project.Id}/cleanup-generated", new CleanupGeneratedRequest(true, false))).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/symbols")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/flows")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/routes")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/files")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/search?query=Sample")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/outputs")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/packs")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/packs/backend-docs")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/packs/backend-docs/content")).EnsureSuccessStatusCode();
+        (await client.PostAsync($"/api/projects/{created.Project.Id}/exports/backend-docs-compact/run", null)).EnsureSuccessStatusCode();
     }
 }

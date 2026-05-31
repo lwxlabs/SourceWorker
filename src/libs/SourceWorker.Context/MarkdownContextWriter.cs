@@ -5,7 +5,7 @@ using SourceWorker.Domain;
 
 namespace SourceWorker.Context;
 
-public sealed class MarkdownContextWriter(IProjectInstructionRepository? instructions = null, ISourcePathValidator? validator = null, IGeneratedArtifactRepository? artifacts = null, IContextFreshnessService? freshnessService = null, ILocalStorageSchemaService? schemaService = null, IGeneratedArtifactLifecycleService? lifecycleService = null) : IContextWriter
+public sealed class MarkdownContextWriter(IProjectInstructionRepository? instructions = null, ISourcePathValidator? validator = null, IGeneratedArtifactRepository? artifacts = null, IContextFreshnessService? freshnessService = null, ILocalStorageSchemaService? schemaService = null, IGeneratedArtifactLifecycleService? lifecycleService = null, ICodeSymbolRepository? symbols = null, ICodeFlowRepository? flows = null, IRouteInfoRepository? routes = null, IServiceRegistrationRepository? services = null, IConfigurationUsageRepository? configs = null, ITestInfoRepository? tests = null, IContextPackWriter? packWriter = null) : IContextWriter
 {
     public async Task<ContextWriteResult> WriteBasicContextAsync(ProjectScanResult scanResult, CancellationToken cancellationToken)
     {
@@ -18,29 +18,42 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         Directory.CreateDirectory(Path.Combine(output, "scans"));
         Directory.CreateDirectory(Path.Combine(output, "branches"));
         Directory.CreateDirectory(Path.Combine(output, "instructions"));
+        Directory.CreateDirectory(Path.Combine(output, "instructions", "imported"));
+        Directory.CreateDirectory(Path.Combine(output, "docs", "backend"));
+        Directory.CreateDirectory(Path.Combine(output, "packs"));
+        Directory.CreateDirectory(Path.Combine(output, "exports"));
+        Directory.CreateDirectory(Path.Combine(output, "diagrams"));
 
         var freshness = freshnessService is null
             ? new ContextFreshnessReport(scanResult.Project.Id, false, [], [], [], [], 100, [])
             : await freshnessService.CheckAsync(scanResult.Project, cancellationToken);
         var schema = schemaService is null ? null : await schemaService.GetInfoAsync(cancellationToken);
         var lifecycle = lifecycleService is null ? null : await lifecycleService.AnalyzeAsync(scanResult.Project, cancellationToken);
+        var codeSymbols = symbols is null ? [] : await symbols.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
+        var codeFlows = flows is null ? [] : await flows.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
+        var routeInfos = routes is null ? [] : await routes.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
+        var serviceRegs = services is null ? [] : await services.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
+        var configUsages = configs is null ? [] : await configs.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
+        var testInfos = tests is null ? [] : await tests.GetByProjectAsync(scanResult.Project.Id, cancellationToken);
         var files = new Dictionary<string, string>
         {
             ["CONTEXT.md"] = RootContext(scanResult, imported),
-            ["index.yaml"] = Index(scanResult, imported, validation, schema, lifecycle),
+            ["index.yaml"] = Index(scanResult, imported, validation, schema, lifecycle, codeSymbols, codeFlows, routeInfos, serviceRegs, configUsages, testInfos),
             ["project.md"] = Project(scanResult),
             ["architecture.md"] = Architecture(scanResult),
             ["current-state.md"] = CurrentState(scanResult, freshness),
             ["tasks.md"] = Tasks(scanResult),
-            ["ai-handoff.md"] = Handoff(scanResult, imported, validation, freshness),
+            ["ai-handoff.md"] = Handoff(scanResult, imported, validation, freshness, codeFlows, routeInfos, configUsages),
             ["scans/latest-scan.md"] = LatestScan(scanResult),
             ["branches/current.md"] = CurrentBranch(scanResult)
         };
 
         foreach (var file in files)
         {
-            await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, file.Key, file.Value, GeneratedArtifactType.ContextFile, "SourceWorker.Context", cancellationToken);
+            await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, file.Key, file.Value, GeneratedArtifactType.InternalContextFile, "SourceWorker.Context", cancellationToken);
         }
+        await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, "instructions/README.md", InstructionsReadme(), GeneratedArtifactType.InstructionImportFile, "SourceWorker.Context", cancellationToken);
+        if (packWriter is not null) await packWriter.WriteDefaultPacksAsync(scanResult.Project, scanResult.ScanRun.Id, cancellationToken);
 
         return new ContextWriteResult(output, files.Keys.ToArray());
     }
@@ -61,6 +74,14 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Imported instructions: {(imported is null ? "none" : imported.Title)}
 
         Start with `project.md`, then `architecture.md`, `current-state.md`, and `tasks.md`.
+
+        ## Output Layout
+
+        - Imported/user-authored instructions: `.ai-context/instructions/`
+        - Canonical generated backend docs: `.ai-context/docs/backend/`
+        - AI-ready packs: `.ai-context/packs/`
+        - Export profiles/history: `.ai-context/exports/`
+        - External mirrored backend docs: `instructions/Result/Backend/`
         """;
 
     private static string Project(ProjectScanResult scan)
@@ -183,7 +204,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         return builder.ToString();
     }
 
-    private static string Handoff(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, ContextFreshnessReport freshness)
+    private static string Handoff(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, ContextFreshnessReport freshness, IReadOnlyList<CodeFlow> flows, IReadOnlyList<RouteInfo> routes, IReadOnlyList<ConfigurationUsage> configs)
         => $"""
         # AI Handoff
 
@@ -201,6 +222,18 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         ## Important Files
 
         {ListOrNone(scan.SolutionFiles.Select(s => $"- `{s.RelativePath}`").Concat(scan.MainEntrypoints.Select(e => $"- `{e}`")).Concat(scan.ConfigFiles.Take(10).Select(c => $"- `{c}`")))}
+
+        ## High Confidence Flows
+
+        {ListOrNone(flows.Where(f => f.Confidence == FlowConfidence.High).Select(f => $"- {f.Name}: {f.Trigger}"))}
+
+        ## Detected Routes
+
+        {ListOrNone(routes.Take(20).Select(r => $"- {r.HttpMethod} `{r.RoutePattern}` in `{r.RelativePath}:{r.LineNumber}`"))}
+
+        ## Detected Configuration Usages
+
+        {ListOrNone(configs.Take(20).Select(c => $"- {c.UsageKind} `{c.KeyOrSection}` in `{c.RelativePath}:{c.LineNumber}`"))}
 
         ## Current Branch
 
@@ -226,6 +259,18 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         ## Active Recipe
 
         - `backend-docs-compact`
+
+        ## Available Packs And Outputs
+
+        - AI handoff pack: `.ai-context/packs/ai-handoff.pack.yaml`
+        - Backend docs pack: `.ai-context/packs/backend-docs.pack.yaml`
+        - Onboarding pack: `.ai-context/packs/onboarding.pack.yaml`
+        - Current branch pack: `.ai-context/packs/current-branch.pack.yaml`
+        - Canonical backend docs: `.ai-context/docs/backend`
+        - External backend docs mirror: `instructions/Result/Backend`
+        - Export profile: `.ai-context/exports/backend-docs-compact.yaml`
+
+        AI assistants should consume packs first, then read specific source files before making changes.
 
         ## Important Source Paths
 
@@ -275,6 +320,11 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Keep changes compileable.
         - Run tests after changes.
         - Do not do skip-later items.
+        - Use detected source file paths.
+        - Do not invent method names.
+        - Keep Domain dependency-free.
+        - Do not add AI/MCP/MAUI/cloud/licensing unless requested.
+        - Update docs/Current.md after significant changes.
         """;
 
     private static string LatestScan(ProjectScanResult scan)
@@ -306,10 +356,10 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Captured at: {scan.Git.CapturedAt:O}
         """;
 
-    private static string Index(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, LocalStorageSchemaInfo? schema, ArtifactLifecycleReport? lifecycle)
+    private static string Index(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, LocalStorageSchemaInfo? schema, ArtifactLifecycleReport? lifecycle, IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<CodeFlow> flows, IReadOnlyList<RouteInfo> routes, IReadOnlyList<ServiceRegistration> services, IReadOnlyList<ConfigurationUsage> configs, IReadOnlyList<TestInfo> tests)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("formatVersion: 3");
+        builder.AppendLine("formatVersion: 5");
         builder.AppendLine("project:");
         builder.AppendLine($"  id: \"{scan.Project.Id}\"");
         builder.AppendLine($"  name: \"{Escape(scan.Project.Name)}\"");
@@ -353,11 +403,68 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine("cleanup:");
         builder.AppendLine($"  recommended: {((lifecycle?.CleanupRecommended ?? false)).ToString().ToLowerInvariant()}");
         builder.AppendLine($"  previewCommand: \"sourceworker cleanup-preview {Escape(scan.Project.RootPath)}\"");
+        builder.AppendLine("codeIntelligence:");
+        builder.AppendLine("  symbols:");
+        builder.AppendLine($"    total: {symbols.Count}");
+        builder.AppendLine($"    classes: {symbols.Count(s => s.Kind == CodeSymbolKind.Class)}");
+        builder.AppendLine($"    interfaces: {symbols.Count(s => s.Kind == CodeSymbolKind.Interface)}");
+        builder.AppendLine($"    methods: {symbols.Count(s => s.Kind == CodeSymbolKind.Method)}");
+        builder.AppendLine("  routes:");
+        builder.AppendLine($"    total: {routes.Count}");
+        builder.AppendLine("  serviceRegistrations:");
+        builder.AppendLine($"    total: {services.Count}");
+        builder.AppendLine("  configurationUsages:");
+        builder.AppendLine($"    total: {configs.Count}");
+        builder.AppendLine("  tests:");
+        builder.AppendLine($"    total: {tests.Count}");
+        builder.AppendLine("flows:");
+        builder.AppendLine($"  total: {flows.Count}");
+        builder.AppendLine($"  highConfidence: {flows.Count(f => f.Confidence == FlowConfidence.High)}");
+        builder.AppendLine($"  mediumConfidence: {flows.Count(f => f.Confidence == FlowConfidence.Medium)}");
+        builder.AppendLine($"  lowConfidence: {flows.Count(f => f.Confidence == FlowConfidence.Low)}");
+        builder.AppendLine("contextBrowser:");
+        builder.AppendLine("  files:");
+        builder.AppendLine("    total: 0");
+        builder.AppendLine("  searchable:");
+        builder.AppendLine("    enabled: true");
+        builder.AppendLine("outputs:");
+        builder.AppendLine("  internal:");
+        builder.AppendLine("    - id: internal-backend-docs");
+        builder.AppendLine("      path: \".ai-context/docs/backend\"");
+        builder.AppendLine("      files: 7");
+        builder.AppendLine("      status: Generated");
+        builder.AppendLine("  external:");
+        builder.AppendLine("    - id: external-backend-docs");
+        builder.AppendLine("      path: \"instructions/Result/Backend\"");
+        builder.AppendLine("      files: 7");
+        builder.AppendLine("      status: Generated");
+        builder.AppendLine("packs:");
+        builder.AppendLine("  total: 4");
+        builder.AppendLine("  items:");
+        foreach (var pack in new[] { ("ai-handoff", ".ai-context/packs/ai-handoff.pack.yaml", 3), ("backend-docs", ".ai-context/packs/backend-docs.pack.yaml", 7), ("onboarding", ".ai-context/packs/onboarding.pack.yaml", 3), ("current-branch", ".ai-context/packs/current-branch.pack.yaml", 3) })
+        {
+            builder.AppendLine($"    - id: {pack.Item1}");
+            builder.AppendLine($"      path: \"{pack.Item2}\"");
+            builder.AppendLine($"      fileCount: {pack.Item3}");
+            builder.AppendLine("      freshness: unknown");
+        }
+        builder.AppendLine("exports:");
+        builder.AppendLine("  total: 1");
+        builder.AppendLine("  items:");
+        builder.AppendLine("    - id: backend-docs-compact");
+        builder.AppendLine("      target: MarkdownFolder");
+        builder.AppendLine("      path: \"instructions/Result/Backend\"");
+        builder.AppendLine($"      lastExportUtc: \"{scan.ScanRun.CompletedAt:O}\"");
+        builder.AppendLine("docs:");
+        builder.AppendLine("  internalBackendDocs:");
+        builder.AppendLine("    path: \".ai-context/docs/backend\"");
+        builder.AppendLine("    fileCount: 7");
+        builder.AppendLine("    status: Generated");
         if (imported is not null)
         {
             builder.AppendLine("instructions:");
-            builder.AppendLine($"  imported: \".ai-context/instructions/imported-instructions.md\"");
-            builder.AppendLine($"  sourcePathValidation: \".ai-context/instructions/source-path-validation.md\"");
+            builder.AppendLine($"  imported: \".ai-context/instructions/imported/imported-instructions.md\"");
+            builder.AppendLine($"  sourcePathValidation: \".ai-context/instructions/imported/source-path-validation.md\"");
             builder.AppendLine($"  sourceFile: \"{Escape(imported.SourceFilePath)}\"");
             builder.AppendLine($"  missingSourcePaths: {validation.Count(p => !p.Exists || !p.IsInsideProject)}");
             builder.AppendLine("  sourcePaths:");
@@ -418,6 +525,20 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
 
     public static string Hash(string content)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+
+    private static string InstructionsReadme()
+        => """
+        # Instructions
+
+        This folder is for imported or user-authored project instructions.
+
+        - Imported instructions are written under `.ai-context/instructions/imported/`.
+        - Generated internal documentation is written under `.ai-context/docs/`.
+        - AI-ready bundles are written under `.ai-context/packs/`.
+        - External mirrored documentation may be written under `instructions/Result/Backend/`.
+
+        If no instruction file has been imported, this folder may contain only this README.
+        """;
 
     private static string DetectArchitectureStyle(ProjectScanResult scan)
         => scan.FolderRoles.Any(f => f.Role == "core") && scan.FolderRoles.Any(f => f.Role == "infrastructure")

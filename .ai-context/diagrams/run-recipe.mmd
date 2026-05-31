@@ -1,0 +1,8 @@
+flowchart TD
+    A[Application loads recipe]
+    B[Scanner refreshes project data]
+    A --> B
+    C[Recipe runner writes generated docs]
+    B --> C
+    D[Generated artifacts are tracked]
+    C --> D

@@ -29,16 +29,22 @@ public sealed class InstructionContextWriter : IInstructionContextWriter
 {
     public async Task WriteImportedInstructionsAsync(Project project, ProjectInstructionDocument instructions, CancellationToken cancellationToken)
     {
-        var output = Path.Combine(project.RootPath, ".ai-context", "instructions");
+        var output = Path.Combine(project.RootPath, ".ai-context", "instructions", "imported");
         Directory.CreateDirectory(output);
-        await File.WriteAllTextAsync(Path.Combine(output, "imported-instructions.md"), RenderInstructions(instructions), cancellationToken);
+        var rendered = RenderInstructions(instructions);
+        await File.WriteAllTextAsync(Path.Combine(output, "imported-instructions.md"), rendered, cancellationToken);
+        var legacy = Path.Combine(project.RootPath, ".ai-context", "instructions", "imported-instructions.md");
+        if (File.Exists(legacy)) await File.WriteAllTextAsync(legacy, rendered, cancellationToken);
     }
 
     public async Task WriteSourcePathValidationAsync(Project project, SourcePathValidationReport report, CancellationToken cancellationToken)
     {
-        var output = Path.Combine(project.RootPath, ".ai-context", "instructions");
+        var output = Path.Combine(project.RootPath, ".ai-context", "instructions", "imported");
         Directory.CreateDirectory(output);
-        await File.WriteAllTextAsync(Path.Combine(output, "source-path-validation.md"), RenderValidation(report), cancellationToken);
+        var rendered = RenderValidation(report);
+        await File.WriteAllTextAsync(Path.Combine(output, "source-path-validation.md"), rendered, cancellationToken);
+        var legacy = Path.Combine(project.RootPath, ".ai-context", "instructions", "source-path-validation.md");
+        if (File.Exists(legacy)) await File.WriteAllTextAsync(legacy, rendered, cancellationToken);
     }
 
     private static string RenderInstructions(ProjectInstructionDocument doc)

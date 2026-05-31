@@ -166,6 +166,56 @@ public interface IStorageHealthService
     Task<bool> CheckAsync(CancellationToken cancellationToken);
 }
 
+public interface ICSharpCodeIntelligenceScanner
+{
+    Task<CodeIntelligenceResult> ScanAsync(ProjectScanResult scanResult, CancellationToken cancellationToken);
+}
+
+public interface ICodeSymbolRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeSymbol> symbols, CancellationToken cancellationToken); Task<IReadOnlyList<CodeSymbol>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface ICodeFlowRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeFlow> flows, CancellationToken cancellationToken); Task<IReadOnlyList<CodeFlow>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IRouteInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<RouteInfo> routes, CancellationToken cancellationToken); Task<IReadOnlyList<RouteInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IServiceRegistrationRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ServiceRegistration> registrations, CancellationToken cancellationToken); Task<IReadOnlyList<ServiceRegistration>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IConfigurationUsageRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ConfigurationUsage> usages, CancellationToken cancellationToken); Task<IReadOnlyList<ConfigurationUsage>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IBackgroundWorkerInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<BackgroundWorkerInfo> workers, CancellationToken cancellationToken); Task<IReadOnlyList<BackgroundWorkerInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface ITestInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken); Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+
+public interface IRouteScanner;
+public interface IServiceRegistrationScanner;
+public interface IConfigurationUsageScanner;
+public interface IBackgroundWorkerScanner;
+public interface ITestScanner;
+public interface IFlowExtractor { IReadOnlyList<CodeFlow> Extract(ProjectScanResult scan, CodeIntelligenceResult code); }
+public interface IFlowDiagramGenerator { string Generate(CodeFlow flow); }
+public interface IContextBrowserService
+{
+    Task<ContextBrowserSummary> GetSummaryAsync(Project project, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ContextBrowserFile>> ListFilesAsync(Project project, CancellationToken cancellationToken);
+    Task<string> ReadFileAsync(Project project, string relativePath, CancellationToken cancellationToken);
+    Task<ContextBrowserQueryResult> SearchAsync(Project project, string query, CancellationToken cancellationToken);
+}
+public interface IContextSearchService { Task<ContextBrowserQueryResult> SearchAsync(Project project, string query, CancellationToken cancellationToken); }
+
+public interface IOutputProfileService { Task<IReadOnlyList<OutputProfile>> GetProfilesAsync(Project project, CancellationToken cancellationToken); }
+public interface IOutputRoutingService { Task<IReadOnlyList<OutputRoute>> GetRoutesAsync(Project project, string recipeId, CancellationToken cancellationToken); }
+public interface IGeneratedOutputService { Task<GeneratedOutputSet> GetOutputSetAsync(Project project, string recipeId, CancellationToken cancellationToken); }
+public interface IExportProfileService
+{
+    Task<ExportProfile> WriteBackendDocsProfileAsync(Project project, Guid? scanRunId, IReadOnlyList<GeneratedArtifact> artifacts, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ExportProfile>> ListAsync(Project project, CancellationToken cancellationToken);
+    Task<ExportProfile?> GetAsync(Project project, string exportProfileId, CancellationToken cancellationToken);
+}
+public interface IExportRunner { Task<ExportRun> RunAsync(Project project, string exportProfileId, CancellationToken cancellationToken); }
+public interface IContextPackService
+{
+    Task<IReadOnlyList<ContextPackManifest>> ListAsync(Project project, CancellationToken cancellationToken);
+    Task<ContextPackManifest?> GetAsync(Project project, string packId, CancellationToken cancellationToken);
+}
+public interface IContextPackWriter { Task<IReadOnlyList<ContextPackManifest>> WriteDefaultPacksAsync(Project project, Guid? scanRunId, CancellationToken cancellationToken); }
+public interface IContextPackReader { Task<string> ReadPackContentAsync(Project project, string packId, CancellationToken cancellationToken); }
+public interface IContextPackValidator { Task<ContextPackManifest> ValidateAsync(Project project, ContextPack pack, string relativePath, CancellationToken cancellationToken); }
+
+public sealed record CodeIntelligenceResult(IReadOnlyList<CodeSymbol> Symbols, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<ServiceRegistration> ServiceRegistrations, IReadOnlyList<ConfigurationUsage> ConfigurationUsages, IReadOnlyList<BackgroundWorkerInfo> BackgroundWorkers, IReadOnlyList<TestInfo> Tests, IReadOnlyList<CodeFlow> Flows);
+
 public interface ILocalJobQueue
 {
     ValueTask EnqueueAsync(Guid jobId, CancellationToken cancellationToken);

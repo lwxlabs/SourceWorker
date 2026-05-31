@@ -1,0 +1,8 @@
+flowchart TD
+    A[Job queue dequeues id]
+    B[Worker loads project]
+    A --> B
+    C[Worker executes scanner]
+    B --> C
+    D[Worker persists progress]
+    C --> D

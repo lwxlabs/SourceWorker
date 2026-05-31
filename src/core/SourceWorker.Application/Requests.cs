@@ -19,6 +19,19 @@ public sealed record GetStorageInfoQuery : IRequest<StorageInfo>;
 public sealed record GetArtifactsQuery(Guid ProjectId) : IRequest<ArtifactLifecycleReport>;
 public sealed record GetCleanupPreviewQuery(Guid ProjectId) : IRequest<CleanupPreviewReport>;
 public sealed record CleanupGeneratedCommand(Guid ProjectId, bool DryRun, bool Force) : IRequest<CleanupResult>;
+public sealed record GetSymbolsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeSymbol>>;
+public sealed record GetFlowsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeFlow>>;
+public sealed record GetRoutesQuery(Guid ProjectId) : IRequest<IReadOnlyList<RouteInfo>>;
+public sealed record GetContextBrowserQuery(Guid ProjectId) : IRequest<ContextBrowserSummary>;
+public sealed record GetContextFilesQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextBrowserFile>>;
+public sealed record ReadContextFileQuery(Guid ProjectId, string RelativePath) : IRequest<string>;
+public sealed record SearchContextQuery(Guid ProjectId, string Query) : IRequest<ContextBrowserQueryResult>;
+public sealed record GetOutputsQuery(Guid ProjectId) : IRequest<GeneratedOutputSet>;
+public sealed record GetPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
+public sealed record GetPackQuery(Guid ProjectId, string PackId) : IRequest<ContextPackManifest?>;
+public sealed record ReadPackContentQuery(Guid ProjectId, string PackId) : IRequest<string>;
+public sealed record ExportPackCommand(Guid ProjectId, string PackId, string OutputFile) : IRequest<string>;
+public sealed record ExportDocsCommand(Guid ProjectId, string ExportProfileId) : IRequest<ExportRun>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -57,7 +70,7 @@ public sealed class GetJobStatusQueryHandler(IJobRepository jobs) : IRequestHand
         => (await jobs.GetAsync(request.JobId, cancellationToken))?.ToDto();
 }
 
-public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository)
+public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository, ICSharpCodeIntelligenceScanner codeScanner, ICodeSymbolRepository symbols, ICodeFlowRepository flows, IRouteInfoRepository routes, IServiceRegistrationRepository services, IConfigurationUsageRepository configs, IBackgroundWorkerInfoRepository workers, ITestInfoRepository tests)
     : IRequestHandler<GenerateBasicContextCommand, ContextGenerationResponse>
 {
     public async Task<ContextGenerationResponse> Handle(GenerateBasicContextCommand request, CancellationToken cancellationToken)
@@ -67,6 +80,14 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         await scanRuns.AddAsync(scan.ScanRun, cancellationToken);
         await fileIndex.ReplaceForScanAsync(scan.ScanRun.Id, scan.Files, scan.Todos, scan.Technologies, cancellationToken);
         await indexedFiles.SaveForScanAsync(project.Id, scan.ScanRun.Id, scan.Files, cancellationToken);
+        var code = await codeScanner.ScanAsync(scan, cancellationToken);
+        await symbols.SaveAsync(project.Id, scan.ScanRun.Id, code.Symbols, cancellationToken);
+        await flows.SaveAsync(project.Id, scan.ScanRun.Id, code.Flows, cancellationToken);
+        await routes.SaveAsync(project.Id, scan.ScanRun.Id, code.Routes, cancellationToken);
+        await services.SaveAsync(project.Id, scan.ScanRun.Id, code.ServiceRegistrations, cancellationToken);
+        await configs.SaveAsync(project.Id, scan.ScanRun.Id, code.ConfigurationUsages, cancellationToken);
+        await workers.SaveAsync(project.Id, scan.ScanRun.Id, code.BackgroundWorkers, cancellationToken);
+        await tests.SaveAsync(project.Id, scan.ScanRun.Id, code.Tests, cancellationToken);
         foreach (var recipe in recipeFactory.CreateDefaultRecipes(project))
         {
             await recipeRepository.SaveAsync(project, recipe, cancellationToken);
@@ -99,7 +120,7 @@ public sealed class ImportProjectInstructionsCommandHandler(IProjectRepository p
 
         var importedRecipe = recipeFactory.CreateImportedRecipe(project, document);
         await recipes.SaveAsync(project, importedRecipe, cancellationToken);
-        return new ImportInstructionsResponse(document.Id, ".ai-context/instructions/imported-instructions.md", ".ai-context/instructions/source-path-validation.md", importedRecipe.Id);
+        return new ImportInstructionsResponse(document.Id, ".ai-context/instructions/imported/imported-instructions.md", ".ai-context/instructions/imported/source-path-validation.md", importedRecipe.Id);
     }
 }
 
@@ -197,6 +218,32 @@ public sealed class CleanupGeneratedCommandHandler(IProjectRepository projects, 
         return await cleanup.CleanupAsync(project, request.DryRun, request.Force, cancellationToken);
     }
 }
+
+public sealed class GetSymbolsQueryHandler(ICodeSymbolRepository repo) : IRequestHandler<GetSymbolsQuery, IReadOnlyList<CodeSymbol>> { public Task<IReadOnlyList<CodeSymbol>> Handle(GetSymbolsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetFlowsQueryHandler(ICodeFlowRepository repo) : IRequestHandler<GetFlowsQuery, IReadOnlyList<CodeFlow>> { public Task<IReadOnlyList<CodeFlow>> Handle(GetFlowsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetRoutesQueryHandler(IRouteInfoRepository repo) : IRequestHandler<GetRoutesQuery, IReadOnlyList<RouteInfo>> { public Task<IReadOnlyList<RouteInfo>> Handle(GetRoutesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetContextBrowserQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextBrowserQuery, ContextBrowserSummary> { public async Task<ContextBrowserSummary> Handle(GetContextBrowserQuery request, CancellationToken cancellationToken) => await browser.GetSummaryAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
+public sealed class GetContextFilesQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextFilesQuery, IReadOnlyList<ContextBrowserFile>> { public async Task<IReadOnlyList<ContextBrowserFile>> Handle(GetContextFilesQuery request, CancellationToken cancellationToken) => await browser.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
+public sealed class ReadContextFileQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<ReadContextFileQuery, string> { public async Task<string> Handle(ReadContextFileQuery request, CancellationToken cancellationToken) => await browser.ReadFileAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
+public sealed class SearchContextQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<SearchContextQuery, ContextBrowserQueryResult> { public async Task<ContextBrowserQueryResult> Handle(SearchContextQuery request, CancellationToken cancellationToken) => await browser.SearchAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Query, cancellationToken); }
+public sealed class GetOutputsQueryHandler(IProjectRepository projects, IGeneratedOutputService outputs) : IRequestHandler<GetOutputsQuery, GeneratedOutputSet> { public async Task<GeneratedOutputSet> Handle(GetOutputsQuery request, CancellationToken cancellationToken) => await outputs.GetOutputSetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), "backend-docs-compact", cancellationToken); }
+public sealed class GetPacksQueryHandler(IProjectRepository projects, IContextPackService packs) : IRequestHandler<GetPacksQuery, IReadOnlyList<ContextPackManifest>> { public async Task<IReadOnlyList<ContextPackManifest>> Handle(GetPacksQuery request, CancellationToken cancellationToken) => await packs.ListAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
+public sealed class GetPackQueryHandler(IProjectRepository projects, IContextPackService packs) : IRequestHandler<GetPackQuery, ContextPackManifest?> { public async Task<ContextPackManifest?> Handle(GetPackQuery request, CancellationToken cancellationToken) => await packs.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.PackId, cancellationToken); }
+public sealed class ReadPackContentQueryHandler(IProjectRepository projects, IContextPackReader reader) : IRequestHandler<ReadPackContentQuery, string> { public async Task<string> Handle(ReadPackContentQuery request, CancellationToken cancellationToken) => await reader.ReadPackContentAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.PackId, cancellationToken); }
+public sealed class ExportPackCommandHandler(IProjectRepository projects, IContextPackReader reader) : IRequestHandler<ExportPackCommand, string>
+{
+    public async Task<string> Handle(ExportPackCommand request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var full = Path.GetFullPath(request.OutputFile);
+        var root = Path.GetFullPath(project.RootPath);
+        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Pack export path must be inside the project root.");
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        await File.WriteAllTextAsync(full, await reader.ReadPackContentAsync(project, request.PackId, cancellationToken), cancellationToken);
+        return full;
+    }
+}
+public sealed class ExportDocsCommandHandler(IProjectRepository projects, IExportRunner runner) : IRequestHandler<ExportDocsCommand, ExportRun> { public async Task<ExportRun> Handle(ExportDocsCommand request, CancellationToken cancellationToken) => await runner.RunAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.ExportProfileId, cancellationToken); }
 
 public static class ProjectMappings
 {

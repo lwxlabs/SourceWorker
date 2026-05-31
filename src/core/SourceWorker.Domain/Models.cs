@@ -117,8 +117,9 @@ public sealed record DoctorReport(
     IReadOnlyList<string> Warnings);
 
 public enum SourcePathType { File, Folder, Unknown }
-public enum GeneratedArtifactType { ContextFile, RecipeFile, BackendDocs, InstructionFile, ValidationFile, Other }
+public enum GeneratedArtifactType { ContextFile, RecipeFile, BackendDocs, InstructionFile, ValidationFile, Other, InternalContextFile, InternalGeneratedDoc, ExternalExportedDoc, ContextPackManifest, ExportProfile, DiagramFile, InstructionImportFile }
 public enum GeneratedArtifactStatus { Generated, ManuallyModified, Stale, Missing, Orphaned, Deprecated }
+public enum OutputDestinationType { InternalContextDocs, ExternalMarkdownFolder, YouTrackKnowledgeBaseLater, GitHubWikiLater, ObsidianVaultLater, ZipExportLater }
 
 public sealed record GeneratedArtifact(
     Guid Id,
@@ -134,6 +135,17 @@ public sealed record GeneratedArtifact(
     GeneratedArtifactStatus Status,
     string GeneratorName,
     string? Notes);
+
+public sealed record OutputDestination(string Id, OutputDestinationType Type, string Path, bool Primary, string PublishMode = "mirror");
+public sealed record OutputProfile(string Id, string RecipeId, IReadOnlyList<OutputDestination> Destinations, IReadOnlyList<string> GeneratedFiles);
+public sealed record OutputRoute(string RecipeId, OutputDestination Destination, IReadOnlyList<string> Files);
+public sealed record GeneratedOutputSet(string RecipeId, IReadOnlyList<OutputDestination> Destinations, IReadOnlyList<GeneratedOutputFile> Files, IReadOnlyList<string> Warnings);
+public sealed record GeneratedOutputFile(string RelativePath, string DestinationId, GeneratedArtifactType ArtifactType, GeneratedArtifactStatus Status, bool Exists);
+public sealed record ExportProfile(string Id, string RecipeId, string InternalSourcePath, string ExternalOutputPath, string TargetPlatform, string PublishMode, IReadOnlyList<string> GeneratedFiles, DateTimeOffset? LastExportUtc, Guid? LastExportScanRunId, IReadOnlyList<Guid> ArtifactIds, IReadOnlyList<string> Warnings, string CleanupBehavior);
+public sealed record ExportRun(string Id, string ExportProfileId, Guid ProjectId, DateTimeOffset StartedUtc, DateTimeOffset FinishedUtc, IReadOnlyList<string> ExportedFiles, IReadOnlyList<string> Warnings);
+public sealed record ContextPack(string Id, string Name, string Description, string Audience, string Purpose, IReadOnlyList<ContextPackItem> Items, IReadOnlyList<string> IncludedSelectors, string MaxRecommendedUse, int TokenEstimate, string FreshnessStatus, Guid? SourceScanRunId, DateTimeOffset GeneratedUtc);
+public sealed record ContextPackItem(string RelativePath, string Kind, bool Required);
+public sealed record ContextPackManifest(ContextPack Pack, string RelativePath, IReadOnlyList<string> MissingFiles, bool IsValid);
 
 public sealed record ContextFreshnessReport(
     Guid ProjectId,
@@ -155,7 +167,7 @@ public sealed record ChangeSetReport(
     int IgnoredCount);
 
 public sealed record LocalStorageSchemaInfo(string Provider, string Mode, string StoragePath, int SchemaVersion, DateTimeOffset CreatedUtc, DateTimeOffset LastMigratedUtc, string AppStorageFormatVersion);
-public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth);
+public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth, int CodeSymbolCount = 0, int CodeFlowCount = 0, int RouteCount = 0, int ServiceRegistrationCount = 0, int ConfigurationUsageCount = 0, int TestInfoCount = 0);
 
 public sealed record ArtifactLifecycleReport(
     Guid ProjectId,
@@ -169,3 +181,27 @@ public sealed record ArtifactLifecycleReport(
 
 public sealed record CleanupPreviewReport(Guid ProjectId, IReadOnlyList<string> SafeDeleteFiles, IReadOnlyList<string> MissingTrackedArtifacts, IReadOnlyList<string> StaleTrackedArtifacts, IReadOnlyList<string> Warnings);
 public sealed record CleanupResult(Guid ProjectId, bool DryRun, IReadOnlyList<string> DeletedFiles, IReadOnlyList<string> SkippedFiles, IReadOnlyList<string> Warnings);
+
+public sealed record CodeSymbol(Guid Id, Guid ProjectId, Guid ScanRunId, string FilePath, string RelativePath, string? Namespace, string Name, string FullName, CodeSymbolKind Kind, string Accessibility, string? ParentSymbolName, string? ReturnType, IReadOnlyList<string> Parameters, int LineNumber, IReadOnlyList<string> Attributes, bool IsStatic, bool IsAsync);
+public sealed record CodeFileSummary(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, int SymbolCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount);
+public sealed record CodeProjectSummary(Guid Id, Guid ProjectId, Guid ScanRunId, int SymbolCount, int FlowCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount, int TestCount);
+public sealed record CodeDependency(Guid Id, Guid ProjectId, Guid ScanRunId, string FromSymbol, string ToSymbol, string Kind, string RelativePath);
+public sealed record CodeEntrypoint(Guid Id, Guid ProjectId, Guid ScanRunId, string Name, string RelativePath, string Kind, int LineNumber);
+public sealed record CodeFlow(Guid Id, Guid ProjectId, Guid ScanRunId, string Name, CodeFlowType FlowType, string Trigger, IReadOnlyList<string> InvolvedFiles, IReadOnlyList<string> InvolvedSymbols, IReadOnlyList<CodeFlowStep> Steps, FlowConfidence Confidence, IReadOnlyList<string> Warnings);
+public sealed record CodeFlowStep(int Order, string Text, string? SymbolName, string? RelativePath);
+public sealed record RouteInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string HttpMethod, string RoutePattern, string? HandlerSymbol, int LineNumber);
+public sealed record ConfigurationUsage(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string KeyOrSection, string UsageKind, int LineNumber);
+public sealed record ServiceRegistration(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string RegistrationMethod, string ServiceType, string? ImplementationType, int LineNumber);
+public sealed record BackgroundWorkerInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string ClassName, string BaseTypeOrInterface, int LineNumber);
+public sealed record PublicApiEndpoint(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string Method, string Route, string? Handler, int LineNumber);
+public sealed record TestInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string ClassName, string MethodName, string TestFramework, int LineNumber);
+
+public enum CodeSymbolKind { Class, Interface, Record, Struct, Enum, Method, Constructor, Property, Field }
+public enum CodeFlowType { CliCommandFlow, LocalApiEndpointFlow, ScanFlow, InstructionImportFlow, RecipeRunFlow, DoctorFlow, ArtifactCleanupFlow, StorageInfoFlow, WorkerJobFlow, ContextGenerationFlow }
+public enum FlowConfidence { High, Medium, Low }
+
+public sealed record ContextBrowserNode(string Name, string RelativePath, string Kind, IReadOnlyList<ContextBrowserNode> Children);
+public sealed record ContextBrowserFile(string RelativePath, string AbsolutePath, string Kind, long SizeBytes, DateTimeOffset LastModifiedUtc);
+public sealed record ContextBrowserSummary(Guid ProjectId, IReadOnlyList<ContextBrowserFile> Files, IReadOnlyList<ProjectRecipe> Recipes, IReadOnlyList<CodeFlow> Flows, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<TodoItem> Todos, IReadOnlyList<GeneratedArtifact> ProblemArtifacts);
+public sealed record ContextBrowserQueryResult(string Query, IReadOnlyList<ContextBrowserSearchHit> Hits);
+public sealed record ContextBrowserSearchHit(string RelativePath, int LineNumber, string Preview);
