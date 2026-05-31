@@ -2,25 +2,20 @@
 
 Date: 2026-05-31
 
-SourceWorker is still local-engine only. No AI provider, MAUI/Desktop UI, MCP, cloud sync, licensing, or terminal agent execution has been added.
+SourceWorker is a local-first project context engine. It intentionally does not include AI providers, MAUI/Desktop UI, MCP, cloud sync, licensing, or terminal agent execution.
 
-## Implemented Features
+## Architecture
 
-- .NET 10 clean architecture solution with Domain, Application, Contracts, Infrastructure, Scanner, Context, Recipes, Worker, CLI, Local API, and tests.
-- Scanner detects solution files, project files, project references, README/docs, config files, Docker files, GitHub Actions, test projects, folder roles, entrypoints, Git state, technologies, TODO/FIXME/REVIEW items, SHA256 hashes, and change states.
-- Scan runs are persisted and preserved so latest scan data can be queried.
-- Indexed files are persisted per scan run with absolute path, relative path, extension, file kind, size, last modified UTC, SHA256, ignored status, ignore reason, and change state.
-- Generated artifacts are persisted with project id, scan run id, recipe id, relative/absolute path, type, content hash, generated UTC, source input hash, status, generator name, and notes.
-- Markdown instruction/todo files can be imported with deterministic heading/list parsing.
-- Imported instructions produce structured source paths, rules/mindset, todos, skip-later items, verification items, and extra sections.
-- Source path validation marks imported paths as found/missing/outside project and file/folder/unknown.
-- Rule-based recipes exist for `ai-handoff`, `backend-docs-compact`, `project-onboarding`, and `todo-plan`.
-- Imported instruction files generate an `imported-*` recipe YAML file.
-- Context freshness detects missing generated files, manually modified generated files, stale files, and computes a 0-100 freshness score.
-- Generated markdown includes metadata comments with `GeneratedBy`, `FormatVersion`, `ProjectId`, `ScanRunId`, `RecipeId`, `GeneratedUtc`, `InputHash`, `ContentHash`, and `Status`.
-- Recipe generation protects manual edits by default; `run-recipe --force` overwrites.
+- `SourceWorker.Domain` is dependency-free and holds the project, scan, instruction, recipe, job, artifact, freshness, cleanup, and storage diagnostic models.
+- `SourceWorker.Application` owns use cases and interfaces. CLI and API talk to application requests only.
+- `SourceWorker.Scanner` scans project shape, file hashes, technologies, Git state, TODOs, and change state.
+- `SourceWorker.Context` writes `.ai-context`, parses imported markdown instructions, validates source paths, checks freshness, analyzes artifact lifecycle, and performs safe cleanup.
+- `SourceWorker.Recipes` owns rule-based recipes including `backend-docs-compact`.
+- `SourceWorker.Storage.Localite` now uses explicit table-backed SQLite storage under the Localite infrastructure boundary.
+- `SourceWorker.Cli` is thin command routing.
+- `SourceWorker.LocalApi` exposes minimal engine endpoints.
 
-## Current Commands
+## Commands
 
 - `scan <projectPath>`
 - `scan <projectPath> --instructions <instructionFilePath>`
@@ -30,25 +25,38 @@ SourceWorker is still local-engine only. No AI provider, MAUI/Desktop UI, MCP, c
 - `changes <projectPath>`
 - `changes <projectPath> --json`
 - `context-status <projectPath>`
+- `artifacts <projectPath>`
+- `artifacts <projectPath> --json`
+- `cleanup-preview <projectPath>`
+- `cleanup-preview <projectPath> --json`
+- `cleanup-generated <projectPath> --dry-run`
+- `cleanup-generated <projectPath> --force`
+- `storage-info`
+- `storage-info --json`
 - `recipes <projectPath>`
 - `run-recipe <projectPath> <recipeId>`
 - `run-recipe <projectPath> <recipeId> --force`
 - `status`
 - `handoff <projectPath>`
 
-## Current Persistence State
+## Localite Table-Backed Storage
 
-- Localite is used for local persistence.
-- Repositories exist for projects, scan runs, indexed files, file index data, generated artifacts, jobs, and imported instruction documents.
-- Storage is still implemented on top of Localite key/value JSON collections rather than Localite ORM table classes. The application layer already depends on explicit repository interfaces, so the next persistence pass can move implementation internals to true table-backed Localite without changing CLI/API behavior.
+- Storage provider: Localite.
+- Storage mode: table-backed.
+- Schema version: 1.
+- App storage format version: 3.
+- Current database path on this machine: `C:\Users\louie\AppData\Local\SourceWorker\sourceworker.localite.db`.
+- Explicit storage tables exist for project, scan run, indexed file, detected technology, Git snapshot, todo item, generated artifact, instruction document, instruction section, instruction source path, source path validation result, prompt recipe, worker job, worker job step, and doctor report records.
+- Domain models and storage records are separate.
+- Mapping helpers live in `SourceWorker.Storage.Localite`.
 - Secrets are not stored.
 
-## Generated Files
+## Generated Context
 
-`.ai-context/` includes:
+`.ai-context/` remains stable:
 
 - `CONTEXT.md`
-- `index.yaml` with `formatVersion: 2`
+- `index.yaml`
 - `project.md`
 - `architecture.md`
 - `current-state.md`
@@ -60,6 +68,23 @@ SourceWorker is still local-engine only. No AI provider, MAUI/Desktop UI, MCP, c
 - `scans/latest-scan.md`
 - `branches/current.md`
 
+`index.yaml` is format version 3 and includes:
+
+- project identity
+- latest scan
+- Git state
+- storage provider/mode/schema version
+- context files
+- recipes
+- imported instruction state
+- stale status
+- artifact lifecycle counts
+- cleanup recommendation and preview command
+
+Generated markdown files include metadata comments with generator, format version, project id, scan run id, recipe id, generated UTC, input hash, content hash, and status.
+
+## Backend Recipe Output
+
 `backend-docs-compact` writes:
 
 - `instructions/Result/Backend/README.md`
@@ -70,9 +95,26 @@ SourceWorker is still local-engine only. No AI provider, MAUI/Desktop UI, MCP, c
 - `05-tasks-and-risks.md`
 - `06-verification-checklist.md`
 
-## Local API
+Manual edits are protected. `run-recipe` skips manually modified generated files unless `--force` is used.
 
-Minimal engine endpoints include:
+## Artifact Lifecycle
+
+SourceWorker detects:
+
+- `Missing`: tracked generated file no longer exists.
+- `ManuallyModified`: file exists but body hash differs from stored generated hash.
+- `Stale`: tracked artifact marked stale.
+- `Orphaned`: generated markdown exists but is not expected by the current recipe/index shape.
+- `Deprecated`: known older backend recipe outputs such as previous worker/configuration filenames.
+
+Cleanup behavior:
+
+- `cleanup-preview` never deletes.
+- `cleanup-generated --dry-run` reports what would be deleted.
+- `cleanup-generated --force` deletes only confidently generated orphan/deprecated files.
+- Manually modified and unknown user files are not deleted by default.
+
+## Local API
 
 - `GET /health`
 - `GET /api/projects`
@@ -85,26 +127,51 @@ Minimal engine endpoints include:
 - `GET /api/projects/{id}/context-files`
 - `GET /api/projects/{id}/scan-runs`
 - `GET /api/projects/{id}/scan-runs/latest`
+- `GET /api/storage/info`
+- `GET /api/projects/{id}/artifacts`
+- `GET /api/projects/{id}/cleanup-preview`
+- `POST /api/projects/{id}/cleanup-generated`
 
-## Current Tests
+## Tests
 
-- Build: `dotnet build SourceWorker.slnx`
-- Test: `dotnet test SourceWorker.slnx --no-build`
-- Tests cover scanner behavior, instruction parsing, source path validation, recipe YAML generation, context writing, persistence of scan/file/artifact data, freshness/manual-edit detection, application commands, CLI smoke flow, and Local API engine endpoints.
+Current tests cover:
+
+- scanner detection and ignore behavior
+- instruction parser behavior
+- source path validation
+- recipe YAML generation
+- context writer output
+- application command flows
+- CLI smoke flow
+- Local API engine endpoints
+- table-backed storage info
+- persisted scan/index/artifact records
+- artifact lifecycle and cleanup dry-run/force behavior
+- manual edit freshness detection
 
 ## Latest Verification
 
-These commands passed against this repository:
+These commands passed:
 
 ```powershell
 dotnet build SourceWorker.slnx
 dotnet test SourceWorker.slnx --no-build
 dotnet run --project src/services/SourceWorker.Cli -- scan C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
 dotnet run --project src/services/SourceWorker.Cli -- doctor C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
-dotnet run --project src/services/SourceWorker.Cli -- changes C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
 dotnet run --project src/services/SourceWorker.Cli -- context-status C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
+dotnet run --project src/services/SourceWorker.Cli -- artifacts C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
+dotnet run --project src/services/SourceWorker.Cli -- cleanup-preview C:\Users\louie\source\lwxlabs\projects\lwxlabs\SourceWorker
+dotnet run --project src/services/SourceWorker.Cli -- storage-info
 ```
+
+Latest `storage-info` after verification showed table-backed Localite storage at `C:\Users\louie\AppData\Local\SourceWorker\sourceworker.localite.db`, schema version 1, with persisted project, scan run, indexed file, generated artifact, and instruction records.
 
 ## Next Recommended Step
 
-Move the Localite repository internals from JSON collection storage to true Localite ORM table-backed storage for projects, scan runs, indexed files, detected technologies, TODOs, instructions, recipes, generated artifacts, jobs, and doctor reports. Keep the repository interfaces and CLI/API behavior stable while doing that migration.
+Now that storage and artifact lifecycle are stable enough for engine work, the next best step is to improve scan precision and recipe usefulness before UI or AI:
+
+- store detected technologies, Git snapshots, TODOs, recipes, and doctor reports with richer query APIs;
+- add per-project storage isolation for tests and future multi-project use;
+- improve `.gitignore` compatibility;
+- add stronger stale detection based on source input hashes per artifact;
+- add a read-only context browser endpoint for dashboard preparation.

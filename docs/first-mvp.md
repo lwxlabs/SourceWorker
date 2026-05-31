@@ -47,6 +47,10 @@ Inspect scan file changes and context freshness:
 dotnet run --project src/services/SourceWorker.Cli -- changes C:\path\to\project
 dotnet run --project src/services/SourceWorker.Cli -- changes C:\path\to\project --json
 dotnet run --project src/services/SourceWorker.Cli -- context-status C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- artifacts C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- cleanup-preview C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- cleanup-generated C:\path\to\project --dry-run
+dotnet run --project src/services/SourceWorker.Cli -- storage-info --json
 ```
 
 List and run local rule-based recipes:
@@ -77,7 +81,7 @@ The API uses an in-process queue for scan jobs. It does not expose AI, MCP, clou
 
 ## Generated Context
 
-`index.yaml` uses format version 2 and includes project identity, latest scan, Git state, context files, recipes, imported instructions, and stale status.
+`index.yaml` uses format version 3 and includes project identity, latest scan, Git state, table-backed Localite storage metadata, context files, recipes, imported instructions, stale status, artifact lifecycle counts, and cleanup recommendations.
 
 The scan writes:
 

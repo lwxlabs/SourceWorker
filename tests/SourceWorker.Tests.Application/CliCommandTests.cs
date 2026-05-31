@@ -29,12 +29,20 @@ public sealed class CliCommandTests
         var doctor = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- doctor \"{projectRoot}\" --json");
         var changes = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- changes \"{projectRoot}\" --json");
         var contextStatus = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- context-status \"{projectRoot}\"");
+        var storageInfo = await Dotnet(repoRoot, "run --no-build --project src/services/SourceWorker.Cli -- storage-info --json");
+        var artifacts = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- artifacts \"{projectRoot}\" --json");
+        var cleanupPreview = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- cleanup-preview \"{projectRoot}\" --json");
+        var cleanupDryRun = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- cleanup-generated \"{projectRoot}\" --dry-run");
         var recipes = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- recipes \"{projectRoot}\"");
         var runRecipe = await Dotnet(repoRoot, $"run --no-build --project src/services/SourceWorker.Cli -- run-recipe \"{projectRoot}\" backend-docs-compact");
 
         Assert.Contains("ImportedInstructionsFound", doctor);
         Assert.Contains("NewFiles", changes);
         Assert.Contains("Freshness score:", contextStatus);
+        Assert.Contains("table-backed", storageInfo);
+        Assert.Contains("Artifacts", artifacts);
+        Assert.Contains("SafeDeleteFiles", cleanupPreview);
+        Assert.Contains("Dry run: True", cleanupDryRun);
         Assert.Contains("backend-docs-compact", recipes);
         Assert.Contains("Ran recipe: backend-docs-compact", runRecipe);
         Assert.True(File.Exists(Path.Combine(projectRoot, ".ai-context", "recipes", "imported-todo-louie.yaml")));

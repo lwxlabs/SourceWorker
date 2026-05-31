@@ -23,6 +23,9 @@ public static class DependencyInjection
         services.AddSingleton<IContextFreshnessService, ContextFreshnessService>();
         services.AddSingleton<IContextStatusService, ContextFreshnessService>();
         services.AddSingleton<IChangeSetService, ChangeSetService>();
+        services.AddSingleton<IGeneratedArtifactLifecycleService, GeneratedArtifactLifecycleService>();
+        services.AddSingleton<IArtifactStatusService, GeneratedArtifactLifecycleService>();
+        services.AddSingleton<IGeneratedArtifactCleanupService, GeneratedArtifactCleanupService>();
         services.AddSingleton<IRecipeFactory, RecipeFactory>();
         services.AddSingleton<IRecipeRepository, FileRecipeRepository>();
         services.AddSingleton<IRecipeRunner, BasicRecipeRunner>();

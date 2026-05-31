@@ -1,10 +1,10 @@
 <!--
 GeneratedBy: SourceWorker
 FormatVersion: 2
-ProjectId: 76752664-849e-478a-a90b-60fd40e6769d
-ScanRunId: 992dd8ef-b429-400f-b653-6fb6a9776f7c
+ProjectId: d4348923-193c-4c0b-9b5d-aec1406a5966
+ScanRunId: 6b790c8b-6de1-4b43-85e6-500157365b3d
 RecipeId: backend-docs-compact
-GeneratedUtc: 2026-05-31T15:46:55.5616171+00:00
+GeneratedUtc: 2026-05-31T16:08:50.1256386+00:00
 InputHash: 6ffef1715cec01d74b46ffcd856188b22baddd7c585da3a5d7b361ee458695b2
 ContentHash: 6ffef1715cec01d74b46ffcd856188b22baddd7c585da3a5d7b361ee458695b2
 Status: Generated

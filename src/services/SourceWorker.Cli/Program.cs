@@ -141,6 +141,77 @@ switch (args[0].ToLowerInvariant())
         foreach (var action in status.RecommendedActions) Console.WriteLine($"Recommended: {action}");
         return 0;
     }
+    case "storage-info":
+    {
+        var info = await flow.Send(new GetStorageInfoQuery());
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        else
+        {
+            Console.WriteLine($"Storage provider: {info.Schema.Provider}");
+            Console.WriteLine($"Storage mode: {info.Schema.Mode}");
+            Console.WriteLine($"Storage path: {info.Schema.StoragePath}");
+            Console.WriteLine($"Schema version: {info.Schema.SchemaVersion}");
+            Console.WriteLine($"Projects: {info.ProjectCount}");
+            Console.WriteLine($"Scan runs: {info.ScanRunCount}");
+            Console.WriteLine($"Indexed files: {info.IndexedFileCount}");
+            Console.WriteLine($"Generated artifacts: {info.GeneratedArtifactCount}");
+            Console.WriteLine($"Jobs: {info.JobCount}");
+            Console.WriteLine($"Instructions: {info.InstructionCount}");
+            Console.WriteLine($"Recipes: {info.RecipeCount}");
+        }
+
+        return 0;
+    }
+    case "artifacts" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var report = await flow.Send(new GetArtifactsQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        else
+        {
+            foreach (var artifact in report.Artifacts)
+            {
+                Console.WriteLine($"{artifact.Status} {artifact.RecipeId ?? "-"} {artifact.RelativePath} {artifact.GeneratedUtc:O}");
+            }
+            foreach (var path in report.OrphanedArtifacts) Console.WriteLine($"Orphaned {path}");
+            foreach (var path in report.DeprecatedArtifacts) Console.WriteLine($"Deprecated {path}");
+        }
+
+        return 0;
+    }
+    case "cleanup-preview" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var preview = await flow.Send(new GetCleanupPreviewQuery(project.Id));
+        if (args.Contains("--json", StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(JsonSerializer.Serialize(preview, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        else
+        {
+            Console.WriteLine("Safe cleanup candidates:");
+            foreach (var file in preview.SafeDeleteFiles) Console.WriteLine(file);
+            foreach (var warning in preview.Warnings) Console.WriteLine($"Warning: {warning}");
+        }
+
+        return 0;
+    }
+    case "cleanup-generated" when args.Length >= 2:
+    {
+        var project = await flow.Send(new AddProjectCommand(args[1]));
+        var result = await flow.Send(new CleanupGeneratedCommand(project.Id, args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase), args.Contains("--force", StringComparer.OrdinalIgnoreCase)));
+        Console.WriteLine($"Dry run: {result.DryRun}");
+        foreach (var file in result.DeletedFiles) Console.WriteLine(result.DryRun ? $"Would delete: {file}" : $"Deleted: {file}");
+        foreach (var file in result.SkippedFiles) Console.WriteLine($"Skipped: {file}");
+        foreach (var warning in result.Warnings) Console.WriteLine($"Warning: {warning}");
+        return 0;
+    }
     default:
         PrintUsage();
         return 1;
@@ -161,6 +232,10 @@ static void PrintUsage()
     Console.WriteLine("sourceworker doctor <path> [--json]");
     Console.WriteLine("sourceworker changes <path> [--json]");
     Console.WriteLine("sourceworker context-status <path>");
+    Console.WriteLine("sourceworker storage-info [--json]");
+    Console.WriteLine("sourceworker artifacts <path> [--json]");
+    Console.WriteLine("sourceworker cleanup-preview <path> [--json]");
+    Console.WriteLine("sourceworker cleanup-generated <path> [--dry-run] [--force]");
     Console.WriteLine("sourceworker recipes <path>");
     Console.WriteLine("sourceworker run-recipe <path> <recipeId> [--force]");
 }

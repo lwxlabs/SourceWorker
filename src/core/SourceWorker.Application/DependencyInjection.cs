@@ -19,6 +19,10 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<RunRecipeCommand, SourceWorker.Contracts.RunRecipeResponse>, RunRecipeCommandHandler>();
         services.AddScoped<IRequestHandler<GetProjectChangesQuery, SourceWorker.Domain.ChangeSetReport>, GetProjectChangesQueryHandler>();
         services.AddScoped<IRequestHandler<GetContextStatusQuery, SourceWorker.Domain.ContextFreshnessReport>, GetContextStatusQueryHandler>();
+        services.AddScoped<IRequestHandler<GetStorageInfoQuery, SourceWorker.Domain.StorageInfo>, GetStorageInfoQueryHandler>();
+        services.AddScoped<IRequestHandler<GetArtifactsQuery, SourceWorker.Domain.ArtifactLifecycleReport>, GetArtifactsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetCleanupPreviewQuery, SourceWorker.Domain.CleanupPreviewReport>, GetCleanupPreviewQueryHandler>();
+        services.AddScoped<IRequestHandler<CleanupGeneratedCommand, SourceWorker.Domain.CleanupResult>, CleanupGeneratedCommandHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
         return services;
     }

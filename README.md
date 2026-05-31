@@ -27,6 +27,10 @@ dotnet run --project src/services/SourceWorker.Cli -- import-instructions C:\pat
 dotnet run --project src/services/SourceWorker.Cli -- doctor C:\path\to\project --json
 dotnet run --project src/services/SourceWorker.Cli -- changes C:\path\to\project --json
 dotnet run --project src/services/SourceWorker.Cli -- context-status C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- artifacts C:\path\to\project --json
+dotnet run --project src/services/SourceWorker.Cli -- cleanup-preview C:\path\to\project
+dotnet run --project src/services/SourceWorker.Cli -- cleanup-generated C:\path\to\project --dry-run
+dotnet run --project src/services/SourceWorker.Cli -- storage-info --json
 dotnet run --project src/services/SourceWorker.Cli -- recipes C:\path\to\project
 dotnet run --project src/services/SourceWorker.Cli -- run-recipe C:\path\to\project backend-docs-compact --force
 ```
@@ -55,6 +59,6 @@ Scanning writes:
 
 The first rule-based recipe, `backend-docs-compact`, also writes compact backend documentation to `instructions/Result/Backend/`.
 
-Generated markdown includes SourceWorker metadata comments with format version, project id, scan run id, recipe id, generated UTC, input hash, content hash, and status. Doctor/context-status use these records to detect missing or manually modified generated files.
+Generated markdown includes SourceWorker metadata comments with format version, project id, scan run id, recipe id, generated UTC, input hash, content hash, and status. Doctor/context-status/artifacts use these records to detect missing, manually modified, orphaned, and deprecated generated files. `cleanup-preview` is read-only; `cleanup-generated` only deletes confidently generated orphan/deprecated files.
 
 See [docs/first-mvp.md](docs/first-mvp.md) for run commands.

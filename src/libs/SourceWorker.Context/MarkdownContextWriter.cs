@@ -5,7 +5,7 @@ using SourceWorker.Domain;
 
 namespace SourceWorker.Context;
 
-public sealed class MarkdownContextWriter(IProjectInstructionRepository? instructions = null, ISourcePathValidator? validator = null, IGeneratedArtifactRepository? artifacts = null, IContextFreshnessService? freshnessService = null) : IContextWriter
+public sealed class MarkdownContextWriter(IProjectInstructionRepository? instructions = null, ISourcePathValidator? validator = null, IGeneratedArtifactRepository? artifacts = null, IContextFreshnessService? freshnessService = null, ILocalStorageSchemaService? schemaService = null, IGeneratedArtifactLifecycleService? lifecycleService = null) : IContextWriter
 {
     public async Task<ContextWriteResult> WriteBasicContextAsync(ProjectScanResult scanResult, CancellationToken cancellationToken)
     {
@@ -22,10 +22,12 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         var freshness = freshnessService is null
             ? new ContextFreshnessReport(scanResult.Project.Id, false, [], [], [], [], 100, [])
             : await freshnessService.CheckAsync(scanResult.Project, cancellationToken);
+        var schema = schemaService is null ? null : await schemaService.GetInfoAsync(cancellationToken);
+        var lifecycle = lifecycleService is null ? null : await lifecycleService.AnalyzeAsync(scanResult.Project, cancellationToken);
         var files = new Dictionary<string, string>
         {
             ["CONTEXT.md"] = RootContext(scanResult, imported),
-            ["index.yaml"] = Index(scanResult, imported, validation),
+            ["index.yaml"] = Index(scanResult, imported, validation, schema, lifecycle),
             ["project.md"] = Project(scanResult),
             ["architecture.md"] = Architecture(scanResult),
             ["current-state.md"] = CurrentState(scanResult, freshness),
@@ -304,10 +306,10 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Captured at: {scan.Git.CapturedAt:O}
         """;
 
-    private static string Index(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation)
+    private static string Index(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, LocalStorageSchemaInfo? schema, ArtifactLifecycleReport? lifecycle)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("formatVersion: 2");
+        builder.AppendLine("formatVersion: 3");
         builder.AppendLine("project:");
         builder.AppendLine($"  id: \"{scan.Project.Id}\"");
         builder.AppendLine($"  name: \"{Escape(scan.Project.Name)}\"");
@@ -320,6 +322,10 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine("git:");
         builder.AppendLine($"  branch: \"{Escape(scan.Git.Branch ?? string.Empty)}\"");
         builder.AppendLine($"  hasUncommittedChanges: {scan.Git.IsDirty.ToString().ToLowerInvariant()}");
+        builder.AppendLine("storage:");
+        builder.AppendLine("  provider: Localite");
+        builder.AppendLine("  mode: table-backed");
+        builder.AppendLine($"  schemaVersion: {schema?.SchemaVersion ?? 1}");
         builder.AppendLine("contextFiles:");
         foreach (var path in new[] { "CONTEXT.md", "project.md", "architecture.md", "current-state.md", "tasks.md", "ai-handoff.md", "scans/latest-scan.md", "branches/current.md" })
         {
@@ -332,10 +338,21 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine("    path: \".ai-context/recipes/backend-docs-compact.yaml\"");
         builder.AppendLine("    outputPath: \"instructions/Result/Backend\"");
         builder.AppendLine("stale:");
-        builder.AppendLine("  hasStaleContext: false");
+        builder.AppendLine($"  hasStaleContext: {((lifecycle?.CleanupRecommended ?? false)).ToString().ToLowerInvariant()}");
         builder.AppendLine("  staleFiles: []");
-        builder.AppendLine("  missingGeneratedFiles: []");
-        builder.AppendLine("  manuallyModifiedFiles: []");
+        builder.AppendLine($"  missingGeneratedFiles: [{string.Join(", ", lifecycle?.MissingArtifacts.Select(EscapeYamlList) ?? [])}]");
+        builder.AppendLine($"  manuallyModifiedFiles: [{string.Join(", ", lifecycle?.ManuallyModifiedArtifacts.Select(EscapeYamlList) ?? [])}]");
+        builder.AppendLine("artifacts:");
+        builder.AppendLine($"  total: {lifecycle?.Artifacts.Count ?? 0}");
+        builder.AppendLine($"  generated: {lifecycle?.Artifacts.Count(a => a.Status == GeneratedArtifactStatus.Generated) ?? 0}");
+        builder.AppendLine($"  stale: {lifecycle?.StaleArtifacts.Count ?? 0}");
+        builder.AppendLine($"  missing: {lifecycle?.MissingArtifacts.Count ?? 0}");
+        builder.AppendLine($"  manuallyModified: {lifecycle?.ManuallyModifiedArtifacts.Count ?? 0}");
+        builder.AppendLine($"  orphaned: {lifecycle?.OrphanedArtifacts.Count ?? 0}");
+        builder.AppendLine($"  deprecated: {lifecycle?.DeprecatedArtifacts.Count ?? 0}");
+        builder.AppendLine("cleanup:");
+        builder.AppendLine($"  recommended: {((lifecycle?.CleanupRecommended ?? false)).ToString().ToLowerInvariant()}");
+        builder.AppendLine($"  previewCommand: \"sourceworker cleanup-preview {Escape(scan.Project.RootPath)}\"");
         if (imported is not null)
         {
             builder.AppendLine("instructions:");
@@ -423,4 +440,5 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
     }
 
     private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    private static string EscapeYamlList(string value) => $"\"{Escape(value)}\"";
 }

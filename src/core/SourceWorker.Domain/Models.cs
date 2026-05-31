@@ -118,7 +118,7 @@ public sealed record DoctorReport(
 
 public enum SourcePathType { File, Folder, Unknown }
 public enum GeneratedArtifactType { ContextFile, RecipeFile, BackendDocs, InstructionFile, ValidationFile, Other }
-public enum GeneratedArtifactStatus { Generated, ManuallyModified, Stale, Missing }
+public enum GeneratedArtifactStatus { Generated, ManuallyModified, Stale, Missing, Orphaned, Deprecated }
 
 public sealed record GeneratedArtifact(
     Guid Id,
@@ -153,3 +153,19 @@ public sealed record ChangeSetReport(
     IReadOnlyList<string> DeletedFiles,
     int UnchangedCount,
     int IgnoredCount);
+
+public sealed record LocalStorageSchemaInfo(string Provider, string Mode, string StoragePath, int SchemaVersion, DateTimeOffset CreatedUtc, DateTimeOffset LastMigratedUtc, string AppStorageFormatVersion);
+public sealed record StorageInfo(LocalStorageSchemaInfo Schema, int ProjectCount, int ScanRunCount, int IndexedFileCount, int GeneratedArtifactCount, int JobCount, int InstructionCount, int RecipeCount, bool RepositoryHealth);
+
+public sealed record ArtifactLifecycleReport(
+    Guid ProjectId,
+    IReadOnlyList<GeneratedArtifact> Artifacts,
+    IReadOnlyList<string> MissingArtifacts,
+    IReadOnlyList<string> ManuallyModifiedArtifacts,
+    IReadOnlyList<string> StaleArtifacts,
+    IReadOnlyList<string> OrphanedArtifacts,
+    IReadOnlyList<string> DeprecatedArtifacts,
+    bool CleanupRecommended);
+
+public sealed record CleanupPreviewReport(Guid ProjectId, IReadOnlyList<string> SafeDeleteFiles, IReadOnlyList<string> MissingTrackedArtifacts, IReadOnlyList<string> StaleTrackedArtifacts, IReadOnlyList<string> Warnings);
+public sealed record CleanupResult(Guid ProjectId, bool DryRun, IReadOnlyList<string> DeletedFiles, IReadOnlyList<string> SkippedFiles, IReadOnlyList<string> Warnings);

@@ -135,6 +135,37 @@ public interface IContextStatusService
     Task<ContextFreshnessReport> GetStatusAsync(Project project, CancellationToken cancellationToken);
 }
 
+public interface ILocalStorageSchemaService
+{
+    Task<LocalStorageSchemaInfo> GetInfoAsync(CancellationToken cancellationToken);
+}
+
+public interface IStorageInfoService
+{
+    Task<StorageInfo> GetInfoAsync(CancellationToken cancellationToken);
+}
+
+public interface IGeneratedArtifactLifecycleService
+{
+    Task<ArtifactLifecycleReport> AnalyzeAsync(Project project, CancellationToken cancellationToken);
+}
+
+public interface IGeneratedArtifactCleanupService
+{
+    Task<CleanupPreviewReport> PreviewAsync(Project project, CancellationToken cancellationToken);
+    Task<CleanupResult> CleanupAsync(Project project, bool dryRun, bool force, CancellationToken cancellationToken);
+}
+
+public interface IArtifactStatusService
+{
+    Task<ArtifactLifecycleReport> GetArtifactsAsync(Project project, CancellationToken cancellationToken);
+}
+
+public interface IStorageHealthService
+{
+    Task<bool> CheckAsync(CancellationToken cancellationToken);
+}
+
 public interface ILocalJobQueue
 {
     ValueTask EnqueueAsync(Guid jobId, CancellationToken cancellationToken);

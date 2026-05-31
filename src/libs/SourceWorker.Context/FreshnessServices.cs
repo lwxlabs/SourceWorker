@@ -3,11 +3,12 @@ using SourceWorker.Domain;
 
 namespace SourceWorker.Context;
 
-public sealed class ContextFreshnessService(IGeneratedArtifactRepository artifacts, IProjectInstructionRepository instructions, ISourcePathValidator validator) : IContextFreshnessService, IContextStatusService
+public sealed class ContextFreshnessService(IGeneratedArtifactRepository artifacts, IProjectInstructionRepository instructions, ISourcePathValidator validator, IGeneratedArtifactLifecycleService? lifecycle = null) : IContextFreshnessService, IContextStatusService
 {
     public async Task<ContextFreshnessReport> CheckAsync(Project project, CancellationToken cancellationToken)
     {
         var all = await artifacts.GetByProjectAsync(project.Id, cancellationToken);
+        var lifecycleReport = lifecycle is null ? null : await lifecycle.AnalyzeAsync(project, cancellationToken);
         var missing = new List<string>();
         var manual = new List<string>();
         var stale = new List<string>();
@@ -33,10 +34,12 @@ public sealed class ContextFreshnessService(IGeneratedArtifactRepository artifac
 
         var doc = await instructions.GetLatestAsync(project.Id, cancellationToken);
         var validationWarnings = doc is null ? 0 : validator.Validate(project.RootPath, doc.SourcePaths.Select(p => p.OriginalPath)).Count(p => p.WarningMessage is not null);
-        var score = Math.Clamp(100 - (missing.Count * 20) - (manual.Count * 15) - (stale.Count * 10) - (validationWarnings * 5), 0, 100);
+        var orphanDeprecated = (lifecycleReport?.OrphanedArtifacts.Count ?? 0) + (lifecycleReport?.DeprecatedArtifacts.Count ?? 0);
+        var score = Math.Clamp(100 - (missing.Count * 20) - (manual.Count * 15) - (stale.Count * 10) - (orphanDeprecated * 5) - (validationWarnings * 5), 0, 100);
         var actions = new List<string>();
         if (missing.Count > 0) actions.Add($"run sourceworker scan \"{project.RootPath}\"");
         if (stale.Count > 0) actions.Add($"run sourceworker run-recipe \"{project.RootPath}\" backend-docs-compact");
+        if (orphanDeprecated > 0) actions.Add($"run sourceworker cleanup-preview \"{project.RootPath}\"");
         if (manual.Count > 0) actions.Add("review manually modified generated files");
         if (actions.Count == 0) actions.Add("no action required");
 

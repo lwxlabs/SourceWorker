@@ -15,6 +15,10 @@ public sealed record GetRecipesQuery(Guid ProjectId) : IRequest<IReadOnlyList<Re
 public sealed record RunRecipeCommand(Guid ProjectId, string RecipeId, bool Force = false) : IRequest<RunRecipeResponse>;
 public sealed record GetProjectChangesQuery(Guid ProjectId) : IRequest<ChangeSetReport>;
 public sealed record GetContextStatusQuery(Guid ProjectId) : IRequest<ContextFreshnessReport>;
+public sealed record GetStorageInfoQuery : IRequest<StorageInfo>;
+public sealed record GetArtifactsQuery(Guid ProjectId) : IRequest<ArtifactLifecycleReport>;
+public sealed record GetCleanupPreviewQuery(Guid ProjectId) : IRequest<CleanupPreviewReport>;
+public sealed record CleanupGeneratedCommand(Guid ProjectId, bool DryRun, bool Force) : IRequest<CleanupResult>;
 
 public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
@@ -159,6 +163,38 @@ public sealed class GetContextStatusQueryHandler(IProjectRepository projects, IC
     {
         var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{request.ProjectId}' was not found.");
         return await status.GetStatusAsync(project, cancellationToken);
+    }
+}
+
+public sealed class GetStorageInfoQueryHandler(IStorageInfoService storage) : IRequestHandler<GetStorageInfoQuery, StorageInfo>
+{
+    public Task<StorageInfo> Handle(GetStorageInfoQuery request, CancellationToken cancellationToken) => storage.GetInfoAsync(cancellationToken);
+}
+
+public sealed class GetArtifactsQueryHandler(IProjectRepository projects, IGeneratedArtifactLifecycleService lifecycle) : IRequestHandler<GetArtifactsQuery, ArtifactLifecycleReport>
+{
+    public async Task<ArtifactLifecycleReport> Handle(GetArtifactsQuery request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{request.ProjectId}' was not found.");
+        return await lifecycle.AnalyzeAsync(project, cancellationToken);
+    }
+}
+
+public sealed class GetCleanupPreviewQueryHandler(IProjectRepository projects, IGeneratedArtifactCleanupService cleanup) : IRequestHandler<GetCleanupPreviewQuery, CleanupPreviewReport>
+{
+    public async Task<CleanupPreviewReport> Handle(GetCleanupPreviewQuery request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{request.ProjectId}' was not found.");
+        return await cleanup.PreviewAsync(project, cancellationToken);
+    }
+}
+
+public sealed class CleanupGeneratedCommandHandler(IProjectRepository projects, IGeneratedArtifactCleanupService cleanup) : IRequestHandler<CleanupGeneratedCommand, CleanupResult>
+{
+    public async Task<CleanupResult> Handle(CleanupGeneratedCommand request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{request.ProjectId}' was not found.");
+        return await cleanup.CleanupAsync(project, request.DryRun, request.Force, cancellationToken);
     }
 }
 

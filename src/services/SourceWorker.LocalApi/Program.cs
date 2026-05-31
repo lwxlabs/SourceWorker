@@ -57,6 +57,19 @@ app.MapGet("/api/projects/{id:guid}/scan-runs/latest", async (Guid id, IScanRunR
     return scan is null ? Results.NotFound() : Results.Ok(scan);
 });
 
+app.MapGet("/api/storage/info", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetStorageInfoQuery(), cancellationToken)));
+
+app.MapGet("/api/projects/{id:guid}/artifacts", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetArtifactsQuery(id), cancellationToken)));
+
+app.MapGet("/api/projects/{id:guid}/cleanup-preview", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetCleanupPreviewQuery(id), cancellationToken)));
+
+app.MapPost("/api/projects/{id:guid}/cleanup-generated", async (Guid id, CleanupGeneratedRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CleanupGeneratedCommand(id, request.DryRun, request.Force), cancellationToken)));
+
 app.Run();
 
 public partial class Program;
+public sealed record CleanupGeneratedRequest(bool DryRun, bool Force);
