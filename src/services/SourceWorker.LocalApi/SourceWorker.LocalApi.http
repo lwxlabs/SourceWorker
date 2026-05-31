@@ -1,0 +1,6 @@
+@SourceWorker.LocalApi_HostAddress = http://localhost:5255
+
+GET {{SourceWorker.LocalApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -408,5 +408,4 @@ TEST*.xml
 *.exe
 *.war
 
-# UI
-/ui/
+

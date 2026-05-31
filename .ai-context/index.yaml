@@ -1,0 +1,142 @@
+version: 1
+projectId: 76752664-849e-478a-a90b-60fd40e6769d
+scanRunId: e96129e5-3e8e-4037-a381-5b1d722f1813
+files:
+  - path: ".dockerignore"
+    kind: Other
+    sizeBytes: 422
+  - path: ".gitignore"
+    kind: Other
+    sizeBytes: 7135
+  - path: "SourceWorker.slnx"
+    kind: Solution
+    sizeBytes: 1805
+  - path: "src/core/SourceWorker.Application/DependencyInjection.cs"
+    kind: Source
+    sizeBytes: 1058
+  - path: "src/core/SourceWorker.Application/Flow/FlowAbstractions.cs"
+    kind: Source
+    sizeBytes: 966
+  - path: "src/core/SourceWorker.Application/Interfaces.cs"
+    kind: Source
+    sizeBytes: 2517
+  - path: "src/core/SourceWorker.Application/Requests.cs"
+    kind: Source
+    sizeBytes: 4171
+  - path: "src/core/SourceWorker.Application/SourceWorker.Application.csproj"
+    kind: Project
+    sizeBytes: 570
+  - path: "src/core/SourceWorker.Contracts/Contracts.cs"
+    kind: Source
+    sizeBytes: 614
+  - path: "src/core/SourceWorker.Contracts/SourceWorker.Contracts.csproj"
+    kind: Project
+    sizeBytes: 338
+  - path: "src/core/SourceWorker.Domain/Models.cs"
+    kind: Source
+    sizeBytes: 1954
+  - path: "src/core/SourceWorker.Domain/SourceWorker.Domain.csproj"
+    kind: Project
+    sizeBytes: 219
+  - path: "src/core/SW.Core/SW.Core.csproj"
+    kind: Project
+    sizeBytes: 219
+  - path: "src/infrastructure/SourceWorker.FileSystem/Placeholder.cs"
+    kind: Source
+    sizeBytes: 82
+  - path: "src/infrastructure/SourceWorker.FileSystem/SourceWorker.FileSystem.csproj"
+    kind: Project
+    sizeBytes: 356
+  - path: "src/infrastructure/SourceWorker.Git/BasicGitInspector.cs"
+    kind: Source
+    sizeBytes: 1733
+  - path: "src/infrastructure/SourceWorker.Git/SourceWorker.Git.csproj"
+    kind: Project
+    sizeBytes: 450
+  - path: "src/infrastructure/SourceWorker.Infrastructure/DependencyInjection.cs"
+    kind: Source
+    sizeBytes: 776
+  - path: "src/infrastructure/SourceWorker.Infrastructure/SourceWorker.Infrastructure.csproj"
+    kind: Project
+    sizeBytes: 970
+  - path: "src/infrastructure/SourceWorker.Markdown/Placeholder.cs"
+    kind: Source
+    sizeBytes: 78
+  - path: "src/infrastructure/SourceWorker.Markdown/SourceWorker.Markdown.csproj"
+    kind: Project
+    sizeBytes: 356
+  - path: "src/infrastructure/SourceWorker.Storage.Localite/LocaliteRepositories.cs"
+    kind: Source
+    sizeBytes: 6177
+  - path: "src/infrastructure/SourceWorker.Storage.Localite/SourceWorker.Storage.Localite.csproj"
+    kind: Project
+    sizeBytes: 651
+  - path: "src/libs/SourceWorker.Context/MarkdownContextWriter.cs"
+    kind: Source
+    sizeBytes: 3612
+  - path: "src/libs/SourceWorker.Context/SourceWorker.Context.csproj"
+    kind: Project
+    sizeBytes: 450
+  - path: "src/libs/SourceWorker.Recipes/BasicRecipeRunner.cs"
+    kind: Source
+    sizeBytes: 450
+  - path: "src/libs/SourceWorker.Recipes/SourceWorker.Recipes.csproj"
+    kind: Project
+    sizeBytes: 356
+  - path: "src/libs/SourceWorker.Scanner/BasicProjectScanner.cs"
+    kind: Source
+    sizeBytes: 7672
+  - path: "src/libs/SourceWorker.Scanner/SourceWorker.Scanner.csproj"
+    kind: Project
+    sizeBytes: 450
+  - path: "src/libs/SW.Local.Scanner/SW.Local.Scanner.csproj"
+    kind: Project
+    sizeBytes: 219
+  - path: "src/services/SourceWorker.Cli/Program.cs"
+    kind: Source
+    sizeBytes: 1701
+  - path: "src/services/SourceWorker.Cli/SourceWorker.Cli.csproj"
+    kind: Project
+    sizeBytes: 723
+  - path: "src/services/SourceWorker.LocalApi/appsettings.Development.json"
+    kind: Source
+    sizeBytes: 127
+  - path: "src/services/SourceWorker.LocalApi/appsettings.json"
+    kind: Source
+    sizeBytes: 151
+  - path: "src/services/SourceWorker.LocalApi/Program.cs"
+    kind: Source
+    sizeBytes: 1496
+  - path: "src/services/SourceWorker.LocalApi/Properties/launchSettings.json"
+    kind: Source
+    sizeBytes: 644
+  - path: "src/services/SourceWorker.LocalApi/SourceWorker.LocalApi.csproj"
+    kind: Project
+    sizeBytes: 678
+  - path: "src/services/SourceWorker.LocalApi/SourceWorker.LocalApi.http"
+    kind: Other
+    sizeBytes: 155
+  - path: "src/services/SourceWorker.Worker/InProcessJobs.cs"
+    kind: Source
+    sizeBytes: 3573
+  - path: "src/services/SourceWorker.Worker/SourceWorker.Worker.csproj"
+    kind: Project
+    sizeBytes: 578
+  - path: "tests/SourceWorker.Tests.Application/ApplicationFlowTests.cs"
+    kind: Source
+    sizeBytes: 1014
+  - path: "tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj"
+    kind: Project
+    sizeBytes: 1095
+  - path: "tests/SourceWorker.Tests.LocalApi/HealthTests.cs"
+    kind: Source
+    sizeBytes: 408
+  - path: "tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj"
+    kind: Project
+    sizeBytes: 859
+  - path: "tests/SourceWorker.Tests.Scanner/BasicProjectScannerTests.cs"
+    kind: Source
+    sizeBytes: 2061
+  - path: "tests/SourceWorker.Tests.Scanner/SourceWorker.Tests.Scanner.csproj"
+    kind: Project
+    sizeBytes: 767
