@@ -19,12 +19,13 @@ public sealed class PersistenceAndFreshnessTests
 
         var sp = new ServiceCollection()
             .AddSourceWorkerApplication()
-            .AddSourceWorkerInfrastructure()
+            .AddTestSourceWorkerInfrastructure()
             .AddSourceWorkerJobs(addHostedWorker: false)
             .BuildServiceProvider();
 
         var flow = sp.GetRequiredService<LwX.Flow.IRequestFlow>();
         var project = await flow.Send(new AddProjectCommand(root, "Sample"));
+        await flow.Send(new GenerateBasicContextCommand(project.Id));
         await flow.Send(new GenerateBasicContextCommand(project.Id));
 
         var scanRuns = sp.GetRequiredService<IScanRunRepository>();
@@ -33,7 +34,9 @@ public sealed class PersistenceAndFreshnessTests
         var latest = await scanRuns.GetLatestAsync(project.Id, CancellationToken.None);
         Assert.NotNull(latest);
         Assert.NotEmpty(await files.GetByScanRunAsync(latest!.Id, CancellationToken.None));
-        Assert.NotEmpty(await artifacts.GetByProjectAsync(project.Id, CancellationToken.None));
+        var projectArtifacts = await artifacts.GetByProjectAsync(project.Id, CancellationToken.None);
+        Assert.NotEmpty(projectArtifacts);
+        Assert.Equal(projectArtifacts.Count, projectArtifacts.Select(a => a.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.NotEmpty(await sp.GetRequiredService<ICodeSymbolRepository>().GetByProjectAsync(project.Id, CancellationToken.None));
         Assert.NotEmpty(await sp.GetRequiredService<ICodeFlowRepository>().GetByProjectAsync(project.Id, CancellationToken.None));
 
@@ -43,3 +46,4 @@ public sealed class PersistenceAndFreshnessTests
         Assert.Contains(status.ManuallyModifiedFiles, path => path.EndsWith("README.md", StringComparison.OrdinalIgnoreCase));
     }
 }
+

@@ -1,0 +1,24 @@
+<nav class="project-tabs">
+    @foreach (var item in SourceWorkerNavigation.ProjectPrimary)
+    {
+        <a class="@TabClass(item.RelativePath)" href="@Href(item.RelativePath)">@item.Label</a>
+    }
+    <details class="project-tabs-advanced">
+        <summary>Advanced</summary>
+        @foreach (var item in SourceWorkerNavigation.ProjectAdvanced)
+        {
+            <a class="@TabClass(item.RelativePath)" href="@Href(item.RelativePath)">@item.Label</a>
+        }
+    </details>
+</nav>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public string Active { get; set; } = "";
+
+    private string Href(string relative)
+        => string.IsNullOrWhiteSpace(relative) ? $"/projects/{ProjectId}" : $"/projects/{ProjectId}/{relative}";
+
+    private string TabClass(string relative)
+        => Active.Equals(relative, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrWhiteSpace(relative) && string.IsNullOrWhiteSpace(Active)) ? "active" : "";
+}

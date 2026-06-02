@@ -1,0 +1,15 @@
+<header class="project-workspace-header">
+    <div>
+        <p class="eyebrow">Selected project</p>
+        <h1>@(Context.Project?.Name ?? "Project")</h1>
+        <p class="path">@Context.Project?.RootPath</p>
+    </div>
+    <ProjectPrimaryActions Context="@Context" OnRefreshRequested="@OnRefreshRequested" />
+</header>
+
+<ProjectStatusBar Context="@Context" />
+
+@code {
+    [Parameter, EditorRequired] public ProjectWorkspaceContext Context { get; set; } = default!;
+    [Parameter] public EventCallback OnRefreshRequested { get; set; }
+}

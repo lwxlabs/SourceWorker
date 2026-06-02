@@ -113,6 +113,8 @@ app.MapGet("/api/projects", async (
 
 app.MapPost("/api/projects", async (AddProjectRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(new CreateProjectResponse(await flow.Send(new AddProjectCommand(request.Path, request.Name), cancellationToken))));
+app.MapDelete("/api/projects/{id:guid}", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new DeleteProjectCommand(id), cancellationToken) ? Results.NoContent() : Results.NotFound());
 app.MapPost("/api/projects/validate-path", async (ValidateProjectPathRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new ValidateProjectPathCommand(request.Path), cancellationToken)));
 app.MapGet("/api/projects/recent-paths", async (IRequestFlow flow, CancellationToken cancellationToken)
@@ -147,6 +149,10 @@ app.MapGet("/api/projects/{id:guid}/changes", async (Guid id, IRequestFlow flow,
 
 app.MapGet("/api/projects/{id:guid}/context-status", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetContextStatusQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/agent-handoff", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAgentHandoffQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/scan-completeness", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetScanCompletenessQuery(id), cancellationToken)));
 
 app.MapGet("/api/projects/{id:guid}/context-files", async (Guid id, IGeneratedArtifactRepository artifacts, CancellationToken cancellationToken)
     => Results.Ok((await artifacts.GetByProjectAsync(id, cancellationToken)).Where(a => a.Type == SourceWorker.Domain.GeneratedArtifactType.ContextFile)));
@@ -179,7 +185,7 @@ app.MapGet("/api/projects/{id:guid}/service-registrations", async (Guid id, ISer
 app.MapGet("/api/projects/{id:guid}/configuration-usages", async (Guid id, IConfigurationUsageRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/tests", async (Guid id, ITestInfoRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextBrowserQuery(id), cancellationToken)));
-app.MapGet("/api/projects/{id:guid}/context-browser/files", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextFilesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-browser/files", async (Guid id, [FromQuery] bool showTechnical, [FromQuery] bool showExports, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextFilesQuery(id, showTechnical, showExports), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser/files/{*relativePath}", async (Guid id, string relativePath, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadContextFileQuery(id, relativePath), cancellationToken), "text/plain"));
 app.MapGet("/api/projects/{id:guid}/context-browser/search", async (Guid id, string query, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new SearchContextQuery(id, query), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/outputs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetOutputsQuery(id), cancellationToken)));

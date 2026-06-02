@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
 using SourceWorker.Contracts;
 using SourceWorker.Domain;
@@ -11,12 +9,25 @@ public sealed class HealthTests
     [Fact]
     public async Task Health_returns_ok()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        await using var factory = TestApiFactory.Create(requireToken: false);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/health");
 
         response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Storage_info_uses_isolated_test_database()
+    {
+        await using var factory = TestApiFactory.Create(requireToken: false);
+        using var client = factory.CreateClient();
+
+        var info = await client.GetFromJsonAsync<StorageInfo>("/api/storage/info");
+
+        Assert.NotNull(info);
+        Assert.DoesNotContain(Path.Combine("AppData", "Local", "SourceWorker", "sourceworker.localite.db"), info!.Schema.StoragePath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(Path.Combine(Path.GetTempPath(), "sourceworker-localapi-test-db"), info.Schema.StoragePath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -27,7 +38,7 @@ public sealed class HealthTests
         await File.WriteAllTextAsync(Path.Combine(root, "ApiSample.sln"), "");
         await File.WriteAllTextAsync(Path.Combine(root, "src", "ApiSample.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>");
 
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        await using var factory = TestApiFactory.Create(requireToken: false);
         using var client = factory.CreateClient();
         var created = await (await client.PostAsJsonAsync("/api/projects", new AddProjectRequest(root, "ApiSample"))).Content.ReadFromJsonAsync<CreateProjectResponse>();
 
@@ -35,6 +46,8 @@ public sealed class HealthTests
         (await client.GetAsync($"/api/projects/{created!.Project.Id}/doctor")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/changes")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/context-status")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/agent-handoff")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/scan-completeness")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/scan-runs")).EnsureSuccessStatusCode();
         await client.PostAsync($"/api/projects/{created.Project.Id}/scan", null);
         (await client.GetAsync("/api/storage/info")).EnsureSuccessStatusCode();
@@ -45,7 +58,8 @@ public sealed class HealthTests
         (await client.GetAsync($"/api/projects/{created.Project.Id}/flows")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/routes")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser")).EnsureSuccessStatusCode();
-        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/files")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/files?showTechnical=false&showExports=false")).EnsureSuccessStatusCode();
+        (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/files?showTechnical=true&showExports=true")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/context-browser/search?query=Sample")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/outputs")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/projects/{created.Project.Id}/packs")).EnsureSuccessStatusCode();
@@ -57,7 +71,7 @@ public sealed class HealthTests
     [Fact]
     public async Task Ai_endpoints_require_token()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "true" })));
+        await using var factory = TestApiFactory.Create(requireToken: true);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/ai/providers");
@@ -72,7 +86,7 @@ public sealed class HealthTests
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# Sample");
 
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        await using var factory = TestApiFactory.Create(requireToken: false);
         using var client = factory.CreateClient();
         var created = await (await client.PostAsJsonAsync("/api/projects", new AddProjectRequest(root, "AiSample"))).Content.ReadFromJsonAsync<CreateProjectResponse>();
         Assert.NotNull(created);
@@ -106,7 +120,7 @@ public sealed class HealthTests
         var root = Path.Combine(Path.GetTempPath(), "sourceworker-api-dogfood-" + Guid.NewGuid());
         Directory.CreateDirectory(root);
 
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["SourceWorker:LocalApi:RequireToken"] = "false" })));
+        await using var factory = TestApiFactory.Create(requireToken: false);
         using var client = factory.CreateClient();
 
         (await client.PostAsJsonAsync("/api/projects/validate-path", new { path = root })).EnsureSuccessStatusCode();

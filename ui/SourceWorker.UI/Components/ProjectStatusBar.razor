@@ -1,0 +1,14 @@
+<div class="project-status-bar">
+    <span>Last scan: @(Context.LastScanUtc?.ToString("g") ?? "never")</span>
+    <span>Scan completeness: @(Context.ScanCompleteness?.Score.ToString() ?? "0")%</span>
+    <span>Handoff: @Context.HandoffReadiness</span>
+    <span>Generated files: @Context.ArtifactHealth</span>
+    @if (Context.RunningJob is not null)
+    {
+        <span>Job: @Context.RunningJob.CurrentStep (@Context.RunningJob.ProgressPercent%)</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectWorkspaceContext Context { get; set; } = default!;
+}

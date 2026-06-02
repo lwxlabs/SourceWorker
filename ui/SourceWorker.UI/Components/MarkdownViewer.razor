@@ -5,10 +5,32 @@
     }
     else
     {
-        <pre>@Content</pre>
+        @if (AllowMetadataToggle)
+        {
+            <label class="checkbox-row mb-2">
+                <input type="checkbox" @bind="showMetadata" />
+                <span>Show SourceWorker metadata</span>
+            </label>
+        }
+        <pre>@DisplayedContent</pre>
     }
 </article>
 
 @code {
     [Parameter] public string? Content { get; set; }
+    [Parameter] public bool HideSourceWorkerMetadataMarkers { get; set; } = true;
+    [Parameter] public bool AllowMetadataToggle { get; set; } = true;
+
+    private bool showMetadata;
+
+    private string? DisplayedContent
+        => HideSourceWorkerMetadataMarkers && !showMetadata ? StripMetadata(Content) : Content;
+
+    private static string? StripMetadata(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return content;
+        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var filtered = lines.Where(line => !line.TrimStart().StartsWith("<!-- SourceWorker:Generated;", StringComparison.OrdinalIgnoreCase));
+        return string.Join(Environment.NewLine, filtered).TrimStart();
+    }
 }

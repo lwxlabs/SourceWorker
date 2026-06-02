@@ -1,15 +1,20 @@
 <aside class="sw-sidebar">
     <a class="sw-brand" href="/">SourceWorker</a>
     <nav>
-        <a href="/projects">Projects</a>
-        <a href="/projects/onboarding">Onboarding</a>
-        <a href="/dogfood">Dogfood</a>
-        <a href="/dogfood/sessions">Dogfood Sessions</a>
-        <a href="/dogfood/issues">Friction Issues</a>
-        <a href="/jobs">Jobs</a>
-        <a href="/settings/ai">AI Settings</a>
-        <a href="/settings/diagnostics">Diagnostics</a>
-        <a href="/settings/logs">Logs</a>
-        <a href="/settings">Settings</a>
+        @foreach (var item in SourceWorkerNavigation.GlobalPrimary)
+        {
+            <a href="@item.Href">@item.Label</a>
+        }
+        @foreach (var item in SourceWorkerNavigation.GlobalSecondary)
+        {
+            <a href="@item.Href">@item.Label</a>
+        }
+        <details class="nav-section">
+            <summary>Advanced</summary>
+            @foreach (var item in SourceWorkerNavigation.AdvancedGlobal)
+            {
+                <a href="@item.Href">@item.Label</a>
+            }
+        </details>
     </nav>
 </aside>

@@ -187,7 +187,7 @@ public sealed record CodeFileSummary(Guid Id, Guid ProjectId, Guid ScanRunId, st
 public sealed record CodeProjectSummary(Guid Id, Guid ProjectId, Guid ScanRunId, int SymbolCount, int FlowCount, int RouteCount, int ServiceRegistrationCount, int ConfigurationUsageCount, int TestCount);
 public sealed record CodeDependency(Guid Id, Guid ProjectId, Guid ScanRunId, string FromSymbol, string ToSymbol, string Kind, string RelativePath);
 public sealed record CodeEntrypoint(Guid Id, Guid ProjectId, Guid ScanRunId, string Name, string RelativePath, string Kind, int LineNumber);
-public sealed record CodeFlow(Guid Id, Guid ProjectId, Guid ScanRunId, string Name, CodeFlowType FlowType, string Trigger, IReadOnlyList<string> InvolvedFiles, IReadOnlyList<string> InvolvedSymbols, IReadOnlyList<CodeFlowStep> Steps, FlowConfidence Confidence, IReadOnlyList<string> Warnings);
+public sealed record CodeFlow(Guid Id, Guid ProjectId, Guid ScanRunId, string Name, CodeFlowType FlowType, string Trigger, IReadOnlyList<string> InvolvedFiles, IReadOnlyList<string> InvolvedSymbols, IReadOnlyList<CodeFlowStep> Steps, FlowConfidence Confidence, IReadOnlyList<string> Warnings, FlowOrigin Origin = FlowOrigin.SourceCodeDetected);
 public sealed record CodeFlowStep(int Order, string Text, string? SymbolName, string? RelativePath);
 public sealed record RouteInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string HttpMethod, string RoutePattern, string? HandlerSymbol, int LineNumber);
 public sealed record ConfigurationUsage(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string KeyOrSection, string UsageKind, int LineNumber);
@@ -197,14 +197,45 @@ public sealed record PublicApiEndpoint(Guid Id, Guid ProjectId, Guid ScanRunId, 
 public sealed record TestInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string ClassName, string MethodName, string TestFramework, int LineNumber);
 
 public enum CodeSymbolKind { Class, Interface, Record, Struct, Enum, Method, Constructor, Property, Field }
-public enum CodeFlowType { CliCommandFlow, LocalApiEndpointFlow, ScanFlow, InstructionImportFlow, RecipeRunFlow, DoctorFlow, ArtifactCleanupFlow, StorageInfoFlow, WorkerJobFlow, ContextGenerationFlow }
+public enum CodeFlowType { CliCommandFlow, LocalApiEndpointFlow, ScanFlow, InstructionImportFlow, RecipeRunFlow, DoctorFlow, ArtifactCleanupFlow, StorageInfoFlow, WorkerJobFlow, ContextGenerationFlow, CandidateDomainFlow }
 public enum FlowConfidence { High, Medium, Low }
+public enum FlowOrigin { SourceCodeDetected, TestInferred, RecipeGenerated, SourceWorkerInternal, GenericFallback }
+public enum ProjectHandoffProfile { Library, WebApi, WorkerService, DesktopApp, FullstackApp, TestHeavyLibrary, Unknown }
+public enum ScanWarningSeverity { Info, Warning, Error }
 
 public sealed record ContextBrowserNode(string Name, string RelativePath, string Kind, IReadOnlyList<ContextBrowserNode> Children);
 public sealed record ContextBrowserFile(string RelativePath, string AbsolutePath, string Kind, long SizeBytes, DateTimeOffset LastModifiedUtc);
 public sealed record ContextBrowserSummary(Guid ProjectId, IReadOnlyList<ContextBrowserFile> Files, IReadOnlyList<ProjectRecipe> Recipes, IReadOnlyList<CodeFlow> Flows, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<TodoItem> Todos, IReadOnlyList<GeneratedArtifact> ProblemArtifacts);
 public sealed record ContextBrowserQueryResult(string Query, IReadOnlyList<ContextBrowserSearchHit> Hits);
 public sealed record ContextBrowserSearchHit(string RelativePath, int LineNumber, string Preview);
+
+public sealed record AgentHandoff(
+    Guid ProjectId,
+    string RelativePath,
+    string Markdown,
+    string RecommendedPackId,
+    IReadOnlyList<AgentHandoffTemplate> Templates);
+public sealed record AgentHandoffTemplate(string Id, string Name, string Header);
+public sealed record ProjectPurposeCandidate(string Text, ProjectPurposeConfidence Confidence, string Source);
+public enum ProjectPurposeConfidence { High, Medium, Low }
+
+public sealed record ScanCompletenessReport(
+    Guid ProjectId,
+    Guid? ScanRunId,
+    int Score,
+    IReadOnlyList<ScanStageResult> Stages,
+    IReadOnlyList<ScanStageWarning> Warnings,
+    string CodeIntelligenceExplanation);
+public sealed record ScanStageResult(
+    string Name,
+    ScanStageStatus Status,
+    int Count,
+    IReadOnlyList<ScanStageWarning> Warnings,
+    string? ErrorMessage,
+    TimeSpan? Duration,
+    IReadOnlyList<string> RelatedFiles);
+public sealed record ScanStageWarning(string Code, string Message, string? Detail = null);
+public enum ScanStageStatus { NotStarted, Completed, CompletedWithWarnings, Failed, Skipped }
 
 public sealed class LocalApiRuntimeOptions
 {

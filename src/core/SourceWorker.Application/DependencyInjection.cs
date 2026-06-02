@@ -10,6 +10,7 @@ public static class DependencyInjection
         services.AddScoped<IRequestFlow, ServiceProviderRequestFlow>();
         services.AddScoped<IRequestHandler<AddProjectCommand, SourceWorker.Contracts.ProjectDto>, AddProjectCommandHandler>();
         services.AddScoped<IRequestHandler<GetProjectsQuery, IReadOnlyList<SourceWorker.Contracts.ProjectSummaryDto>>, GetProjectsQueryHandler>();
+        services.AddScoped<IRequestHandler<DeleteProjectCommand, bool>, DeleteProjectCommandHandler>();
         services.AddScoped<IRequestHandler<StartProjectScanCommand, SourceWorker.Contracts.StartScanResponse>, StartProjectScanCommandHandler>();
         services.AddScoped<IRequestHandler<GetJobsQuery, IReadOnlyList<SourceWorker.Contracts.JobStatusDto>>, GetJobsQueryHandler>();
         services.AddScoped<IRequestHandler<GetProjectJobsQuery, IReadOnlyList<SourceWorker.Contracts.JobStatusDto>>, GetProjectJobsQueryHandler>();
@@ -32,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetContextFilesQuery, IReadOnlyList<SourceWorker.Domain.ContextBrowserFile>>, GetContextFilesQueryHandler>();
         services.AddScoped<IRequestHandler<ReadContextFileQuery, string>, ReadContextFileQueryHandler>();
         services.AddScoped<IRequestHandler<SearchContextQuery, SourceWorker.Domain.ContextBrowserQueryResult>, SearchContextQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAgentHandoffQuery, SourceWorker.Domain.AgentHandoff>, GetAgentHandoffQueryHandler>();
+        services.AddScoped<IRequestHandler<GetScanCompletenessQuery, SourceWorker.Domain.ScanCompletenessReport>, GetScanCompletenessQueryHandler>();
         services.AddScoped<IRequestHandler<GetOutputsQuery, SourceWorker.Domain.GeneratedOutputSet>, GetOutputsQueryHandler>();
         services.AddScoped<IRequestHandler<GetPacksQuery, IReadOnlyList<SourceWorker.Domain.ContextPackManifest>>, GetPacksQueryHandler>();
         services.AddScoped<IRequestHandler<GetPackQuery, SourceWorker.Domain.ContextPackManifest?>, GetPackQueryHandler>();

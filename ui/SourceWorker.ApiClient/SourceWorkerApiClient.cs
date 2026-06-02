@@ -32,6 +32,13 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return result?.Project ?? throw new InvalidOperationException("Failed to register project.");
     }
 
+    public async Task DeleteProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<StartScanResponse> StartProjectScanAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
         await ApplyTokenAsync();
@@ -89,6 +96,12 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public Task<ContextFreshnessReport> GetContextStatusAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<ContextFreshnessReport>($"/api/projects/{projectId}/context-status", cancellationToken);
 
+    public Task<AgentHandoffDto> GetAgentHandoffAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<AgentHandoffDto>($"/api/projects/{projectId}/agent-handoff", cancellationToken);
+
+    public Task<ScanCompletenessReportDto> GetScanCompletenessAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<ScanCompletenessReportDto>($"/api/projects/{projectId}/scan-completeness", cancellationToken);
+
     public Task<StorageInfo> GetStorageInfoAsync(CancellationToken cancellationToken = default)
         => Required<StorageInfo>("/api/storage/info", cancellationToken);
 
@@ -127,8 +140,8 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public Task<ContextBrowserSummary> GetContextBrowserAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<ContextBrowserSummary>($"/api/projects/{projectId}/context-browser", cancellationToken);
 
-    public async Task<IReadOnlyList<ContextBrowserFile>> GetContextFilesAsync(Guid projectId, CancellationToken cancellationToken = default)
-        => await GetAsync<ContextBrowserFile[]>($"/api/projects/{projectId}/context-browser/files", cancellationToken) ?? [];
+    public async Task<IReadOnlyList<ContextBrowserFile>> GetContextFilesAsync(Guid projectId, bool showTechnical = false, bool showExports = false, CancellationToken cancellationToken = default)
+        => await GetAsync<ContextBrowserFile[]>($"/api/projects/{projectId}/context-browser/files?showTechnical={showTechnical.ToString().ToLowerInvariant()}&showExports={showExports.ToString().ToLowerInvariant()}", cancellationToken) ?? [];
 
     public async Task<string> ReadContextAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default)
     {

@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\libs\SourceWorker.AI\SourceWorker.AI.csproj" />
     <ProjectReference Include="..\..\src\services\SourceWorker.Worker\SourceWorker.Worker.csproj" />
     <ProjectReference Include="..\..\ui\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
+    <ProjectReference Include="..\..\ui\SourceWorker.UI\SourceWorker.UI.csproj" />
   </ItemGroup>
 
 </Project>

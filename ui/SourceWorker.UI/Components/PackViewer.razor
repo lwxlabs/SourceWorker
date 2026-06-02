@@ -1,6 +1,7 @@
 @inject ISourceWorkerApiClient Api
 @inject ToastService Toast
 @inject DashboardActionService Actions
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <Cards Title="Pack">
     @if (Pack is null)
@@ -10,22 +11,29 @@
     else
     {
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0">@Pack.Pack.Name</h3>
+            <h3 class="mb-0">@DisplayName(Pack.Pack.Id)</h3>
             @{ var availability = Actions.GetAvailability(DashboardActionKind.ExportPack); }
-            <button class="btn btn-primary btn-sm" @onclick="ExportPack" disabled="@(!availability.IsEnabled || exporting)" title="@availability.DisabledReason">
-                @if (exporting)
-                {
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                <i class="bi bi-file-earmark-arrow-down me-1"></i> Export to .ai-context/packs
-            </button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="CopyPack" disabled="@string.IsNullOrWhiteSpace(Content)">Copy</button>
+                <a class="btn btn-outline-secondary btn-sm" href="@($"/projects/{ProjectId}/ai?pack={Pack.Pack.Id}")">Use in Ask</a>
+                <button class="btn btn-primary btn-sm" @onclick="ExportPack" disabled="@(!availability.IsEnabled || exporting)" title="@availability.DisabledReason">
+                    @if (exporting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    Export
+                </button>
+            </div>
         </div>
-        <p>@Pack.Pack.Description</p>
+        <p>@RecommendedUse(Pack.Pack.Id)</p>
         <span class="pill @(Pack.IsValid ? "ok" : "warn")">@(Pack.IsValid ? "valid" : "missing files")</span>
-        @foreach (var item in Pack.Pack.Items)
-        {
-            <div class="list-row compact"><code>@item.RelativePath</code></div>
-        }
+        <details class="mt-3">
+            <summary>Included files (@Pack.Pack.Items.Count)</summary>
+            @foreach (var item in Pack.Pack.Items)
+            {
+                <div class="list-row compact"><code>@item.RelativePath</code></div>
+            }
+        </details>
         @if (!string.IsNullOrWhiteSpace(Content))
         {
             <MarkdownViewer Content="@Content" />
@@ -39,6 +47,13 @@
     [Parameter] public string? Content { get; set; }
 
     private bool exporting;
+
+    private async Task CopyPack()
+    {
+        if (string.IsNullOrWhiteSpace(Content)) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [Content]);
+        Toast.ShowSuccess("Pack copied.");
+    }
 
     private async Task ExportPack()
     {
@@ -58,4 +73,26 @@
             exporting = false;
         }
     }
+
+    private static string DisplayName(string id)
+        => id switch
+        {
+            "ai-handoff" => "Quick Agent Handoff",
+            "backend-docs" => "Architecture Deep Dive",
+            "onboarding" => "Project Onboarding",
+            "current-branch" => "Current Branch Context",
+            "dogfood-feedback" => "Dogfood Feedback",
+            _ => id
+        };
+
+    private static string RecommendedUse(string id)
+        => id switch
+        {
+            "ai-handoff" => "Best for Codex/Junie quick coding context.",
+            "backend-docs" => "Best when an agent needs deeper architecture, flows, configuration, tasks, and verification context.",
+            "onboarding" => "Best for introducing a new developer or AI session to the project.",
+            "current-branch" => "Best for branch-specific work.",
+            "dogfood-feedback" => "Only for improving SourceWorker itself.",
+            _ => "Context bundle."
+        };
 }

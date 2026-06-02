@@ -12,9 +12,9 @@ namespace SourceWorker.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddSourceWorkerInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddSourceWorkerInfrastructure(this IServiceCollection services, Action<LocaliteStorageOptions>? configureStorage = null)
     {
-        services.AddSourceWorkerLocaliteStorage();
+        services.AddSourceWorkerLocaliteStorage(configureStorage);
         services.AddSourceWorkerAiCore();
         services.AddSourceWorkerAiProviders();
         services.AddSingleton<IGitInspector, BasicGitInspector>();
@@ -35,6 +35,8 @@ public static class DependencyInjection
         services.AddSingleton<IGeneratedArtifactCleanupService, GeneratedArtifactCleanupService>();
         services.AddSingleton<IContextBrowserService, ContextBrowserService>();
         services.AddSingleton<IContextSearchService, ContextBrowserService>();
+        services.AddSingleton<IAgentHandoffService, AgentHandoffService>();
+        services.AddSingleton<IScanCompletenessService, ScanCompletenessService>();
         services.AddSingleton<IOutputProfileService, OutputProfileService>();
         services.AddSingleton<IOutputRoutingService, OutputProfileService>();
         services.AddSingleton<IGeneratedOutputService, GeneratedOutputService>();

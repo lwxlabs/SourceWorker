@@ -10,6 +10,7 @@ public interface IProjectRepository
     Task<Project?> GetByPathAsync(string rootPath, CancellationToken cancellationToken);
     Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken);
     Task<Project> UpdateAsync(Project project, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public interface IScanRunRepository
@@ -190,11 +191,13 @@ public interface IFlowDiagramGenerator { string Generate(CodeFlow flow); }
 public interface IContextBrowserService
 {
     Task<ContextBrowserSummary> GetSummaryAsync(Project project, CancellationToken cancellationToken);
-    Task<IReadOnlyList<ContextBrowserFile>> ListFilesAsync(Project project, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ContextBrowserFile>> ListFilesAsync(Project project, bool showTechnical, bool showExports, CancellationToken cancellationToken);
     Task<string> ReadFileAsync(Project project, string relativePath, CancellationToken cancellationToken);
     Task<ContextBrowserQueryResult> SearchAsync(Project project, string query, CancellationToken cancellationToken);
 }
 public interface IContextSearchService { Task<ContextBrowserQueryResult> SearchAsync(Project project, string query, CancellationToken cancellationToken); }
+public interface IAgentHandoffService { Task<AgentHandoff> GetAsync(Project project, CancellationToken cancellationToken); }
+public interface IScanCompletenessService { Task<ScanCompletenessReport> GetAsync(Project project, CancellationToken cancellationToken); }
 
 public interface IOutputProfileService { Task<IReadOnlyList<OutputProfile>> GetProfilesAsync(Project project, CancellationToken cancellationToken); }
 public interface IOutputRoutingService { Task<IReadOnlyList<OutputRoute>> GetRoutesAsync(Project project, string recipeId, CancellationToken cancellationToken); }

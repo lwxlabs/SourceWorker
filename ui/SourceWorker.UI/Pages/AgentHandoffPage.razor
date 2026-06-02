@@ -1,0 +1,168 @@
+@page "/projects/{ProjectId:guid}/handoff"
+@inject ISourceWorkerApiClient Api
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ToastService Toast
+
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="handoff">
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <ErrorState Message="@error" />
+    }
+    else
+    {
+        <section class="handoff-hero">
+            <div>
+                <p class="eyebrow">Agent Handoff</p>
+                <h2>@ProjectName</h2>
+                <p>@PurposeLine</p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="pill ok">@HandoffReadiness</span>
+                    <span class="pill">Last scan: @(project?.LastScannedAt?.ToString("g") ?? "never")</span>
+                </div>
+            </div>
+            <div class="project-actions">
+                <button class="btn btn-primary" @onclick="CopyHandoff" disabled="@(handoff is null)">Copy Handoff</button>
+                <button class="btn" @onclick="CopyCodexPrompt" disabled="@(handoff is null)">Copy Codex Prompt</button>
+                <button class="btn" @onclick="CopyJuniePrompt" disabled="@(handoff is null)">Copy Junie Prompt</button>
+                <a class="btn" href="/projects/@ProjectId/ai">Ask with this context</a>
+            </div>
+        </section>
+
+        <Cards Title="What To Give An Agent">
+            <div class="grid three">
+                <div class="list-row"><strong>Quick coding context</strong><span>ai-handoff</span></div>
+                <div class="list-row"><strong>Architecture/deep context</strong><span>backend-docs</span></div>
+                <div class="list-row"><strong>Current branch context</strong><span>current-branch</span></div>
+            </div>
+        </Cards>
+
+        <Cards Title="Handoff Preview">
+            <MarkdownViewer Content="@handoff?.Markdown" />
+        </Cards>
+
+        <Cards Title="Understanding Summary">
+            <div class="metric-grid">
+                <MetricCard Label="Scan Completeness" Value="@($"{completeness?.Score ?? 0}%")" />
+                <MetricCard Label="Files Indexed" Value="@FilesIndexed" />
+                <MetricCard Label="C# Files" Value="@CSharpFiles" />
+                <MetricCard Label="Symbols" Value="@Symbols" />
+                <MetricCard Label="Tests" Value="@Tests" />
+                <MetricCard Label="Domain Flows" Value="@DomainFlows" />
+            </div>
+            <p class="muted">@completeness?.CodeIntelligenceExplanation</p>
+        </Cards>
+
+        @if (completeness?.Warnings.Count > 0)
+        {
+            <Cards Title="Warnings / Needs Attention">
+                @foreach (var warning in completeness.Warnings.Take(8))
+                {
+                    <div class="list-row"><strong>@warning.Code</strong><span>@warning.Message</span></div>
+                }
+            </Cards>
+        }
+
+        <details class="mt-3">
+            <summary>Scan stages</summary>
+            <div class="stage-list">
+                @foreach (var stage in completeness?.Stages ?? [])
+                {
+                    <div class="stage-row">
+                        <strong>@stage.Name</strong>
+                        <span class="pill @StageClass(stage.Status)">@stage.Status</span>
+                        <span>@stage.Count</span>
+                    </div>
+                }
+            </div>
+        </details>
+    }
+</ProjectWorkspaceLayout>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private AgentHandoffDto? handoff;
+    private ScanCompletenessReportDto? completeness;
+    private ProjectDto? project;
+    private IReadOnlyList<CodeSymbol> symbols = [];
+    private IReadOnlyList<CodeFlow> flows = [];
+    private IReadOnlyList<TestInfo> tests = [];
+    private bool loading = true;
+    private string? error;
+
+    private string ProjectName => project?.Name ?? "Project";
+    private string HandoffReadiness => completeness is { Score: >= 80 } ? "Handoff ready" : "Needs scan";
+    private string PurposeLine => ExtractSectionFirstText("## What This Project Appears To Be") ?? "Scan this project to infer a useful purpose.";
+    private string FilesIndexed => ExtractMetric("Files indexed") ?? "0";
+    private string CSharpFiles => ExtractMetric("C# files") ?? "0";
+    private string Symbols => symbols.Count.ToString();
+    private string Tests => tests.Count.ToString();
+    private string DomainFlows => flows.Count(f => f.FlowType.Equals("CandidateDomainFlow", StringComparison.OrdinalIgnoreCase)).ToString();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try
+        {
+            project = (await Api.GetProjectsAsync()).FirstOrDefault(p => p.Id == ProjectId);
+            handoff = await Api.GetAgentHandoffAsync(ProjectId);
+            completeness = await Api.GetScanCompletenessAsync(ProjectId);
+            symbols = await Api.GetSymbolsAsync(ProjectId);
+            flows = await Api.GetFlowsAsync(ProjectId);
+            tests = await Api.GetTestsAsync(ProjectId);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task CopyHandoff()
+    {
+        if (handoff is null) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [handoff.Markdown]);
+        Toast.ShowSuccess("Handoff copied.");
+    }
+
+    private Task CopyCodexPrompt() => CopyPrompt("codex", "Codex");
+    private Task CopyJuniePrompt() => CopyPrompt("junie", "Junie");
+
+    private async Task CopyPrompt(string templateId, string label)
+    {
+        if (handoff is null) return;
+        var header = handoff.Templates.FirstOrDefault(t => t.Id == templateId)?.Header ?? "Use this repository context.";
+        var prompt = $"{header}{Environment.NewLine}{Environment.NewLine}{handoff.Markdown}{Environment.NewLine}{Environment.NewLine}Task:{Environment.NewLine}<describe the change you want here>";
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [prompt]);
+        Toast.ShowSuccess($"{label} prompt copied.");
+    }
+
+    private string? ExtractMetric(string label)
+    {
+        if (handoff?.Markdown is null) return null;
+        var line = handoff.Markdown.Split('\n').FirstOrDefault(l => l.TrimStart().StartsWith($"- {label}:", StringComparison.OrdinalIgnoreCase));
+        return line?.Split(':', 2).LastOrDefault()?.Trim();
+    }
+
+    private string? ExtractSectionFirstText(string heading)
+    {
+        if (handoff?.Markdown is null) return null;
+        var lines = handoff.Markdown.Replace("\r\n", "\n").Split('\n');
+        var index = Array.FindIndex(lines, line => line.Trim().Equals(heading, StringComparison.OrdinalIgnoreCase));
+        if (index < 0) return null;
+        return lines.Skip(index + 1).Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0 && !l.StartsWith("#", StringComparison.Ordinal));
+    }
+
+    private static string StageClass(string status)
+        => status.Contains("Warning", StringComparison.OrdinalIgnoreCase) ? "warn" :
+           status.Contains("Failed", StringComparison.OrdinalIgnoreCase) ? "bad" :
+           "ok";
+}

@@ -1,12 +1,20 @@
 @page "/projects/{ProjectId:guid}/context"
 @inject ISourceWorkerApiClient Api
 
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="context">
 <h1>Context Browser</h1>
+<p>Default view shows user-facing context. Technical files and external mirrored exports are available when needed.</p>
+
+<div class="toolbar">
+    <label><input type="checkbox" @bind="showTechnical" @bind:after="ReloadFiles" /> Show technical files</label>
+    <label><input type="checkbox" @bind="showExports" @bind:after="ReloadFiles" /> Show exports</label>
+</div>
 
 <div class="split">
     <ContextFileTree Files="@files" BaseUrl="@($"/projects/{ProjectId}/context")" />
     <MarkdownViewer Content="@content" />
 </div>
+</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
@@ -14,13 +22,20 @@
 
     private IReadOnlyList<ContextBrowserFile> files = [];
     private string? content;
+    private bool showTechnical;
+    private bool showExports;
 
     protected override async Task OnParametersSetAsync()
     {
-        files = await Api.GetContextFilesAsync(ProjectId);
+        await ReloadFiles();
         if (!string.IsNullOrWhiteSpace(SelectedFile))
         {
             content = await Api.ReadContextAsync(ProjectId, SelectedFile);
         }
+    }
+
+    private async Task ReloadFiles()
+    {
+        files = await Api.GetContextFilesAsync(ProjectId, showTechnical, showExports);
     }
 }

@@ -78,13 +78,14 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         }
 
         var inputHash = Hash(body);
-        var content = Metadata(scan.Project.Id, scan.ScanRun.Id, recipeId, inputHash, inputHash, "Generated") + body;
+        var artifactId = Guid.NewGuid();
+        var content = Metadata(artifactId, "Generated") + body;
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
         await File.WriteAllTextAsync(absolute, content, cancellationToken);
         GeneratedArtifact? artifact = null;
         if (artifacts is not null)
         {
-            artifact = await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), scan.Project.Id, scan.ScanRun.Id, recipeId, projectRelative, absolute, type, inputHash, DateTimeOffset.UtcNow, inputHash, GeneratedArtifactStatus.Generated, "backend-docs-compact", $"OutputDestinationId: {destinationId}"), cancellationToken);
+            artifact = await artifacts.UpsertAsync(new GeneratedArtifact(artifactId, scan.Project.Id, scan.ScanRun.Id, recipeId, projectRelative, absolute, type, inputHash, DateTimeOffset.UtcNow, inputHash, GeneratedArtifactStatus.Generated, "backend-docs-compact", $"OutputDestinationId: {destinationId}"), cancellationToken);
         }
         return artifact;
     }
@@ -116,21 +117,8 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         return end < 0 ? content : content[(end + 3)..].TrimStart();
     }
 
-    private static string Metadata(Guid projectId, Guid? scanRunId, string? recipeId, string inputHash, string contentHash, string status)
-        => $"""
-        <!--
-        GeneratedBy: SourceWorker
-        FormatVersion: 2
-        ProjectId: {projectId}
-        ScanRunId: {scanRunId}
-        RecipeId: {recipeId}
-        GeneratedUtc: {DateTimeOffset.UtcNow:O}
-        InputHash: {inputHash}
-        ContentHash: {contentHash}
-        Status: {status}
-        -->
-
-        """;
+    private static string Metadata(Guid artifactId, string status)
+        => $"<!-- SourceWorker:Generated; ArtifactId={artifactId}; Status={status} -->{Environment.NewLine}{Environment.NewLine}";
 
     private static async Task<ContextWriteResult> WriteGenericRecipeAsync(ProjectRecipe recipe, ProjectScanResult scan, ProjectInstructionDocument? doc, CancellationToken cancellationToken)
     {

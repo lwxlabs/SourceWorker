@@ -1,0 +1,16 @@
+id: dogfood-feedback
+name: Dogfood Feedback Pack
+description: Latest dogfood feedback, open friction issues, diagnostics, and current project handoff notes.
+audience: product-builder
+purpose: Use SourceWorker dogfood feedback to prioritize the next local-engine improvement pass.
+maxRecommendedUse: compact
+tokenEstimate: 0
+freshnessStatus: missing-files
+sourceScanRunId: "90ef7b49-b6f0-4ddb-9b37-a8193a5a94f7"
+generatedUtc: "2026-06-02T14:25:05.3779416+00:00"
+files:
+  - .ai-context/dogfood/issues.md
+  - .ai-context/current-state.md
+  - .ai-context/ai-handoff.md
+missingFiles:
+  - .ai-context/dogfood/issues.md

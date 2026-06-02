@@ -62,7 +62,7 @@ public sealed class GeneratedArtifactLifecycleService(IGeneratedArtifactReposito
             {
                 var relative = Path.GetRelativePath(project.RootPath, file).Replace('\\', '/');
                 var text = await File.ReadAllTextAsync(file, cancellationToken);
-                var generated = text.StartsWith("<!--", StringComparison.Ordinal) && text.Contains("GeneratedBy: SourceWorker", StringComparison.Ordinal);
+                var generated = IsGenerated(text);
                 if (!generated) continue;
                 if (DeprecatedBackendDocs.Contains(relative))
                 {
@@ -86,6 +86,11 @@ public sealed class GeneratedArtifactLifecycleService(IGeneratedArtifactReposito
         var end = content.IndexOf("-->", StringComparison.Ordinal);
         return end < 0 ? content : content[(end + 3)..].TrimStart();
     }
+
+    internal static bool IsGenerated(string text)
+        => text.StartsWith("<!--", StringComparison.Ordinal) &&
+           (text.Contains("GeneratedBy: SourceWorker", StringComparison.Ordinal) ||
+            text.Contains("SourceWorker:Generated", StringComparison.Ordinal));
 }
 
 public sealed class GeneratedArtifactCleanupService(IGeneratedArtifactLifecycleService lifecycle) : IGeneratedArtifactCleanupService
@@ -114,7 +119,7 @@ public sealed class GeneratedArtifactCleanupService(IGeneratedArtifactLifecycleS
             }
 
             var text = await File.ReadAllTextAsync(fullPath, cancellationToken);
-            var generated = text.StartsWith("<!--", StringComparison.Ordinal) && text.Contains("GeneratedBy: SourceWorker", StringComparison.Ordinal);
+            var generated = GeneratedArtifactLifecycleService.IsGenerated(text);
             if (!generated)
             {
                 skipped.Add(relative);

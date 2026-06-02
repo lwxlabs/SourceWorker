@@ -1,7 +1,9 @@
 @page "/projects/{ProjectId:guid}/ai"
 @inject ISourceWorkerApiClient Api
 
-<h1>AI Preview</h1>
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="ai">
+<h1>Ask With Context</h1>
+<p>SourceWorker does not code by itself. It prepares context, lets you ask questions, and shows a preview-only answer that you copy into your agent or notes manually.</p>
 
 <Cards Title="Prompt Builder">
     <div class="grid two">
@@ -41,12 +43,12 @@
     <label>User instruction
         <textarea rows="5" @bind="instruction"></textarea>
     </label>
-    <button @onclick="PreviewAsync">Preview prompt</button>
-    <button @onclick="RunAsync" disabled="@(preview is null)">Run AI</button>
+    <button @onclick="PreviewAsync">Preview Prompt</button>
+    <button @onclick="RunAsync" disabled="@(preview is null)">Ask AI</button>
 </Cards>
 
 <Cards Title="AI Safety">
-    <p>AI output is preview-only. SourceWorker does not apply patches, run terminals, or write files from AI responses.</p>
+    <p>AI output is preview-only. SourceWorker does not apply patches, run terminals, or write files from AI responses. Copy the answer manually if it is useful.</p>
     @if (usage is not null)
     {
         <div class="list-row"><strong>Project runs</strong><span>@usage.TotalRuns total, @usage.SuccessfulRuns successful, @usage.FailedRuns failed</span></div>
@@ -104,6 +106,7 @@
         <pre style="white-space: pre-wrap;">@run.OutputText</pre>
     </Cards>
 }
+</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

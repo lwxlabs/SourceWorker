@@ -7,32 +7,77 @@ else
     <div class="project-list">
         @foreach (var project in Projects)
         {
-            <a class="project-row" href="/projects/@project.Id" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid #eee; margin-bottom: 0.5rem; border-radius: 4px; text-decoration: none; color: inherit;">
-                <div style="display: flex; flex-direction: column;">
-                    <strong style="font-size: 1.1rem;">@project.Name</strong>
-                    <span style="font-size: 0.85rem; color: #666;">@project.Path</span>
-                </div>
-                <div style="display: flex; gap: 1rem; align-items: center;">
+            <div class="project-row project-row-manage">
+                <a class="project-row-main" href="/projects/@project.Id">
+                    <strong>@project.Name</strong>
+                    <span class="path">@project.Path</span>
+                </a>
+                <div class="project-row-meta">
                     @if (project.LastScanUtc.HasValue)
                     {
-                        <span style="font-size: 0.85rem; color: #666;" title="Last Scan">📅 @project.LastScanUtc.Value.ToString("g")</span>
+                        <span title="Last scan">@project.LastScanUtc.Value.ToString("g")</span>
                     }
-                    <span title="Routes">🔗 @project.RouteCount</span>
-                    <span title="Flows">⚡ @project.FlowCount</span>
+                    <span title="Routes">Routes @project.RouteCount</span>
+                    <span title="Flows">Flows @project.FlowCount</span>
                     @if (project.HasStaleContext)
                     {
-                        <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">Stale</span>
+                        <span class="pill warn">Stale</span>
                     }
                     @if (!project.Exists)
                     {
-                        <span style="background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">Missing</span>
+                        <span class="pill warn">Missing</span>
+                    }
+                    <a class="btn btn-outline-secondary btn-sm" href="/projects/@project.Id">Open</a>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => Scan(project)" disabled="@scanning.Contains(project.Id)">@(project.LastScanUtc.HasValue ? "Rescan" : "Scan")</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => CopyHandoff(project)">Copy Handoff</button>
+                    @if (OnRemove.HasDelegate)
+                    {
+                        <button class="btn btn-outline-danger btn-sm" type="button" @onclick="() => OnRemove.InvokeAsync(project)">Remove</button>
                     }
                 </div>
-            </a>
+            </div>
         }
     </div>
 }
 
 @code {
     [Parameter] public IReadOnlyList<ProjectSummaryDto> Projects { get; set; } = [];
+    [Parameter] public EventCallback<ProjectSummaryDto> OnRemove { get; set; }
+
+    private readonly HashSet<Guid> scanning = [];
+
+    private async Task Scan(ProjectSummaryDto project)
+    {
+        scanning.Add(project.Id);
+        try
+        {
+            await Api.StartProjectScanAsync(project.Id);
+            Toast.ShowInfo($"Scan started for {project.Name}.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to start scan: {ex.Message}");
+        }
+        finally
+        {
+            scanning.Remove(project.Id);
+        }
+    }
+
+    private async Task CopyHandoff(ProjectSummaryDto project)
+    {
+        try
+        {
+            var handoff = await Api.GetAgentHandoffAsync(project.Id);
+            await JS.InvokeAsync<object>("navigator.clipboard.writeText", [handoff.Markdown]);
+            Toast.ShowSuccess("Handoff copied.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Failed to copy handoff: {ex.Message}");
+        }
+    }
 }
+@inject ISourceWorkerApiClient Api
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ToastService Toast

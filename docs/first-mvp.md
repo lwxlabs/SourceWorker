@@ -1,6 +1,39 @@
 # First MVP
 
-SourceWorker is currently a local-first skeleton. It scans a folder, stores basic project/job/index state locally, and writes markdown context into `.ai-context/`.
+SourceWorker is a local-first project understanding and AI context handoff app. It scans a folder, stores project/job/index state locally, writes `.ai-context/`, and produces a clean Agent Handoff that can be copied into another AI coding assistant.
+
+SourceWorker prepares context; it does not code by itself. It does not apply patches, edit source files from AI output, run terminal agent tasks, or replace Codex/Junie/ChatGPT/Cursor/Claude Code.
+
+## Product UX Direction
+
+The daily product loop is:
+
+```text
+Pick repo -> scan -> understand -> copy handoff for agent
+```
+
+Normal users should start with Agent Handoff. Technical surfaces such as artifacts, jobs, diagnostics, logs, dogfood sessions, raw recipes, exports, and generated metadata belong under Advanced.
+
+Global navigation is limited to Home, Projects, Settings, and Advanced. Handoff, Ask, Docs, Packs, Scan Health, Code, Artifacts, Jobs, and Context Browser are project workspace tabs that appear only after selecting a project.
+
+## Agent Handoff Mode
+
+The primary generated output is:
+
+```text
+.ai-context/agent-handoff.md
+```
+
+This file is clean, user-facing markdown. It includes project identity, purpose, current state, architecture, important files, AI working rules, TODO/risk summary, high-confidence flows, available context packs, and a recommended next agent prompt.
+
+The handoff should summarize source reality, not generated internals:
+
+- prefer README/project/symbol/test evidence for purpose
+- exclude TODOs from `.ai-context/**` and `instructions/Result/**`
+- exclude SourceWorker product flows when scanning other projects
+- infer candidate domain flows for library projects
+
+Generated lifecycle metadata is no longer repeated as a heavy block in every markdown file. Full metadata lives in `.ai-context/index.yaml` and Localite artifact records; user-facing markdown uses either no marker or a compact SourceWorker marker.
 
 ## CLI
 
@@ -295,6 +328,7 @@ The scan writes:
 
 - `.ai-context/CONTEXT.md`
 - `.ai-context/index.yaml`
+- `.ai-context/agent-handoff.md`
 - `.ai-context/project.md`
 - `.ai-context/architecture.md`
 - `.ai-context/current-state.md`

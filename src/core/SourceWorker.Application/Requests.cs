@@ -6,6 +6,7 @@ namespace SourceWorker.Application;
 
 public sealed record AddProjectCommand(string Path, string? Name = null) : IRequest<ProjectDto>;
 public sealed record GetProjectsQuery(bool? IncludeTestProjects = null, bool? IncludeMissing = null, string? Search = null, int? Limit = null) : IRequest<IReadOnlyList<ProjectSummaryDto>>;
+public sealed record DeleteProjectCommand(Guid ProjectId) : IRequest<bool>;
 public sealed record StartProjectScanCommand(Guid ProjectId) : IRequest<StartScanResponse>;
 public sealed record GetJobsQuery : IRequest<IReadOnlyList<JobStatusDto>>;
 public sealed record GetProjectJobsQuery(Guid ProjectId) : IRequest<IReadOnlyList<JobStatusDto>>;
@@ -25,9 +26,11 @@ public sealed record GetSymbolsQuery(Guid ProjectId) : IRequest<IReadOnlyList<Co
 public sealed record GetFlowsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeFlow>>;
 public sealed record GetRoutesQuery(Guid ProjectId) : IRequest<IReadOnlyList<RouteInfo>>;
 public sealed record GetContextBrowserQuery(Guid ProjectId) : IRequest<ContextBrowserSummary>;
-public sealed record GetContextFilesQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextBrowserFile>>;
+public sealed record GetContextFilesQuery(Guid ProjectId, bool ShowTechnical = false, bool ShowExports = false) : IRequest<IReadOnlyList<ContextBrowserFile>>;
 public sealed record ReadContextFileQuery(Guid ProjectId, string RelativePath) : IRequest<string>;
 public sealed record SearchContextQuery(Guid ProjectId, string Query) : IRequest<ContextBrowserQueryResult>;
+public sealed record GetAgentHandoffQuery(Guid ProjectId) : IRequest<AgentHandoff>;
+public sealed record GetScanCompletenessQuery(Guid ProjectId) : IRequest<ScanCompletenessReport>;
 public sealed record GetOutputsQuery(Guid ProjectId) : IRequest<GeneratedOutputSet>;
 public sealed record GetPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
 public sealed record GetPackQuery(Guid ProjectId, string PackId) : IRequest<ContextPackManifest?>;
@@ -138,10 +141,25 @@ public sealed class GetProjectsQueryHandler(
             ));
         }
 
-        var result = summaries.OrderByDescending(s => s.LastScanUtc).ThenBy(s => s.Name).AsEnumerable();
+        var createdByProject = all.ToDictionary(p => p.Id, p => p.CreatedAt);
+        var result = summaries
+            .OrderByDescending(s => s.LastScanUtc ?? createdByProject.GetValueOrDefault(s.Id))
+            .ThenBy(s => s.Name)
+            .AsEnumerable();
         if (request.Limit.HasValue) result = result.Take(request.Limit.Value);
 
         return result.ToArray();
+    }
+}
+
+public sealed class DeleteProjectCommandHandler(IProjectRepository projects) : IRequestHandler<DeleteProjectCommand, bool>
+{
+    public async Task<bool> Handle(DeleteProjectCommand request, CancellationToken cancellationToken)
+    {
+        var existing = await projects.GetAsync(request.ProjectId, cancellationToken);
+        if (existing is null) return false;
+        await projects.DeleteAsync(request.ProjectId, cancellationToken);
+        return true;
     }
 }
 
@@ -332,9 +350,11 @@ public sealed class GetSymbolsQueryHandler(ICodeSymbolRepository repo) : IReques
 public sealed class GetFlowsQueryHandler(ICodeFlowRepository repo) : IRequestHandler<GetFlowsQuery, IReadOnlyList<CodeFlow>> { public Task<IReadOnlyList<CodeFlow>> Handle(GetFlowsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
 public sealed class GetRoutesQueryHandler(IRouteInfoRepository repo) : IRequestHandler<GetRoutesQuery, IReadOnlyList<RouteInfo>> { public Task<IReadOnlyList<RouteInfo>> Handle(GetRoutesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
 public sealed class GetContextBrowserQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextBrowserQuery, ContextBrowserSummary> { public async Task<ContextBrowserSummary> Handle(GetContextBrowserQuery request, CancellationToken cancellationToken) => await browser.GetSummaryAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
-public sealed class GetContextFilesQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextFilesQuery, IReadOnlyList<ContextBrowserFile>> { public async Task<IReadOnlyList<ContextBrowserFile>> Handle(GetContextFilesQuery request, CancellationToken cancellationToken) => await browser.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
+public sealed class GetContextFilesQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextFilesQuery, IReadOnlyList<ContextBrowserFile>> { public async Task<IReadOnlyList<ContextBrowserFile>> Handle(GetContextFilesQuery request, CancellationToken cancellationToken) => await browser.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.ShowTechnical, request.ShowExports, cancellationToken); }
 public sealed class ReadContextFileQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<ReadContextFileQuery, string> { public async Task<string> Handle(ReadContextFileQuery request, CancellationToken cancellationToken) => await browser.ReadFileAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
 public sealed class SearchContextQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<SearchContextQuery, ContextBrowserQueryResult> { public async Task<ContextBrowserQueryResult> Handle(SearchContextQuery request, CancellationToken cancellationToken) => await browser.SearchAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Query, cancellationToken); }
+public sealed class GetAgentHandoffQueryHandler(IProjectRepository projects, IAgentHandoffService handoff) : IRequestHandler<GetAgentHandoffQuery, AgentHandoff> { public async Task<AgentHandoff> Handle(GetAgentHandoffQuery request, CancellationToken cancellationToken) => await handoff.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
+public sealed class GetScanCompletenessQueryHandler(IProjectRepository projects, IScanCompletenessService completeness) : IRequestHandler<GetScanCompletenessQuery, ScanCompletenessReport> { public async Task<ScanCompletenessReport> Handle(GetScanCompletenessQuery request, CancellationToken cancellationToken) => await completeness.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetOutputsQueryHandler(IProjectRepository projects, IGeneratedOutputService outputs) : IRequestHandler<GetOutputsQuery, GeneratedOutputSet> { public async Task<GeneratedOutputSet> Handle(GetOutputsQuery request, CancellationToken cancellationToken) => await outputs.GetOutputSetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), "backend-docs-compact", cancellationToken); }
 public sealed class GetPacksQueryHandler(IProjectRepository projects, IContextPackService packs) : IRequestHandler<GetPacksQuery, IReadOnlyList<ContextPackManifest>> { public async Task<IReadOnlyList<ContextPackManifest>> Handle(GetPacksQuery request, CancellationToken cancellationToken) => await packs.ListAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetPackQueryHandler(IProjectRepository projects, IContextPackService packs) : IRequestHandler<GetPackQuery, ContextPackManifest?> { public async Task<ContextPackManifest?> Handle(GetPackQuery request, CancellationToken cancellationToken) => await packs.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.PackId, cancellationToken); }

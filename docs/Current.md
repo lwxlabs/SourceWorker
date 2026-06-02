@@ -2,7 +2,16 @@
 
 Date: 2026-06-01
 
-SourceWorker is a local-first project context engine with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, and MVP 2.4 desktop publishing.
+SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, and MVP 2.7 corrected project workspace navigation.
+
+Product statement:
+
+```text
+SourceWorker's job is to make a codebase understandable and portable for AI agents.
+It does not replace the agent; it prepares the context.
+```
+
+SourceWorker is not a coding agent, autonomous editor, terminal runner, patch applier, CI replacement, MCP host, or cloud sync tool.
 
 Still intentionally not included:
 - MCP
@@ -13,6 +22,149 @@ Still intentionally not included:
 - automatic AI file writes
 - full installer/updater
 - production code signing
+
+## MVP 2.5 Agent Handoff Refocus
+
+MVP 2.5 refocuses the product around the core daily flow:
+
+```text
+Open SourceWorker
+→ Select project
+→ Scan / understand
+→ See scan completeness
+→ Build Agent Context Pack
+→ Preview what the AI agent will receive
+→ Copy / export / open handoff
+→ Give it to Codex, Junie, ChatGPT, Cursor, Claude Code, or another tool
+```
+
+New primary generated output:
+
+```text
+.ai-context/agent-handoff.md
+```
+
+This file is clean, human-readable markdown. It does not include the old heavy generated metadata block. It contains:
+- project identity
+- purpose
+- current state
+- architecture
+- important files
+- AI working rules
+- TODO/risk summary
+- high-confidence flows
+- useful generated context packs/docs
+- recommended next agent prompt
+
+Metadata strategy changed:
+- full lifecycle metadata remains in `.ai-context/index.yaml`
+- Localite generated artifact records remain the durable source for artifact status, hashes, stale/manual detection, and generator data
+- user-facing markdown no longer repeats the full `GeneratedBy`, `FormatVersion`, `ProjectId`, `ScanRunId`, `InputHash`, and `ContentHash` block
+- generated markdown now uses either no marker for high-value handoff files or a compact marker like `<!-- SourceWorker:Generated; ArtifactId=...; Status=Generated -->`
+
+New scan completeness state:
+- `ScanCompletenessReport`
+- `ScanStageResult`
+- `ScanStageStatus`
+- `ScanStageWarning`
+
+Tracked stages include project root validation, ignore rules, file indexing, solution/project detection, project/package/reference parsing, Git state, TODO extraction, C# symbols, routes, service registrations, configuration usages, tests, flow extraction, context files, packs, backend docs, and artifact tracking.
+
+Critical zero-state behavior:
+- if `.cs` files exist but persisted symbols are 0, scan completeness reports a warning
+- possible explanations include ignored files, parser failure, unsupported syntax, failed persistence, or stale UI data
+- the Project Dashboard and Agent Handoff page surface this explanation instead of silently showing 0 symbols/routes/flows
+
+UI refocus:
+- new project route: `/projects/{projectId}/handoff`
+- Agent Handoff is the primary project workflow
+- AI Preview is reframed as "Ask With Context"
+- context browser defaults to user-facing context only
+- technical files and external mirrored docs are hidden by default behind toggles
+- backend docs page should treat `.ai-context/docs/backend` as canonical and `instructions/Result/Backend` as an external mirror
+
+## MVP 2.6 Product UX Consolidation
+
+MVP 2.6 keeps the product centered on:
+
+```text
+Pick repo -> scan -> understand -> copy handoff for agent
+```
+
+Navigation is simplified:
+
+- Primary: Home, Projects, Handoff, Ask, Settings
+- Advanced: Scan Health, Context Browser, Docs, Packs, Code Intelligence, Artifacts, Jobs, Diagnostics, Logs, Dogfood
+
+Project open now leads to the Agent Handoff route so a selected repo starts with handoff readiness instead of raw internal diagnostics.
+
+Handoff readiness is separated from generated artifact health:
+
+- Scan completeness answers whether SourceWorker understood the repo.
+- Handoff readiness answers whether the user can copy useful context now.
+- Generated artifact health answers whether tracked generated files need cleanup/review.
+
+Handoff quality changes:
+
+- purpose inference reads README/project names/symbols/tests before using generated docs
+- non-clean-architecture repos still get useful structure summaries
+- library/test-heavy repos do not treat missing routes/DI/config as scary warnings
+- TODO/FIXME/REVIEW summaries exclude `.ai-context/**` and `instructions/Result/**`
+- SourceWorker internal flows are excluded unless the scanned project is SourceWorker
+- library projects get candidate domain flows inferred from public symbols, tests, and source folders
+- normal markdown previews hide compact SourceWorker metadata markers by default
+
+Packs and docs are presented as product concepts:
+
+- `ai-handoff` = Quick Agent Handoff
+- `backend-docs` = Architecture Deep Dive
+- `onboarding` = Project Onboarding
+- `current-branch` = Current Branch Context
+- `dogfood-feedback` = SourceWorker improvement feedback only
+
+## MVP 2.7 Correct Navigation And Project Workspace
+
+MVP 2.7 fixes the navigation model so project-specific pages are not global sidebar items.
+
+Global navigation:
+
+- Home
+- Projects
+- Settings
+- Advanced
+
+Advanced global pages:
+
+- Diagnostics
+- Logs
+- Dogfood
+- All Jobs
+
+Project workspace navigation appears only after selecting a project:
+
+- Overview
+- Handoff
+- Ask
+- Docs
+- Packs
+- Scan Health
+- Code
+- Artifacts
+- Jobs
+- Context Browser
+
+Project workspace header shows selected project identity, root path, last scan, scan completeness, handoff readiness, generated-file health, running job status, scan/rescan, ask, and copy-handoff actions.
+
+Project Jobs are the normal place to watch scan/export progress for a selected repo. Global All Jobs remains available under Advanced for diagnostics only.
+
+Artifacts are reframed as Generated Files Health. The default view shows issue counts and needs-attention groups first; healthy generated files and technical artifact records are collapsed.
+
+Handoff quality improvements:
+
+- Public API/Main Concepts now prefers non-test public interfaces/classes from the main project.
+- test fakes/mocks/sample classes are deprioritized
+- Localite-style library handoffs emphasize interfaces, context/store APIs, public operations, and tests instead of fake test entities
+- Imported Instructions no longer prints duplicate empty-state text
 
 ## Current Architecture
 
@@ -190,6 +342,7 @@ No AI CLI commands were added in MVP 2.1. AI preview is Local API and dashboard 
 - `/`
 - `/projects`
 - `/projects/{projectId}`
+- `/projects/{projectId}/handoff`
 - `/projects/{projectId}/context`
 - `/projects/{projectId}/docs`
 - `/projects/{projectId}/packs`
@@ -213,12 +366,14 @@ No AI CLI commands were added in MVP 2.1. AI preview is Local API and dashboard 
 Dashboard behavior:
 - register projects
 - scan projects with job progress polling
+- inspect Agent Handoff readiness and copy clean handoff markdown for another AI agent
+- view scan completeness and zero-state warnings for code intelligence
 - export docs and context packs
 - preview and run safe cleanup
 - browse generated context files
 - view backend docs, packs, artifacts, code symbols, routes, flows, jobs, storage, runtime/security info
 - configure AI providers
-- build AI prompt previews from packs
+- build "Ask With Context" prompt previews from packs
 - run preview-only AI requests
 - view AI run history
 - validate provider setup
@@ -311,6 +466,7 @@ MVP 2.3 daily-use additions:
 
 - `CONTEXT.md`
 - `index.yaml`
+- `agent-handoff.md`
 - `project.md`
 - `architecture.md`
 - `current-state.md`
@@ -334,6 +490,8 @@ Folder responsibilities:
 - `.ai-context/packs/` is AI-ready pack manifests and markdown exports.
 - `.ai-context/exports/` is export profile/history state.
 - `instructions/Result/Backend/` is the external Markdown mirror.
+
+User-facing markdown is now clean by default. Heavy generated metadata is not repeated in every file; artifact metadata belongs in `index.yaml` and Localite records. The context browser defaults to user-facing context and hides technical YAML/raw scan/export mirror files unless the user enables the technical/export toggles.
 
 `index.yaml` is format version 5 and includes project, latest scan, Git, storage, context files, recipes, imported instructions, stale status, artifact lifecycle, cleanup, code intelligence, flow confidence, context browser, outputs, packs, exports, and docs state.
 

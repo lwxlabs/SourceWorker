@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using SourceWorker.Application;
 using SourceWorker.Domain;
 
@@ -39,6 +40,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         {
             ["CONTEXT.md"] = RootContext(scanResult, imported),
             ["index.yaml"] = Index(scanResult, imported, validation, schema, lifecycle, codeSymbols, codeFlows, routeInfos, serviceRegs, configUsages, testInfos),
+            ["agent-handoff.md"] = AgentHandoff(scanResult, imported, validation, freshness, codeSymbols, codeFlows, routeInfos, serviceRegs, configUsages, testInfos),
             ["project.md"] = Project(scanResult),
             ["architecture.md"] = Architecture(scanResult),
             ["current-state.md"] = CurrentState(scanResult, freshness),
@@ -50,9 +52,9 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
 
         foreach (var file in files)
         {
-            await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, file.Key, file.Value, GeneratedArtifactType.InternalContextFile, "SourceWorker.Context", cancellationToken);
+            await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, file.Key, file.Value, GeneratedArtifactType.InternalContextFile, "SourceWorker.Context", cancellationToken, includeMarker: !file.Key.Equals("agent-handoff.md", StringComparison.OrdinalIgnoreCase));
         }
-        await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, "instructions/README.md", InstructionsReadme(), GeneratedArtifactType.InstructionImportFile, "SourceWorker.Context", cancellationToken);
+        await WriteGeneratedAsync(scanResult.Project, scanResult.ScanRun.Id, null, output, "instructions/README.md", InstructionsReadme(), GeneratedArtifactType.InstructionImportFile, "SourceWorker.Context", cancellationToken, includeMarker: false);
         if (packWriter is not null) await packWriter.WriteDefaultPacksAsync(scanResult.Project, scanResult.ScanRun.Id, cancellationToken);
 
         return new ContextWriteResult(output, files.Keys.ToArray());
@@ -82,6 +84,202 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - AI-ready packs: `.ai-context/packs/`
         - Export profiles/history: `.ai-context/exports/`
         - External mirrored backend docs: `instructions/Result/Backend/`
+        """;
+
+    private static string AgentHandoff(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, ContextFreshnessReport freshness, IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<CodeFlow> flows, IReadOnlyList<RouteInfo> routes, IReadOnlyList<ServiceRegistration> services, IReadOnlyList<ConfigurationUsage> configs, IReadOnlyList<TestInfo> tests)
+    {
+        var profile = DetectProfile(scan, routes, tests);
+        var sourceTodos = SourceTodos(scan).Take(25).ToArray();
+        var visibleFlows = UserFacingFlows(scan, flows).Take(10).ToArray();
+        var candidateFlows = CandidateDomainFlows(scan, symbols, flows, tests).Take(10).ToArray();
+        var importantFiles = ImportantSourceFiles(scan, symbols, tests).Take(20).ToArray();
+        var concepts = PublicConcepts(symbols).Take(20).ToArray();
+        var artifactHealth = freshness.FreshnessScore >= 85 && !freshness.HasStaleContext ? "Healthy" : "Needs review";
+        var handoffReadiness = scan.ScanRun.Status == ScanRunStatus.Completed && importantFiles.Length > 0 ? "Handoff ready" : "Needs scan or review";
+
+        return $"""
+        # Agent Handoff
+
+        ## What This Project Appears To Be
+
+        {InferProjectPurpose(scan, imported, symbols, tests)}
+
+        ## What To Give An AI Agent
+
+        - Quick context: `.ai-context/packs/ai-handoff.pack.yaml`
+        - Deep architecture: `.ai-context/packs/backend-docs.pack.yaml`
+        - Current branch: `.ai-context/packs/current-branch.pack.yaml`
+        - Clean handoff file: `.ai-context/agent-handoff.md`
+
+        ## Project Identity
+
+        - Name: {scan.Project.Name}
+        - Root path: `{scan.Project.RootPath}`
+        - Solution: {scan.SolutionPath ?? "none detected"}
+        - Project profile: {ProfileLabel(profile)}
+        - Project count: {scan.Projects.Count}
+        - Test project count: {scan.Projects.Count(p => p.IsTestProject)}
+
+        ## Source Understanding Summary
+
+        - Handoff readiness: {handoffReadiness}
+        - Scan completed: {scan.ScanRun.CompletedAt:O}
+        - Files indexed: {scan.Files.Count}
+        - C# files: {scan.Files.Count(f => f.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase) && !f.WasIgnored)}
+        - Symbols detected: {symbols.Count}
+        - Tests detected: {tests.Count}
+        - Routes detected: {routes.Count}{(profile is ProjectHandoffProfile.Library or ProjectHandoffProfile.TestHeavyLibrary && routes.Count == 0 ? " (normal for a library)" : "")}
+        - Service registrations detected: {services.Count}{(profile is ProjectHandoffProfile.Library or ProjectHandoffProfile.TestHeavyLibrary && services.Count == 0 ? " (normal for a library)" : "")}
+        - Configuration usages detected: {configs.Count}{(profile is ProjectHandoffProfile.Library or ProjectHandoffProfile.TestHeavyLibrary && configs.Count == 0 ? " (normal for a library)" : "")}
+        - Source TODO/FIXME/REVIEW items: {sourceTodos.Length}
+        - Generated artifact health: {artifactHealth}
+
+        ## Architecture / Structure
+
+        {ArchitectureSummary(scan, profile)}
+
+        {ListOrNone(StructureLines(scan, profile))}
+
+        ## Important Source Files
+
+        {ListOrNone(importantFiles.Select(f => $"- `{f}`"))}
+
+        ## Public API / Main Concepts
+
+        {ListOrNone(concepts.Select(c => $"- {c.Kind} `{c.FullName}` in `{c.RelativePath}:{c.LineNumber}`"))}
+
+        ## Candidate Domain Flows
+
+        {ListOrNone(candidateFlows.Select(f => $"- {f.Name}: {f.Trigger}{(f.Confidence == FlowConfidence.Low ? " (candidate; inspect files to confirm)" : "")}"))}
+
+        ## Detected Project Flows
+
+        {ListOrFallback(visibleFlows.Select(f => $"- {f.Name}: {f.Trigger}"), "- No non-domain application flows were detected. For libraries, use Candidate Domain Flows above.")}
+
+        ## TODO / Risks From Source
+
+        {ListOrFallback(sourceTodos.Select(t => $"- {t.Kind} `{t.RelativePath}:{t.LineNumber}` {CleanTodoText(t.Text)}"), "- No source TODO/FIXME/REVIEW items were detected. Generated context TODOs are excluded by default.")}
+
+        ## Generated Context Available
+
+        - Agent handoff: `.ai-context/agent-handoff.md`
+        - Project summary: `.ai-context/project.md`
+        - Architecture notes: `.ai-context/architecture.md`
+        - Tasks and risks: `.ai-context/tasks.md`
+        - Canonical backend docs: `.ai-context/docs/backend/`
+        - Context packs: `.ai-context/packs/`
+
+        ## How An Agent Should Work Here
+
+        - Use this handoff to orient yourself before editing.
+        - Inspect referenced source files before changing code.
+        - Do not guess method, class, route, or config names.
+        - Preserve the detected architecture and project boundaries.
+        - Keep changes compileable.
+        - Run targeted tests relevant to the change.
+        - Do not add MCP, cloud, licensing, terminal execution, autonomous editing, or automatic AI file writes unless explicitly requested.
+
+        ## Imported Instructions
+
+        {(imported is null ? "- No user-authored instruction file has been imported for this project." : $"- Imported `{Path.GetFileName(imported.SourceFilePath)}` as `{imported.Title}`.")}
+
+        {ListOrFallback(validation.Where(p => p.WarningMessage is not null).Select(p => $"- Warning for `{p.OriginalPath}`: {p.WarningMessage}"), "")}
+
+        ## Recommended Prompt
+
+        ```text
+        You are working in this repository. Use the SourceWorker Agent Handoff below.
+        Do not guess method names. Inspect files before editing.
+        Preserve the current architecture. Keep changes compileable.
+        Run targeted tests only; do not run the full suite unless shared contracts or core behavior changed.
+
+        Task:
+        <describe the change you want here>
+        ```
+        """;
+    }
+
+    private static string LegacyAgentHandoff(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<ProjectInstructionSourcePath> validation, ContextFreshnessReport freshness, IReadOnlyList<CodeFlow> flows, IReadOnlyList<RouteInfo> routes)
+        => $"""
+        # Agent Handoff
+
+        ## Project
+
+        - Name: {scan.Project.Name}
+        - Root path: `{scan.Project.RootPath}`
+        - Solution: {scan.SolutionPath ?? "none detected"}
+        - Project count: {scan.Projects.Count}
+        - Test project count: {scan.Projects.Count(p => p.IsTestProject)}
+
+        ## Purpose
+
+        {DetectedPurpose(scan, imported)}
+
+        ## Current State
+
+        - Latest scan completed: {scan.ScanRun.CompletedAt:O}
+        - Indexed files: {scan.Files.Count}
+        - Context freshness score: {freshness.FreshnessScore}
+        - Main technologies: {TechnologySummary(scan)}
+        - Open TODO/FIXME/REVIEW items: {scan.Todos.Count}
+
+        ## Architecture
+
+        {DetectArchitectureStyle(scan)}
+
+        {ListOrNone(scan.FolderRoles.Select(f => $"- `{f.RelativePath}`: {f.Description}"))}
+
+        ## Important Files
+
+        {ListOrNone(scan.SolutionFiles.Select(s => $"- `{s.RelativePath}`").Concat(scan.MainEntrypoints.Select(e => $"- `{e}`")).Concat(scan.ReadmeFiles.Take(5).Select(r => $"- `{r}`")).Concat(scan.ConfigFiles.Take(8).Select(c => $"- `{c}`")))}
+
+        ## How To Work In This Repo
+
+        - Use this handoff to orient yourself before editing.
+        - Inspect referenced files before changing code.
+        - Do not guess method, class, route, or config names.
+        - Preserve the detected architecture and project boundaries.
+        - Keep changes compileable.
+        - Run targeted tests relevant to the change.
+        - Do not add MCP, cloud, licensing, terminal execution, autonomous editing, or automatic AI file writes unless explicitly requested.
+
+        ## Current Risks / TODOs
+
+        {ListOrNone(scan.Todos.Take(25).Select(t => $"- {t.Kind} `{t.RelativePath}:{t.LineNumber}` {t.Text}"))}
+
+        ## Detected Flows
+
+        {ListOrNone(flows.Where(f => f.Confidence == FlowConfidence.High).Take(10).Select(f => $"- {f.Name}: {f.Trigger}"))}
+
+        ## Detected Routes
+
+        {ListOrNone(routes.Take(20).Select(r => $"- {r.HttpMethod} `{r.RoutePattern}` in `{r.RelativePath}:{r.LineNumber}`"))}
+
+        ## Generated Context Available
+
+        - Quick coding handoff pack: `.ai-context/packs/ai-handoff.pack.yaml`
+        - Backend architecture pack: `.ai-context/packs/backend-docs.pack.yaml`
+        - Canonical backend docs: `.ai-context/docs/backend/`
+        - Tasks and risks: `.ai-context/tasks.md`
+        - Scan details: `.ai-context/scans/latest-scan.md`
+
+        ## Imported Instructions
+
+        {(imported is null ? "- None imported." : $"- Imported `{Path.GetFileName(imported.SourceFilePath)}` as `{imported.Title}`.")}
+
+        {ListOrNone(validation.Where(p => p.WarningMessage is not null).Select(p => $"- Warning for `{p.OriginalPath}`: {p.WarningMessage}"))}
+
+        ## Recommended Next Agent Prompt
+
+        ```text
+        You are working in this repository. Use the SourceWorker Agent Handoff below.
+        Do not guess method names. Inspect files before editing.
+        Preserve the current architecture. Keep changes compileable.
+        Run targeted tests only; do not run the full suite unless shared contracts or core behavior changed.
+
+        Task:
+        <describe the change you want here>
+        ```
         """;
 
     private static string Project(ProjectScanResult scan)
@@ -185,18 +383,19 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         var builder = new StringBuilder();
         builder.AppendLine("# Tasks");
         builder.AppendLine();
-        foreach (var group in scan.Todos.GroupBy(t => TopFolder(t.RelativePath)).OrderBy(g => g.Key))
+        var sourceTodos = SourceTodos(scan);
+        foreach (var group in sourceTodos.GroupBy(t => TopFolder(t.RelativePath)).OrderBy(g => g.Key))
         {
             builder.AppendLine($"## {group.Key}");
             builder.AppendLine();
             foreach (var todo in group.OrderByDescending(t => t.Kind).ThenBy(t => t.RelativePath).ThenBy(t => t.LineNumber))
             {
-                builder.AppendLine($"- {todo.Kind} `{todo.RelativePath}:{todo.LineNumber}` {todo.Text}");
+                builder.AppendLine($"- {todo.Kind} `{todo.RelativePath}:{todo.LineNumber}` {CleanTodoText(todo.Text)}");
             }
             builder.AppendLine();
         }
 
-        if (scan.Todos.Count == 0)
+        if (sourceTodos.Count == 0)
         {
             builder.AppendLine("- None detected");
         }
@@ -377,7 +576,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine("  mode: table-backed");
         builder.AppendLine($"  schemaVersion: {schema?.SchemaVersion ?? 1}");
         builder.AppendLine("contextFiles:");
-        foreach (var path in new[] { "CONTEXT.md", "project.md", "architecture.md", "current-state.md", "tasks.md", "ai-handoff.md", "scans/latest-scan.md", "branches/current.md" })
+        foreach (var path in new[] { "CONTEXT.md", "agent-handoff.md", "project.md", "architecture.md", "current-state.md", "tasks.md", "ai-handoff.md", "scans/latest-scan.md", "branches/current.md" })
         {
             builder.AppendLine($"  - path: \"{path}\"");
             builder.AppendLine("    type: ContextFile");
@@ -422,6 +621,12 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         builder.AppendLine($"  highConfidence: {flows.Count(f => f.Confidence == FlowConfidence.High)}");
         builder.AppendLine($"  mediumConfidence: {flows.Count(f => f.Confidence == FlowConfidence.Medium)}");
         builder.AppendLine($"  lowConfidence: {flows.Count(f => f.Confidence == FlowConfidence.Low)}");
+        builder.AppendLine("scanCompleteness:");
+        builder.AppendLine($"  csharpFiles: {scan.Files.Count(f => f.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase) && !f.WasIgnored)}");
+        builder.AppendLine($"  symbols: {symbols.Count}");
+        builder.AppendLine($"  routes: {routes.Count}");
+        builder.AppendLine($"  flows: {flows.Count}");
+        builder.AppendLine($"  warning: \"{Escape(scan.Files.Any(f => f.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)) && symbols.Count == 0 ? "C# files were found but no symbols were extracted." : "")}\"");
         builder.AppendLine("contextBrowser:");
         builder.AppendLine("  files:");
         builder.AppendLine("    total: 0");
@@ -493,35 +698,23 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         return builder.ToString();
     }
 
-    private async Task WriteGeneratedAsync(Project project, Guid scanRunId, string? recipeId, string root, string relativePath, string body, GeneratedArtifactType type, string generatorName, CancellationToken cancellationToken)
+    private async Task WriteGeneratedAsync(Project project, Guid scanRunId, string? recipeId, string root, string relativePath, string body, GeneratedArtifactType type, string generatorName, CancellationToken cancellationToken, bool includeMarker = true)
     {
         var bodyHash = Hash(body);
-        var content = Metadata(project.Id, scanRunId, recipeId, bodyHash, bodyHash, "Generated") + body;
+        var artifactId = Guid.NewGuid();
+        var content = includeMarker ? Metadata(artifactId, "Generated") + body : body;
         var absolute = Path.Combine(root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
         await File.WriteAllTextAsync(absolute, content, cancellationToken);
         if (artifacts is not null)
         {
             var projectRelative = Path.GetRelativePath(project.RootPath, absolute).Replace('\\', '/');
-            await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), project.Id, scanRunId, recipeId, projectRelative, absolute, type, bodyHash, DateTimeOffset.UtcNow, bodyHash, GeneratedArtifactStatus.Generated, generatorName, null), cancellationToken);
+            await artifacts.UpsertAsync(new GeneratedArtifact(artifactId, project.Id, scanRunId, recipeId, projectRelative, absolute, type, bodyHash, DateTimeOffset.UtcNow, bodyHash, GeneratedArtifactStatus.Generated, generatorName, null), cancellationToken);
         }
     }
 
-    public static string Metadata(Guid projectId, Guid? scanRunId, string? recipeId, string inputHash, string contentHash, string status)
-        => $"""
-        <!--
-        GeneratedBy: SourceWorker
-        FormatVersion: 2
-        ProjectId: {projectId}
-        ScanRunId: {scanRunId}
-        RecipeId: {recipeId}
-        GeneratedUtc: {DateTimeOffset.UtcNow:O}
-        InputHash: {inputHash}
-        ContentHash: {contentHash}
-        Status: {status}
-        -->
-
-        """;
+    public static string Metadata(Guid artifactId, string status)
+        => $"<!-- SourceWorker:Generated; ArtifactId={artifactId}; Status={status} -->{Environment.NewLine}{Environment.NewLine}";
 
     public static string Hash(string content)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
@@ -540,6 +733,238 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         If no instruction file has been imported, this folder may contain only this README.
         """;
 
+    private static ProjectHandoffProfile DetectProfile(ProjectScanResult scan, IReadOnlyList<RouteInfo> routes, IReadOnlyList<TestInfo> tests)
+    {
+        if (scan.Projects.Any(p => p.RelativePath.Contains("Maui", StringComparison.OrdinalIgnoreCase) || p.RelativePath.Contains("Desktop", StringComparison.OrdinalIgnoreCase))) return ProjectHandoffProfile.DesktopApp;
+        if (routes.Count > 0 || scan.Technologies.Any(t => t.Kind == TechnologyKind.AspNetCore)) return ProjectHandoffProfile.WebApi;
+        if (scan.Projects.Any(p => p.RelativePath.Contains("Worker", StringComparison.OrdinalIgnoreCase) || p.RelativePath.Contains("Service", StringComparison.OrdinalIgnoreCase))) return ProjectHandoffProfile.WorkerService;
+        if (scan.FolderRoles.Any(f => f.Role == "ui") && scan.FolderRoles.Any(f => f.Role == "services")) return ProjectHandoffProfile.FullstackApp;
+        if (scan.Projects.Count(p => p.IsTestProject) >= Math.Max(1, scan.Projects.Count / 2) || tests.Count > 25) return ProjectHandoffProfile.TestHeavyLibrary;
+        if (scan.Projects.Count > 0 && scan.Projects.Count(p => p.IsTestProject) > 0) return ProjectHandoffProfile.Library;
+        return ProjectHandoffProfile.Unknown;
+    }
+
+    private static string ProfileLabel(ProjectHandoffProfile profile)
+        => profile switch
+        {
+            ProjectHandoffProfile.WebApi => "Web API",
+            ProjectHandoffProfile.WorkerService => "Worker/service",
+            ProjectHandoffProfile.DesktopApp => "Desktop app",
+            ProjectHandoffProfile.FullstackApp => "Fullstack app",
+            ProjectHandoffProfile.TestHeavyLibrary => "Test-heavy library",
+            ProjectHandoffProfile.Library => "Library",
+            _ => "Unknown"
+        };
+
+    private static string InferProjectPurpose(ProjectScanResult scan, ProjectInstructionDocument? imported, IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<TestInfo> tests)
+    {
+        if (imported is not null && !string.IsNullOrWhiteSpace(imported.Title)) return imported.Title;
+
+        var readme = ReadProjectReadmeSummary(scan);
+        if (!string.IsNullOrWhiteSpace(readme)) return readme;
+
+        var projectNames = scan.Projects.Where(p => !p.IsTestProject).Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToArray();
+        var symbolWords = symbols.Where(s => s.Kind is CodeSymbolKind.Class or CodeSymbolKind.Interface or CodeSymbolKind.Record)
+            .Select(s => SplitPascalWords(s.Name))
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .GroupBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key)
+            .Select(g => g.Key)
+            .Take(10)
+            .ToArray();
+
+        if (scan.Project.Name.Contains("Localite", StringComparison.OrdinalIgnoreCase) || projectNames.Any(p => p.Contains("Localite", StringComparison.OrdinalIgnoreCase)))
+        {
+            var details = new[] { "local persistence", "schema", "query", "save", "delete", "cache", "import/export", "secure local handling", "tests" }
+                .Where(term => symbolWords.Any(w => w.Contains(term.Split('/')[0], StringComparison.OrdinalIgnoreCase)) || scan.Files.Any(f => f.RelativePath.Contains(term.Split('/')[0], StringComparison.OrdinalIgnoreCase)))
+                .DefaultIfEmpty("local persistence")
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            return $"This appears to be a .NET local persistence/library project centered on {string.Join(", ", details)}.";
+        }
+
+        if (projectNames.Length > 0)
+        {
+            var testNote = tests.Count > 0 || scan.Projects.Any(p => p.IsTestProject) ? " with automated tests" : "";
+            var concepts = symbolWords.Length == 0 ? "" : $" Main detected concepts include {string.Join(", ", symbolWords.Take(6))}.";
+            return $"This appears to be a .NET project built around {string.Join(", ", projectNames)}{testNote}.{concepts}";
+        }
+
+        return "This project purpose could not be confidently inferred yet. Use the project name, source folders, and README/docs as context.";
+    }
+
+    private static string? ReadProjectReadmeSummary(ProjectScanResult scan)
+    {
+        var readme = scan.ReadmeFiles
+            .Where(path => !IsGeneratedContextPath(path))
+            .OrderBy(path => path.Equals("README.md", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(path => path.Length)
+            .FirstOrDefault();
+        if (readme is null) return null;
+
+        var absolute = Path.Combine(scan.Project.RootPath, readme.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(absolute)) return null;
+        var lines = File.ReadLines(absolute)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith("<!--", StringComparison.Ordinal))
+            .Take(12)
+            .ToArray();
+        if (lines.Length == 0) return null;
+
+        var title = lines.FirstOrDefault(line => line.StartsWith("#", StringComparison.Ordinal))?.Trim('#', ' ');
+        var paragraphs = lines.Where(line => !line.StartsWith("#", StringComparison.Ordinal) && !line.StartsWith("```", StringComparison.Ordinal) && !line.StartsWith("- ", StringComparison.Ordinal)).Take(2).ToArray();
+        if (paragraphs.Length > 0) return $"{(string.IsNullOrWhiteSpace(title) ? scan.Project.Name : title)} appears to be: {string.Join(" ", paragraphs)}";
+        return string.IsNullOrWhiteSpace(title) ? null : $"This appears to be the `{title}` project. Purpose is inferred from the README title.";
+    }
+
+    private static string SplitPascalWords(string value)
+        => string.Join(" ", Regex.Matches(value, "[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+").Select(m => m.Value));
+
+    private static string ArchitectureSummary(ProjectScanResult scan, ProjectHandoffProfile profile)
+    {
+        if (scan.FolderRoles.Any(f => f.Role == "core") && scan.FolderRoles.Any(f => f.Role == "infrastructure"))
+            return "Clean architecture style with core/application contracts separated from infrastructure adapters.";
+
+        if (profile is ProjectHandoffProfile.Library or ProjectHandoffProfile.TestHeavyLibrary)
+        {
+            var libraryProjects = scan.Projects.Where(p => !p.IsTestProject).Select(p => p.RelativePath).Take(8);
+            var testProjects = scan.Projects.Where(p => p.IsTestProject).Select(p => p.RelativePath).Take(8);
+            return $"""
+            Library-style structure. No formal clean architecture layout was detected, but the repo still has useful structure:
+
+            - Main library projects: {InlineList(libraryProjects)}
+            - Test projects: {InlineList(testProjects)}
+            - Feature/source folders: {InlineList(FeatureFolders(scan).Take(12))}
+            """;
+        }
+
+        if (scan.FolderRoles.Count > 0) return "Project structure is organized by detected top-level folders rather than a named architecture pattern.";
+        if (scan.Projects.Count > 0) return "Project structure is organized primarily by .NET project files.";
+        return "Architecture could not be inferred because no solution/project structure was detected yet.";
+    }
+
+    private static IEnumerable<string> StructureLines(ProjectScanResult scan, ProjectHandoffProfile profile)
+    {
+        foreach (var role in scan.FolderRoles)
+            yield return $"- `{role.RelativePath}`: {role.Description}";
+        if (profile is not (ProjectHandoffProfile.Library or ProjectHandoffProfile.TestHeavyLibrary))
+            foreach (var folder in FeatureFolders(scan).Take(16))
+                yield return $"- `{folder}`: source/feature folder";
+        foreach (var project in scan.Projects.Take(20))
+            yield return $"- `{project.RelativePath}`: {(project.IsTestProject ? "test project" : "project")}";
+    }
+
+    private static IEnumerable<string> FeatureFolders(ProjectScanResult scan)
+        => scan.Files
+            .Where(f => f.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase) && !IsGeneratedContextPath(f.RelativePath))
+            .Select(f => f.RelativePath.Split('/'))
+            .Where(parts => parts.Length >= 2)
+            .Select(parts => string.Join('/', parts.Take(Math.Min(parts.Length - 1, 3))))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path);
+
+    private static IEnumerable<string> ImportantSourceFiles(ProjectScanResult scan, IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<TestInfo> tests)
+        => scan.SolutionFiles.Select(s => s.RelativePath)
+            .Concat(scan.MainEntrypoints)
+            .Concat(scan.ReadmeFiles.Where(path => !IsGeneratedContextPath(path)))
+            .Concat(scan.Projects.Select(p => p.RelativePath))
+            .Concat(RankedImportantSourceFiles(symbols, tests))
+            .Concat(scan.ConfigFiles.Where(path => !IsGeneratedContextPath(path)).Take(8))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<CodeSymbol> PublicConcepts(IReadOnlyList<CodeSymbol> symbols)
+        => symbols
+            .Where(s => s.Accessibility is "public" or "internal" && s.Kind is CodeSymbolKind.Class or CodeSymbolKind.Interface or CodeSymbolKind.Record or CodeSymbolKind.Enum)
+            .OrderBy(s => IsTestPath(s.RelativePath) ? 1 : 0)
+            .ThenBy(s => IsFakeOrTestConcept(s.Name) ? 1 : 0)
+            .ThenBy(s => s.RelativePath.Contains("/Interfaces/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(s => s.RelativePath.Contains("/public/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(s => s.Name.StartsWith("I", StringComparison.Ordinal) && s.Kind == CodeSymbolKind.Interface ? 0 : 1)
+            .ThenBy(s => s.Kind)
+            .ThenBy(s => s.RelativePath)
+            .ThenBy(s => s.Name);
+
+    private static IEnumerable<string> RankedImportantSourceFiles(IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<TestInfo> tests)
+    {
+        var importantTerms = new[] { "Context", "Store", "LocalDbSet", "DbObjSet", "GraphOp", "SaveOp", "DeleteOp", "ServiceBuilder", "ServiceExtensions", "Sql", "Attribute", "Options", "Interface" };
+        return symbols
+            .Where(s => !IsTestPath(s.RelativePath))
+            .Where(s => importantTerms.Any(term => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) || s.RelativePath.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(s => s.Accessibility == "public")
+            .ThenBy(s => s.RelativePath)
+            .Select(s => s.RelativePath)
+            .Concat(tests.Where(t => t.MethodName.Contains("Production", StringComparison.OrdinalIgnoreCase) || t.RelativePath.Contains("Heavy", StringComparison.OrdinalIgnoreCase) || t.RelativePath.Contains("Hardening", StringComparison.OrdinalIgnoreCase)).Select(t => t.RelativePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTestPath(string relativePath)
+        => relativePath.Contains("/test", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains(".Tests/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains(".Production.Tests/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFakeOrTestConcept(string name)
+        => name.Contains("Fake", StringComparison.OrdinalIgnoreCase) ||
+           name.Contains("Mock", StringComparison.OrdinalIgnoreCase) ||
+           name.Contains("Sample", StringComparison.OrdinalIgnoreCase) ||
+           name.EndsWith("Tests", StringComparison.OrdinalIgnoreCase) ||
+           name.EndsWith("Test", StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<CodeFlow> UserFacingFlows(ProjectScanResult scan, IReadOnlyList<CodeFlow> flows)
+    {
+        var isSourceWorker = scan.Project.Name.Equals("SourceWorker", StringComparison.OrdinalIgnoreCase) ||
+            scan.Projects.Any(p => p.Name.StartsWith("SourceWorker.", StringComparison.OrdinalIgnoreCase));
+        return flows
+            .Where(f => f.Origin != FlowOrigin.RecipeGenerated)
+            .Where(f => isSourceWorker || f.Origin != FlowOrigin.SourceWorkerInternal)
+            .Where(f => f.FlowType != CodeFlowType.CandidateDomainFlow)
+            .OrderByDescending(f => f.Confidence)
+            .ThenBy(f => f.Name)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<CodeFlow> CandidateDomainFlows(ProjectScanResult scan, IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<CodeFlow> flows, IReadOnlyList<TestInfo> tests)
+    {
+        var existing = flows.Where(f => f.FlowType == CodeFlowType.CandidateDomainFlow && f.Origin != FlowOrigin.SourceWorkerInternal).ToList();
+        if (existing.Count > 0) return existing.OrderByDescending(f => f.Confidence).ThenBy(f => f.Name).ToArray();
+
+        var terms = new (string Name, string[] Keywords)[]
+        {
+            ("Create context", ["Context", "Create", "Open"]),
+            ("Ensure schema", ["Schema", "Ensure", "Migration"]),
+            ("Query data", ["Query", "Find", "Get", "Read"]),
+            ("Save graph", ["Save", "Insert", "Update", "Write"]),
+            ("Delete graph", ["Delete", "Remove"]),
+            ("Export/import data", ["Export", "Import"]),
+            ("Cache values", ["Cache"]),
+            ("Secure local handling", ["Secure", "Secret", "Encrypt", "Credential"])
+        };
+        var searchable = symbols.Select(s => $"{s.Name} {s.FullName} {s.RelativePath}")
+            .Concat(tests.Select(t => $"{t.ClassName} {t.MethodName} {t.RelativePath}"))
+            .Concat(scan.Files.Select(f => f.RelativePath))
+            .ToArray();
+
+        return terms
+            .Where(term => searchable.Any(value => term.Keywords.Any(keyword => value.Contains(keyword, StringComparison.OrdinalIgnoreCase))))
+            .Select(term => new CodeFlow(Guid.NewGuid(), scan.Project.Id, scan.ScanRun.Id, term.Name, CodeFlowType.CandidateDomainFlow, "Inferred from public symbols, tests, and source folder names", [], [], [], FlowConfidence.Low, ["Candidate domain flow inferred without AI; inspect files to confirm."], FlowOrigin.GenericFallback))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<TodoItem> SourceTodos(ProjectScanResult scan)
+        => scan.Todos.Where(t => !IsGeneratedContextPath(t.RelativePath)).ToArray();
+
+    private static bool IsGeneratedContextPath(string relativePath)
+        => relativePath.StartsWith(".ai-context/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.StartsWith("instructions/Result/", StringComparison.OrdinalIgnoreCase);
+
+    private static string CleanTodoText(string text)
+        => text.Length <= 180 ? text : text[..180] + "...";
+
+    private static string InlineList(IEnumerable<string> values)
+    {
+        var materialized = values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return materialized.Length == 0 ? "none detected" : string.Join(", ", materialized.Select(v => $"`{v}`"));
+    }
+
     private static string DetectArchitectureStyle(ProjectScanResult scan)
         => scan.FolderRoles.Any(f => f.Role == "core") && scan.FolderRoles.Any(f => f.Role == "infrastructure")
             ? "Clean architecture style with core/application contracts separated from infrastructure adapters."
@@ -547,6 +972,14 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
 
     private static string TechnologySummary(ProjectScanResult scan)
         => scan.Technologies.Count == 0 ? "no strongly detected technology stack yet" : string.Join(", ", scan.Technologies.Select(t => t.Kind).Distinct());
+
+    private static string DetectedPurpose(ProjectScanResult scan, ProjectInstructionDocument? imported)
+    {
+        if (imported is not null && !string.IsNullOrWhiteSpace(imported.Title)) return imported.Title;
+        var inferred = InferProjectPurpose(scan, imported, [], []);
+        if (!string.IsNullOrWhiteSpace(inferred)) return inferred;
+        return "Purpose was not explicitly detected. Use the project name, folders, and generated docs as context.";
+    }
 
     private static string TopFolder(string relativePath)
     {
@@ -558,6 +991,12 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
     {
         var materialized = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToArray();
         return materialized.Length == 0 ? "- None detected" : string.Join(Environment.NewLine, materialized);
+    }
+
+    private static string ListOrFallback(IEnumerable<string> lines, string fallback)
+    {
+        var materialized = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToArray();
+        return materialized.Length == 0 ? fallback : string.Join(Environment.NewLine, materialized);
     }
 
     private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");

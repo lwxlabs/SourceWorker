@@ -89,6 +89,7 @@ public sealed class DogfoodTests
         public Task<Project?> GetByPathAsync(string rootPath, CancellationToken cancellationToken) => Task.FromResult(projects.FirstOrDefault(p => p.RootPath == rootPath));
         public Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken) => Task.FromResult(projects);
         public Task<Project> UpdateAsync(Project project, CancellationToken cancellationToken) => Task.FromResult(project);
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class ScanRepo : IScanRunRepository

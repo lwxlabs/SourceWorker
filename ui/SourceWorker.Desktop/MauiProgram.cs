@@ -25,6 +25,7 @@ public static class MauiProgram
 
         builder.Services.AddScoped<ToastService>();
         builder.Services.AddScoped<DashboardActionService>();
+        builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
         builder.Services.AddSingleton<IDesktopLocalApiLifecycleService, DesktopLocalApiLifecycleService>();
         builder.Services.AddSingleton<IDesktopRuntimeStateService>(provider => (DesktopLocalApiLifecycleService)provider.GetRequiredService<IDesktopLocalApiLifecycleService>());
         builder.Services.AddSingleton<IDesktopStartupService, DesktopStartupService>();

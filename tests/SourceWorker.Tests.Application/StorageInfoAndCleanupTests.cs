@@ -20,7 +20,7 @@ public sealed class StorageInfoAndCleanupTests
 
         var sp = new ServiceCollection()
             .AddSourceWorkerApplication()
-            .AddSourceWorkerInfrastructure()
+            .AddTestSourceWorkerInfrastructure()
             .AddSourceWorkerJobs(addHostedWorker: false)
             .BuildServiceProvider();
 
@@ -45,6 +45,8 @@ public sealed class StorageInfoAndCleanupTests
 
         Assert.Equal("Localite", info.Schema.Provider);
         Assert.Equal("table-backed", info.Schema.Mode);
+        Assert.DoesNotContain(Path.Combine("AppData", "Local", "SourceWorker", "sourceworker.localite.db"), info.Schema.StoragePath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(Path.Combine(Path.GetTempPath(), "sourceworker-test-db"), info.Schema.StoragePath, StringComparison.OrdinalIgnoreCase);
         Assert.True(info.Schema.SchemaVersion >= 1);
         Assert.Contains(artifacts.DeprecatedArtifacts, p => p.EndsWith("03-workers-and-services.md", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(preview.SafeDeleteFiles, p => p.EndsWith("03-workers-and-services.md", StringComparison.OrdinalIgnoreCase));
@@ -53,3 +55,4 @@ public sealed class StorageInfoAndCleanupTests
         Assert.False(File.Exists(deprecated));
     }
 }
+

@@ -1,20 +1,23 @@
 @page "/projects/{ProjectId:guid}/packs"
 @inject ISourceWorkerApiClient Api
 
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="packs">
 <h1>Context Packs</h1>
+<p class="text-muted">Packs are clean bundles you can copy, export, or use when asking another AI agent. Raw `.pack.yaml` manifests are hidden in the preview unless you need advanced details.</p>
 
 <div class="split">
     <Cards Title="Packs">
         @foreach (var pack in packs)
         {
             <a class="file-row" href="@($"/projects/{ProjectId}/packs?pack={pack.Pack.Id}")">
-                <span>@pack.Pack.Name</span>
-                <small>@(pack.IsValid ? "valid" : "missing files")</small>
+                <span>@DisplayName(pack.Pack.Id)</span>
+                <small>@RecommendedUse(pack.Pack.Id) · @(pack.IsValid ? "ready" : "missing files")</small>
             </a>
         }
     </Cards>
     <PackViewer ProjectId="@ProjectId" Pack="@selected" Content="@content" />
 </div>
+</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
@@ -34,4 +37,26 @@
             content = await Api.GetPackContentAsync(ProjectId, id);
         }
     }
+
+    private static string DisplayName(string id)
+        => id switch
+        {
+            "ai-handoff" => "Quick Agent Handoff",
+            "backend-docs" => "Architecture Deep Dive",
+            "onboarding" => "Project Onboarding",
+            "current-branch" => "Current Branch Context",
+            "dogfood-feedback" => "Dogfood Feedback",
+            _ => id
+        };
+
+    private static string RecommendedUse(string id)
+        => id switch
+        {
+            "ai-handoff" => "best for Codex/Junie quick coding context",
+            "backend-docs" => "best for deeper architecture understanding",
+            "onboarding" => "best for a new developer or AI session",
+            "current-branch" => "best for branch-specific work",
+            "dogfood-feedback" => "only for improving SourceWorker",
+            _ => "context bundle"
+        };
 }

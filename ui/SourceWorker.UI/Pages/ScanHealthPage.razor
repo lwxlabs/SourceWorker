@@ -1,0 +1,51 @@
+@page "/projects/{ProjectId:guid}/scan-health"
+@inject ISourceWorkerApiClient Api
+
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="scan-health">
+    <h1>Scan Health</h1>
+    <p>Use this page to understand what SourceWorker scanned, what it skipped, and why code intelligence may be incomplete.</p>
+
+    @if (completeness is null)
+    {
+        <LoadingState />
+    }
+    else
+    {
+        <Cards Title="Completeness">
+            <div class="metric-grid">
+                <MetricCard Label="Score" Value="@($"{completeness.Score}%")" />
+                <MetricCard Label="Warnings" Value="@completeness.Warnings.Count.ToString()" />
+                <MetricCard Label="Stages" Value="@completeness.Stages.Count.ToString()" />
+            </div>
+            <p class="muted">@completeness.CodeIntelligenceExplanation</p>
+        </Cards>
+
+        <Cards Title="Scan Stages">
+            @foreach (var stage in completeness.Stages)
+            {
+                <div class="list-row">
+                    <strong>@stage.Name</strong>
+                    <span class="pill @StageClass(stage.Status)">@stage.Status</span>
+                    <span>@stage.Count</span>
+                </div>
+                @foreach (var warning in stage.Warnings)
+                {
+                    <div class="list-row compact"><strong>Warning</strong><span>@warning.Message</span></div>
+                }
+            }
+        </Cards>
+    }
+</ProjectWorkspaceLayout>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private ScanCompletenessReportDto? completeness;
+
+    protected override async Task OnParametersSetAsync()
+        => completeness = await Api.GetScanCompletenessAsync(ProjectId);
+
+    private static string StageClass(string status)
+        => status.Contains("Warning", StringComparison.OrdinalIgnoreCase) ? "warn" :
+           status.Contains("Failed", StringComparison.OrdinalIgnoreCase) ? "bad" :
+           "ok";
+}

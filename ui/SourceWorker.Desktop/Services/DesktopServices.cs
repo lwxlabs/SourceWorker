@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading;
 using SourceWorker.ApiClient;
 using SourceWorker.Hosting;
@@ -36,7 +38,7 @@ public interface IDesktopShellService { string EnvironmentName { get; } }
 public interface IDesktopWindowService { void ShowMainWindow(); }
 public interface IDesktopNotificationService { Task NotifyAsync(string title, string message, CancellationToken cancellationToken = default); }
 public interface IDesktopClipboardService { Task SetTextAsync(string text, CancellationToken cancellationToken = default); }
-public interface IDesktopFileDialogService { Task<string?> PickFolderAsync(CancellationToken cancellationToken = default); }
+public interface IDesktopFileDialogService { Task<string?> PickFolderAsync(string currentPath = "", CancellationToken cancellationToken = default); }
 public interface IDesktopExternalLinkService { Task OpenAsync(string url, CancellationToken cancellationToken = default); }
 public interface ISingleInstanceService { bool TryAcquire(); void Release(); }
 
@@ -128,19 +130,118 @@ public sealed class DesktopExternalLinkService : IDesktopExternalLinkService { p
 
 public sealed class DesktopFolderPickerService : IDesktopFileDialogService, IProjectFolderPicker
 {
-    public Task<string?> PickFolderAsync(CancellationToken cancellationToken = default)
-        => PickAsync(cancellationToken);
+    public Task<string?> PickFolderAsync(string currentPath = "", CancellationToken cancellationToken = default)
+        => Task.FromResult(PickFolderNative(currentPath));
 
-    async Task<string?> IDesktopFileDialogService.PickFolderAsync(CancellationToken cancellationToken)
-        => await PickAsync(cancellationToken);
+    Task<string?> IDesktopFileDialogService.PickFolderAsync(string currentPath, CancellationToken cancellationToken)
+        => PickFolderAsync(currentPath, cancellationToken);
 
-    async Task<string?> IProjectFolderPicker.PickFolderAsync(CancellationToken cancellationToken)
-        => await PickAsync(cancellationToken);
+    Task<string?> IProjectFolderPicker.PickFolderAsync(string currentPath, CancellationToken cancellationToken)
+        => PickFolderAsync(currentPath, cancellationToken);
 
-    private static async Task<string?> PickAsync(CancellationToken cancellationToken)
+    private static string? PickFolderNative(string initialPath = "")
     {
-        var result = await FilePicker.PickAsync(new PickOptions { PickerTitle = "Choose a project folder" });
-        return result?.FullPath is null ? null : Directory.Exists(result.FullPath) ? result.FullPath : Path.GetDirectoryName(result.FullPath);
+        IFileOpenDialog? dialog = null;
+        IShellItem? initialFolder = null;
+
+        try
+        {
+            dialog = (IFileOpenDialog)(object)new FileOpenDialogRCW();
+            dialog.GetOptions(out var options);
+            dialog.SetOptions(options | FOS.FOS_PICKFOLDERS | FOS.FOS_FORCEFILESYSTEM | FOS.FOS_PATHMUSTEXIST);
+            dialog.SetTitle("Choose a SourceWorker project folder");
+
+            if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+            {
+                var hr = SHCreateItemFromParsingName(initialPath, IntPtr.Zero, typeof(IShellItem).GUID, out var folderPtr);
+                if (hr == 0 && folderPtr != IntPtr.Zero)
+                {
+                    initialFolder = (IShellItem)Marshal.GetObjectForIUnknown(folderPtr);
+                    Marshal.Release(folderPtr);
+                    dialog.SetFolder(initialFolder);
+                    dialog.SetDefaultFolder(initialFolder);
+                }
+            }
+
+            if (dialog.Show(IntPtr.Zero) != 0) return null;
+            dialog.GetResult(out var result);
+            result.GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out var selectedPath);
+            return selectedPath;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (initialFolder != null) Marshal.ReleaseComObject(initialFolder);
+            if (dialog != null) Marshal.ReleaseComObject(dialog);
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(string pszPath, IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IntPtr ppv);
+
+    [ComImport]
+    [Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
+    private sealed class FileOpenDialogRCW { }
+
+    [ComImport]
+    [Guid("D57C7288-D4AD-4768-BE02-9D969532D960")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOpenDialog
+    {
+        [PreserveSig] int Show(IntPtr parent);
+        void SetFileTypes(uint cFileTypes, IntPtr rgFilterSpec);
+        void SetFileTypeIndex(uint iFileType);
+        void GetFileTypeIndex(out uint piFileType);
+        void Advise(IntPtr pfde, out uint pdwCookie);
+        void Unadvise(uint dwCookie);
+        void SetOptions(FOS fos);
+        void GetOptions(out FOS pfos);
+        void SetDefaultFolder(IShellItem psi);
+        void SetFolder(IShellItem psi);
+        void GetFolder(out IShellItem ppsi);
+        void GetCurrentSelection(out IShellItem ppsi);
+        void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+        void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+        void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string pszText);
+        void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+        void GetResult(out IShellItem ppsi);
+        void AddPlace(IShellItem psi, int fdap);
+        void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
+        void Close(int hr);
+        void SetClientGuid(ref Guid guid);
+        void ClearClientData();
+        void SetFilter(IntPtr pFilter);
+        void GetResults(IntPtr ppenum);
+        void GetSelectedItems(IntPtr ppsai);
+    }
+
+    [ComImport]
+    [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
+        void BindToHandler(IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid bhid, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IntPtr ppv);
+        void GetParent(out IShellItem ppsi);
+        void GetDisplayName(SIGDN sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+        void GetAttributes(uint sfgaoMask, out uint psfgaoAttribs);
+        void Compare(IShellItem psi, uint hint, out int piOrder);
+    }
+
+    [Flags]
+    private enum FOS : uint
+    {
+        FOS_PICKFOLDERS = 0x00000020,
+        FOS_FORCEFILESYSTEM = 0x00000040,
+        FOS_PATHMUSTEXIST = 0x00000800
+    }
+
+    private enum SIGDN : uint
+    {
+        SIGDN_FILESYSPATH = 0x80058000
     }
 }
 

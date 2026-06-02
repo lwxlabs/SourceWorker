@@ -35,7 +35,8 @@ public sealed partial class BasicProjectScanner(IGitInspector gitInspector) : IP
             if (!ShouldReadText(info)) continue;
             var lines = await File.ReadAllLinesAsync(file, cancellationToken);
             DetectByContent(relative, lines, technologies);
-            todos.AddRange(FindTodos(project.Id, scanId, relative, lines));
+            if (!IsGeneratedContextPath(relative))
+                todos.AddRange(FindTodos(project.Id, scanId, relative, lines));
         }
 
         var solutionFiles = files.Where(f => f.Kind == IndexedFileKind.Solution)
@@ -165,6 +166,10 @@ public sealed partial class BasicProjectScanner(IGitInspector gitInspector) : IP
             yield return new TodoItem(Guid.NewGuid(), projectId, scanRunId, relativePath, i + 1, kind, lines[i].Trim());
         }
     }
+
+    private static bool IsGeneratedContextPath(string relativePath)
+        => relativePath.StartsWith(".ai-context/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.StartsWith("instructions/Result/", StringComparison.OrdinalIgnoreCase);
 
     private static void DetectByPath(string relativePath, IDictionary<TechnologyKind, string> technologies)
     {

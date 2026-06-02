@@ -31,6 +31,7 @@ builder.Services.AddSourceWorkerApiClient(options =>
 });
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<DashboardActionService>();
+builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
 builder.Services.AddScoped<IProjectFolderPicker, NoopProjectFolderPicker>();
 
 var app = builder.Build();

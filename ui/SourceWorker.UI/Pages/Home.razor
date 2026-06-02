@@ -1,54 +1,40 @@
 @page "/"
 @inject ISourceWorkerApiClient Api
 
-<h1>SourceWorker Dashboard</h1>
-<p class="lead">Read-only cockpit for the local context engine.</p>
+<h1>SourceWorker</h1>
+<p class="lead">Pick a repo, scan it, understand it, and copy a clean handoff for another AI coding agent.</p>
 
 <div class="grid two">
-    <HealthCard Health="@health" />
-    <StorageInfoCard Info="@storage" />
+    <Cards Title="Start">
+        <p>Register a project or continue from a recent repository.</p>
+        <a class="btn btn-primary" href="/projects">Open Projects</a>
+    </Cards>
+    <Cards Title="Status">
+        <div class="metric-grid">
+            <MetricCard Label="Projects" Value="@projects.Count.ToString()" />
+            <MetricCard Label="Handoff Ready" Value="@HandoffReadyCount.ToString()" />
+            <MetricCard Label="Needs Scan" Value="@NeedsScanCount.ToString()" />
+            <MetricCard Label="Needs Review" Value="@NeedsReviewCount.ToString()" />
+        </div>
+    </Cards>
 </div>
 
-<Cards Title="Next Recommended Action">
-    @if (dogfood is null)
-    {
-        <LoadingState />
-    }
-    else
-    {
-        <div class="list-row"><strong>Dogfood readiness</strong><span>@dogfood.Score% - @dogfood.Checklist.Status</span></div>
-        @foreach (var action in dogfood.Checklist.NextActions)
-        {
-            <div class="list-row"><strong>Next</strong><span>@action</span></div>
-        }
-        @foreach (var action in nextActions)
-        {
-            <div class="list-row"><strong>@action.Priority</strong><span><a href="@action.Href">@action.Title</a> - @action.Description</span></div>
-        }
-        <a href="/dogfood">Open dogfood checklist</a>
-    }
-</Cards>
-
-<Cards Title="Projects">
+<Cards Title="Recent Projects">
     <ProjectPicker Projects="@projects" />
 </Cards>
 
 @code {
-    private HealthResponse? health;
-    private StorageInfo? storage;
-    private DogfoodProjectReadinessDto? dogfood;
-    private IReadOnlyList<NextActionDto> nextActions = [];
     private IReadOnlyList<ProjectSummaryDto> projects = [];
+
+    private int HandoffReadyCount => projects.Count(p => p.LastScanUtc.HasValue && !p.HasStaleContext);
+    private int NeedsScanCount => projects.Count(p => !p.LastScanUtc.HasValue);
+    private int NeedsReviewCount => projects.Count(p => p.HasStaleContext || p.HasManualGeneratedFiles);
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            health = await Api.GetHealthAsync();
-            storage = await Api.GetStorageInfoAsync();
-            projects = await Api.GetProjectsSummaryAsync(limit: 5);
-            dogfood = await Api.GetDogfoodStatusAsync();
-            nextActions = await Api.GetNextActionsAsync();
+            projects = await Api.GetProjectsSummaryAsync(limit: 6);
         }
         catch
         {

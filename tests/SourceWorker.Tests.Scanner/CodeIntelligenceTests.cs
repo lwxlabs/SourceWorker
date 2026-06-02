@@ -44,7 +44,8 @@ public sealed class CodeIntelligenceTests
         Assert.Contains(result.ConfigurationUsages, c => c.KeyOrSection == "App");
         Assert.Contains(result.BackgroundWorkers, w => w.ClassName == "Worker");
         Assert.Contains(result.Tests, t => t.MethodName == "Works");
-        Assert.Contains(result.Flows, f => f.FlowType == CodeFlowType.ScanFlow && f.Confidence == FlowConfidence.High);
+        Assert.Contains(result.Flows, f => f.FlowType == CodeFlowType.LocalApiEndpointFlow && f.Confidence == FlowConfidence.High);
+        Assert.DoesNotContain(result.Flows, f => f.Origin == FlowOrigin.SourceWorkerInternal);
         Assert.Contains("flowchart TD", new FlowDiagramGenerator().Generate(result.Flows.First()));
     }
 

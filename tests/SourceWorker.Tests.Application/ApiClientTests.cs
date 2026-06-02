@@ -54,6 +54,31 @@ public sealed class ApiClientTests
     }
 
     [Fact]
+    public async Task Api_client_can_delete_project()
+    {
+        var projectId = Guid.NewGuid();
+        var sawDelete = false;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            if (request.Method == HttpMethod.Delete && request.RequestUri?.AbsolutePath == $"/api/projects/{projectId}")
+            {
+                sawDelete = true;
+                return "";
+            }
+
+            throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+
+        await client.DeleteProjectAsync(projectId);
+
+        Assert.True(sawDelete);
+    }
+
+    [Fact]
     public async Task Api_client_can_start_scan()
     {
         var jobId = Guid.NewGuid();
@@ -113,6 +138,33 @@ public sealed class ApiClientTests
         
         Assert.Equal("test", response.ExportProfileId);
         Assert.Single(response.Files);
+    }
+
+    [Fact]
+    public async Task ApiClient_handoff_and_completeness_methods_parse_responses()
+    {
+        var projectId = Guid.NewGuid();
+        using var http = new HttpClient(new StubHandler(request => request.RequestUri?.AbsolutePath switch
+        {
+            var path when path == $"/api/projects/{projectId}/agent-handoff" => $$"""{"projectId":"{{projectId}}","relativePath":".ai-context/agent-handoff.md","markdown":"# Agent Handoff","recommendedPackId":"ai-handoff","templates":[{"id":"codex","name":"Codex","header":"Use context."}]}""",
+            var path when path == $"/api/projects/{projectId}/scan-completeness" => $$"""{"projectId":"{{projectId}}","scanRunId":null,"score":75,"stages":[{"name":"C# symbol scan","status":"CompletedWithWarnings","count":0,"warnings":[{"code":"c-symbol-scan","message":"C# files were found but no symbols were extracted.","detail":null}],"errorMessage":null,"duration":null,"relatedFiles":[]}],"warnings":[{"code":"c-symbol-scan","message":"C# files were found but no symbols were extracted.","detail":null}],"codeIntelligenceExplanation":"C# files were found, but no symbols were extracted."}""",
+            var path when path == $"/api/projects/{projectId}/context-browser/files" => """[{"relativePath":".ai-context/agent-handoff.md","absolutePath":"C:\\Repo\\.ai-context\\agent-handoff.md","kind":"Root Context","sizeBytes":12,"lastModifiedUtc":"2026-05-31T00:00:00Z"}]""",
+            _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
+        }))
+        {
+            BaseAddress = new Uri("http://localhost:5000")
+        };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions());
+
+        var handoff = await client.GetAgentHandoffAsync(projectId);
+        var completeness = await client.GetScanCompletenessAsync(projectId);
+        var files = await client.GetContextFilesAsync(projectId);
+
+        Assert.Equal("ai-handoff", handoff.RecommendedPackId);
+        Assert.Contains("Agent Handoff", handoff.Markdown);
+        Assert.Equal(75, completeness.Score);
+        Assert.Contains(completeness.Warnings, w => w.Message.Contains("no symbols", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(files);
     }
 
     [Fact]

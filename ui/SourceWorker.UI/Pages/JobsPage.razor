@@ -1,46 +1,22 @@
-﻿@page "/jobs"
+@page "/jobs"
+@page "/projects/{ProjectId:guid}/jobs"
 @inject ISourceWorkerApiClient Api
 @using System.Timers
 
-<h1>Recent Jobs</h1>
-
-@if (jobs == null)
+@if (ProjectId is Guid projectId)
 {
-    <LoadingState />
-}
-else if (jobs.Count == 0)
-{
-    <EmptyState Message="No jobs have been run yet." />
+    <ProjectWorkspaceLayout ProjectId="@projectId" Active="jobs">
+        @JobContent("Project Jobs")
+    </ProjectWorkspaceLayout>
 }
 else
 {
-    <div class="job-list">
-        @foreach (var job in jobs)
-        {
-            <div class="job-card" style="padding: 1rem; border: 1px solid #eee; margin-bottom: 0.5rem; border-radius: 4px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong>@job.Type</strong>
-                    <span class="tag @GetStatusClass(job.Status)">@job.Status</span>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.9rem;">
-                    @if (!string.IsNullOrEmpty(job.CurrentStep))
-                    {
-                        <span>Step: @job.CurrentStep</span>
-                    }
-                    <div style="background: #eee; height: 8px; border-radius: 4px; margin-top: 4px;">
-                        <div style="background: #007bff; height: 100%; border-radius: 4px; width: @(job.ProgressPercent + "%")"></div>
-                    </div>
-                </div>
-                @if (!string.IsNullOrEmpty(job.ErrorMessage))
-                {
-                    <div style="color: red; margin-top: 0.5rem; font-size: 0.85rem;">@job.ErrorMessage</div>
-                }
-            </div>
-        }
-    </div>
+    @JobContent("All Jobs")
 }
 
 @code {
+    [Parameter] public Guid? ProjectId { get; set; }
+
     private IReadOnlyList<JobStatusDto>? jobs;
     private Timer? timer;
 
@@ -48,24 +24,29 @@ else
     {
         await LoadJobs();
         timer = new Timer(3000);
-        timer.Elapsed += async (s, e) => await InvokeAsync(LoadJobs);
+        timer.Elapsed += async (_, _) => await InvokeAsync(LoadJobs);
         timer.Start();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadJobs();
     }
 
     private async Task LoadJobs()
     {
-        try 
+        try
         {
-            jobs = await Api.GetJobsAsync();
+            jobs = ProjectId is Guid projectId ? await Api.GetProjectJobsAsync(projectId) : await Api.GetJobsAsync();
             StateHasChanged();
         }
-        catch 
+        catch
         {
-            // Ignore
+            jobs = [];
         }
     }
 
-    private string GetStatusClass(string status) => status switch
+    private static string GetStatusClass(string status) => status switch
     {
         "Running" => "info",
         "Completed" => "success",
@@ -73,8 +54,44 @@ else
         _ => "warning"
     };
 
-    public void Dispose()
-    {
-        timer?.Dispose();
-    }
+    private RenderFragment JobContent(string title) => @<div>
+        <h1>@title</h1>
+        @if (jobs == null)
+        {
+            <LoadingState />
+        }
+        else if (jobs.Count == 0)
+        {
+            <EmptyState Message="No jobs have been run yet." />
+        }
+        else
+        {
+            <div class="job-list">
+                @foreach (var job in jobs)
+                {
+                    <div class="job-card" style="padding: 1rem; border: 1px solid #eee; margin-bottom: 0.5rem; border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>@job.Type</strong>
+                            <span class="tag @GetStatusClass(job.Status)">@job.Status</span>
+                        </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            @if (!string.IsNullOrEmpty(job.CurrentStep))
+                            {
+                                <span>Step: @job.CurrentStep</span>
+                            }
+                            <div style="background: #eee; height: 8px; border-radius: 4px; margin-top: 4px;">
+                                <div style="background: #007bff; height: 100%; border-radius: 4px; width: @(job.ProgressPercent + "%")"></div>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                        {
+                            <div style="color: red; margin-top: 0.5rem; font-size: 0.85rem;">@job.ErrorMessage</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>;
+
+    public void Dispose() => timer?.Dispose();
 }

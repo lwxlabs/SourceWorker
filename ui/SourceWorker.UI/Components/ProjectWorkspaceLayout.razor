@@ -1,0 +1,58 @@
+@inject ISelectedProjectState SelectedProject
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else if (context is null)
+{
+    <EmptyState Message="Select a project first." />
+    <a class="btn btn-primary" href="/projects">Open Projects</a>
+}
+else
+{
+    <section class="project-workspace">
+        <ProjectHeader Context="@context" OnRefreshRequested="Refresh" />
+        <ProjectTabs ProjectId="@ProjectId" Active="@Active" />
+        <div class="project-workspace-body">
+            @ChildContent
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public string Active { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ProjectWorkspaceContext? context;
+    private bool loading = true;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        loading = true;
+        try
+        {
+            context = await SelectedProject.LoadAsync(ProjectId);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

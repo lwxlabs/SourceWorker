@@ -97,16 +97,75 @@ public sealed class RuleBasedFlowExtractor : IFlowExtractor
         var files = scan.Files.Select(f => f.RelativePath).ToArray();
         var symbols = code.Symbols.Select(s => s.FullName).ToArray();
         var flows = new List<CodeFlow>();
-        Add("Scan Project", CodeFlowType.ScanFlow, "CLI scan <projectPath> or POST /api/projects/{id}/scan", ["CLI/API receives scan request", "Application command runs scan", "Scanner indexes files and technologies", "Localite persists scan data", "Context writer updates .ai-context", "Recipe runner writes backend docs"]);
-        Add("Run Recipe", CodeFlowType.RecipeRunFlow, "CLI run-recipe <projectPath> <recipeId>", ["Application loads recipe", "Scanner refreshes project data", "Recipe runner writes generated docs", "Generated artifacts are tracked"]);
-        Add("Artifact Cleanup", CodeFlowType.ArtifactCleanupFlow, "CLI cleanup-preview or cleanup-generated", ["Lifecycle service analyzes generated files", "Cleanup preview lists safe candidates", "Cleanup deletes only generated orphan/deprecated files"]);
-        Add("Storage Info", CodeFlowType.StorageInfoFlow, "CLI storage-info or GET /api/storage/info", ["Storage info service reads schema", "Repository counts are returned"]);
-        if (code.Routes.Count > 0) Add("Local API Endpoint Flow", CodeFlowType.LocalApiEndpointFlow, "HTTP request", ["Minimal API route receives request", "Application request handler executes", "Repository/service returns DTO"]);
-        if (code.BackgroundWorkers.Count > 0) Add("Worker Job Flow", CodeFlowType.WorkerJobFlow, "Queued worker job", ["Job queue dequeues id", "Worker loads project", "Worker executes scanner", "Worker persists progress"]);
+        var isSourceWorker = scan.Project.Name.Equals("SourceWorker", StringComparison.OrdinalIgnoreCase) ||
+            scan.Projects.Any(p => p.Name.StartsWith("SourceWorker.", StringComparison.OrdinalIgnoreCase));
+
+        if (isSourceWorker)
+        {
+            Add("Scan Project", CodeFlowType.ScanFlow, "CLI scan <projectPath> or POST /api/projects/{id}/scan", ["CLI/API receives scan request", "Application command runs scan", "Scanner indexes files and technologies", "Localite persists scan data", "Context writer updates .ai-context", "Recipe runner writes backend docs"], FlowOrigin.SourceWorkerInternal, FlowConfidence.High);
+            Add("Run Recipe", CodeFlowType.RecipeRunFlow, "CLI run-recipe <projectPath> <recipeId>", ["Application loads recipe", "Scanner refreshes project data", "Recipe runner writes generated docs", "Generated artifacts are tracked"], FlowOrigin.SourceWorkerInternal, FlowConfidence.High);
+            Add("Artifact Cleanup", CodeFlowType.ArtifactCleanupFlow, "CLI cleanup-preview or cleanup-generated", ["Lifecycle service analyzes generated files", "Cleanup preview lists safe candidates", "Cleanup deletes only generated orphan/deprecated files"], FlowOrigin.SourceWorkerInternal, FlowConfidence.High);
+            Add("Storage Info", CodeFlowType.StorageInfoFlow, "CLI storage-info or GET /api/storage/info", ["Storage info service reads schema", "Repository counts are returned"], FlowOrigin.SourceWorkerInternal, FlowConfidence.High);
+        }
+
+        if (code.Routes.Count > 0) Add("Local API Endpoint Flow", CodeFlowType.LocalApiEndpointFlow, "HTTP request", ["Minimal API route receives request", "Application request handler executes", "Repository/service returns DTO"], FlowOrigin.SourceCodeDetected, FlowConfidence.High);
+        if (code.BackgroundWorkers.Count > 0) Add("Worker Job Flow", CodeFlowType.WorkerJobFlow, "Queued worker job", ["Job queue dequeues id", "Worker loads project", "Worker executes worker logic", "Worker persists progress"], FlowOrigin.SourceCodeDetected, FlowConfidence.High);
+
+        foreach (var domainFlow in InferDomainFlows(scan, code))
+            flows.Add(domainFlow);
+
         return flows;
 
-        void Add(string name, CodeFlowType type, string trigger, IReadOnlyList<string> steps)
-            => flows.Add(new CodeFlow(Guid.NewGuid(), scan.Project.Id, scan.ScanRun.Id, name, type, trigger, files.Where(f => f.Contains("SourceWorker.", StringComparison.OrdinalIgnoreCase)).Take(12).ToArray(), symbols.Take(20).ToArray(), steps.Select((s, i) => new CodeFlowStep(i + 1, s, null, null)).ToArray(), FlowConfidence.High, []));
+        void Add(string name, CodeFlowType type, string trigger, IReadOnlyList<string> steps, FlowOrigin origin, FlowConfidence confidence)
+            => flows.Add(new CodeFlow(Guid.NewGuid(), scan.Project.Id, scan.ScanRun.Id, name, type, trigger, files.Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).Take(12).ToArray(), symbols.Take(20).ToArray(), steps.Select((s, i) => new CodeFlowStep(i + 1, s, null, null)).ToArray(), confidence, [], origin));
+    }
+
+    private static IReadOnlyList<CodeFlow> InferDomainFlows(ProjectScanResult scan, CodeIntelligenceResult code)
+    {
+        var candidates = new[]
+        {
+            ("Create context", new[] { "Context", "Create", "Open" }),
+            ("Ensure schema", new[] { "Schema", "Ensure", "Migration" }),
+            ("Query data", new[] { "Query", "Find", "Get", "Read" }),
+            ("Save graph", new[] { "Save", "Insert", "Update", "Write" }),
+            ("Delete graph", new[] { "Delete", "Remove" }),
+            ("Export/import data", new[] { "Export", "Import" }),
+            ("Cache get/set", new[] { "Cache", "Get", "Set" }),
+            ("Secure local handling", new[] { "Secure", "Secret", "Encrypt", "Credential" })
+        };
+
+        var searchable = code.Symbols.Select(s => $"{s.Name} {s.FullName} {s.RelativePath}")
+            .Concat(code.Tests.Select(t => $"{t.ClassName} {t.MethodName} {t.RelativePath}"))
+            .Concat(scan.Files.Select(f => f.RelativePath))
+            .ToArray();
+
+        var flows = new List<CodeFlow>();
+        foreach (var (name, terms) in candidates)
+        {
+            var matched = searchable.Where(value => terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase))).Take(10).ToArray();
+            if (matched.Length == 0) continue;
+            var relatedFiles = code.Symbols.Where(s => terms.Any(term => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) || s.RelativePath.Contains(term, StringComparison.OrdinalIgnoreCase))).Select(s => s.RelativePath)
+                .Concat(code.Tests.Where(t => terms.Any(term => t.MethodName.Contains(term, StringComparison.OrdinalIgnoreCase) || t.RelativePath.Contains(term, StringComparison.OrdinalIgnoreCase))).Select(t => t.RelativePath))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToArray();
+            var relatedSymbols = code.Symbols.Where(s => terms.Any(term => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase))).Select(s => s.FullName).Take(12).ToArray();
+            flows.Add(new CodeFlow(
+                Guid.NewGuid(),
+                scan.Project.Id,
+                scan.ScanRun.Id,
+                name,
+                CodeFlowType.CandidateDomainFlow,
+                "Inferred from public symbols, test names, and feature folders",
+                relatedFiles,
+                relatedSymbols,
+                [new CodeFlowStep(1, "Identify related public API, tests, or feature folders", relatedSymbols.FirstOrDefault(), relatedFiles.FirstOrDefault()), new CodeFlowStep(2, "Inspect matching files before making changes", null, relatedFiles.FirstOrDefault())],
+                matched.Length >= 4 ? FlowConfidence.Medium : FlowConfidence.Low,
+                ["Candidate domain flow inferred without AI; inspect files to confirm."],
+                relatedSymbols.Length > 0 ? FlowOrigin.SourceCodeDetected : FlowOrigin.TestInferred));
+        }
+
+        return flows;
     }
 }
 

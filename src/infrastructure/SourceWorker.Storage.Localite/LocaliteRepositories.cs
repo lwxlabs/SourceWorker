@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SourceWorker.Application;
 using SourceWorker.Domain;
 
@@ -8,8 +10,20 @@ namespace SourceWorker.Storage.Localite;
 
 public static class LocaliteStorage
 {
-    public static IServiceCollection AddSourceWorkerLocaliteStorage(this IServiceCollection services)
+    public static IServiceCollection AddSourceWorkerLocaliteStorage(this IServiceCollection services, Action<LocaliteStorageOptions>? configure = null)
     {
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+        else
+        {
+            services.AddOptions<LocaliteStorageOptions>().Configure<IConfiguration>((options, configuration) =>
+            {
+                options.DatabasePath = configuration["SourceWorker:Storage:DatabasePath"];
+            });
+        }
+
         services.AddSingleton<LocaliteTableStore>();
         services.AddSingleton<ILocalStorageSchemaService, LocaliteStorageSchemaService>();
         services.AddSingleton<IStorageInfoService, LocaliteStorageInfoService>();
@@ -38,15 +52,27 @@ public static class LocaliteStorage
     }
 }
 
+public sealed class LocaliteStorageOptions
+{
+    public string? DatabasePath { get; set; }
+}
+
 public sealed class LocaliteTableStore
 {
     private const int SchemaVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    public string StoragePath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SourceWorker", "sourceworker.localite.db");
+    public string StoragePath { get; }
 
-    public LocaliteTableStore()
+    public LocaliteTableStore(IOptions<LocaliteStorageOptions> options)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(StoragePath)!);
+        StoragePath = string.IsNullOrWhiteSpace(options.Value.DatabasePath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SourceWorker", "sourceworker.localite.db")
+            : options.Value.DatabasePath!;
+        var directory = Path.GetDirectoryName(StoragePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
         EnsureSchema();
     }
 
@@ -114,6 +140,17 @@ public sealed class LocaliteTableStore
         var command = connection.CreateCommand();
         command.CommandText = $"DELETE FROM {table} WHERE Id = $id";
         command.Parameters.AddWithValue("$id", id.ToString());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteProjectSecondaryDuplicatesAsync(string table, Guid projectId, string secondaryKey, Guid keepId, CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {table} WHERE ProjectId = $projectId AND SecondaryKey = $secondaryKey AND Id <> $keepId";
+        command.Parameters.AddWithValue("$projectId", projectId.ToString());
+        command.Parameters.AddWithValue("$secondaryKey", secondaryKey);
+        command.Parameters.AddWithValue("$keepId", keepId.ToString());
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -237,6 +274,15 @@ public sealed class LocaliteProjectRepository(LocaliteTableStore store) : IProje
     public async Task<Project?> GetByPathAsync(string rootPath, CancellationToken cancellationToken) => (await ListAsync(cancellationToken)).FirstOrDefault(p => Path.GetFullPath(p.RootPath).Equals(Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase));
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken) => (await store.ListAsync<ProjectRecord>(Tables.Projects, null, cancellationToken)).Select(ProjectRecordMapper.ToDomain).ToArray();
     public async Task<Project> UpdateAsync(Project project, CancellationToken cancellationToken) { await AddAsync(project, cancellationToken); return project; }
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        foreach (var table in Tables.All.Where(table => !table.Equals(Tables.AiProviderConfigurations, StringComparison.OrdinalIgnoreCase)))
+        {
+            await store.DeleteByProjectAsync(table, id, cancellationToken);
+        }
+
+        await store.DeleteAsync(Tables.Projects, id, cancellationToken);
+    }
 }
 
 public sealed class LocaliteScanRunRepository(LocaliteTableStore store) : IScanRunRepository
@@ -262,9 +308,29 @@ public sealed class LocaliteFileIndexRepository(LocaliteTableStore store) : IFil
 
 public sealed class LocaliteGeneratedArtifactRepository(LocaliteTableStore store) : IGeneratedArtifactRepository
 {
-    public async Task<GeneratedArtifact> UpsertAsync(GeneratedArtifact artifact, CancellationToken cancellationToken) { await store.UpsertAsync(Tables.GeneratedArtifacts, artifact.Id, artifact.ProjectId, artifact.RelativePath, GeneratedArtifactRecordMapper.ToRecord(artifact), cancellationToken); return artifact; }
-    public async Task<IReadOnlyList<GeneratedArtifact>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => (await store.ListAsync<GeneratedArtifactRecord>(Tables.GeneratedArtifacts, projectId, cancellationToken)).Select(GeneratedArtifactRecordMapper.ToDomain).OrderBy(a => a.RelativePath).ToArray();
-    public async Task<GeneratedArtifact?> GetByPathAsync(Guid projectId, string relativePath, CancellationToken cancellationToken) => (await GetByProjectAsync(projectId, cancellationToken)).FirstOrDefault(a => a.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
+    public async Task<GeneratedArtifact> UpsertAsync(GeneratedArtifact artifact, CancellationToken cancellationToken)
+    {
+        var existing = await GetByPathAsync(artifact.ProjectId, artifact.RelativePath, cancellationToken);
+        var value = existing is null ? artifact : artifact with { Id = existing.Id };
+        await store.UpsertAsync(Tables.GeneratedArtifacts, value.Id, value.ProjectId, value.RelativePath, GeneratedArtifactRecordMapper.ToRecord(value), cancellationToken);
+        await store.DeleteProjectSecondaryDuplicatesAsync(Tables.GeneratedArtifacts, value.ProjectId, value.RelativePath, value.Id, cancellationToken);
+        return value;
+    }
+
+    public async Task<IReadOnlyList<GeneratedArtifact>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<GeneratedArtifactRecord>(Tables.GeneratedArtifacts, projectId, cancellationToken))
+            .Select(GeneratedArtifactRecordMapper.ToDomain)
+            .GroupBy(a => a.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(a => a.GeneratedUtc).First())
+            .OrderBy(a => a.RelativePath)
+            .ToArray();
+
+    public async Task<GeneratedArtifact?> GetByPathAsync(Guid projectId, string relativePath, CancellationToken cancellationToken)
+        => (await store.ListAsync<GeneratedArtifactRecord>(Tables.GeneratedArtifacts, projectId, cancellationToken))
+            .Select(GeneratedArtifactRecordMapper.ToDomain)
+            .Where(a => a.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.GeneratedUtc)
+            .FirstOrDefault();
 }
 
 public sealed class LocaliteProjectInstructionRepository(LocaliteTableStore store) : IProjectInstructionRepository
@@ -287,7 +353,23 @@ public sealed class LocaliteStorageSchemaService(LocaliteTableStore store) : ILo
 public sealed class LocaliteStorageInfoService(LocaliteTableStore store) : IStorageInfoService, IStorageHealthService
 {
     public async Task<StorageInfo> GetInfoAsync(CancellationToken cancellationToken)
-        => new(await store.SchemaInfoAsync(cancellationToken), await store.CountAsync(Tables.Projects, cancellationToken), await store.CountAsync(Tables.ScanRuns, cancellationToken), await store.CountAsync(Tables.IndexedFiles, cancellationToken), await store.CountAsync(Tables.GeneratedArtifacts, cancellationToken), await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true, await store.CountAsync(Tables.CodeSymbols, cancellationToken), await store.CountAsync(Tables.CodeFlows, cancellationToken), await store.CountAsync(Tables.Routes, cancellationToken), await store.CountAsync(Tables.ServiceRegistrations, cancellationToken), await store.CountAsync(Tables.ConfigurationUsages, cancellationToken), await store.CountAsync(Tables.Tests, cancellationToken), await store.CountAsync(Tables.AiProviderConfigurations, cancellationToken), await store.CountAsync(Tables.AiRuns, cancellationToken));
+    {
+        var projects = await store.ListAsync<ProjectRecord>(Tables.Projects, null, cancellationToken);
+        var scanRuns = await store.ListAsync<ScanRunRecord>(Tables.ScanRuns, null, cancellationToken);
+        var latestScanIds = scanRuns
+            .GroupBy(s => s.ProjectId)
+            .Select(g => g.OrderByDescending(s => s.StartedAt).First().Id)
+            .ToHashSet();
+        var currentIndexedFileCount = (await store.ListAsync<IndexedFileRecord>(Tables.IndexedFiles, null, cancellationToken))
+            .Count(f => latestScanIds.Contains(f.ScanRunId));
+        var currentArtifactCount = (await store.ListAsync<GeneratedArtifactRecord>(Tables.GeneratedArtifacts, null, cancellationToken))
+            .Select(GeneratedArtifactRecordMapper.ToDomain)
+            .GroupBy(a => $"{a.ProjectId:N}:{a.RelativePath}", StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        return new(await store.SchemaInfoAsync(cancellationToken), projects.Count, scanRuns.Count, currentIndexedFileCount, currentArtifactCount, await store.CountAsync(Tables.WorkerJobs, cancellationToken), await store.CountAsync(Tables.InstructionDocuments, cancellationToken), await store.CountAsync(Tables.PromptRecipes, cancellationToken), true, await store.CountAsync(Tables.CodeSymbols, cancellationToken), await store.CountAsync(Tables.CodeFlows, cancellationToken), await store.CountAsync(Tables.Routes, cancellationToken), await store.CountAsync(Tables.ServiceRegistrations, cancellationToken), await store.CountAsync(Tables.ConfigurationUsages, cancellationToken), await store.CountAsync(Tables.Tests, cancellationToken), await store.CountAsync(Tables.AiProviderConfigurations, cancellationToken), await store.CountAsync(Tables.AiRuns, cancellationToken));
+    }
+
     public Task<bool> CheckAsync(CancellationToken cancellationToken) => Task.FromResult(File.Exists(store.StoragePath));
 }
 

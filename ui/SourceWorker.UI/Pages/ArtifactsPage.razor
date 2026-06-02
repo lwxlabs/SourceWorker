@@ -3,44 +3,77 @@
 @inject ToastService Toast
 @inject DashboardActionService Actions
 
-<h1>Artifacts</h1>
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="artifacts">
+    <h1>Generated Files Health</h1>
+    <p class="text-muted">Generated artifacts are tracked so SourceWorker can detect stale, missing, manually edited, orphaned, or deprecated files. Healthy generated files are collapsed by default.</p>
 
-<div class="mb-4 d-flex align-items-center gap-2">
-    @{ var previewAvail = Actions.GetAvailability(DashboardActionKind.CleanupPreview); }
-    <button class="btn btn-outline-primary" @onclick="LoadPreview" disabled="@(!previewAvail.IsEnabled || loadingPreview)" title="@previewAvail.DisabledReason">
-        @if (loadingPreview)
+    <div class="mb-4 d-flex align-items-center gap-2">
+        @{ var previewAvail = Actions.GetAvailability(DashboardActionKind.CleanupPreview); }
+        <button class="btn btn-outline-primary" @onclick="LoadPreview" disabled="@(!previewAvail.IsEnabled || loadingPreview)" title="@previewAvail.DisabledReason">
+            @if (loadingPreview)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            }
+            Cleanup Preview
+        </button>
+        @if (preview != null && preview.Candidates.Any(c => c.SafeToDelete))
         {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            var cleanupAvail = Actions.GetAvailability(DashboardActionKind.CleanupGenerated);
+            <button class="btn btn-danger" @onclick="() => showConfirmCleanup = true" disabled="@(!cleanupAvail.IsEnabled)" title="@cleanupAvail.DisabledReason">Cleanup Generated</button>
         }
-        Run Cleanup Preview
-    </button>
-    
-    @if (preview != null && preview.Candidates.Any(c => c.SafeToDelete))
-    {
-        var cleanupAvail = Actions.GetAvailability(DashboardActionKind.CleanupGenerated);
-        <button class="btn btn-danger" @onclick="() => showConfirmCleanup = true" disabled="@(!cleanupAvail.IsEnabled)" title="@cleanupAvail.DisabledReason">Cleanup Generated</button>
-    }
-</div>
-
-@if (preview != null)
-{
-    <div class="mb-4">
-        <CleanupPreviewPanel Preview="@preview" />
     </div>
-}
 
-<ArtifactStatusCard Report="@report" />
-
-<Cards Title="Generated Artifacts">
-    @foreach (var artifact in (report?.Artifacts ?? []).OrderBy(a => a.RelativePath))
+    @if (report is not null)
     {
-        <div class="list-row">
-            <strong>@artifact.Status</strong>
-            <span>@artifact.Type</span>
-            <code>@artifact.RelativePath</code>
+        <Cards Title="Summary">
+            <div class="metric-grid">
+                <MetricCard Label="Needs Review" Value="@IssueCount.ToString()" />
+                <MetricCard Label="Healthy" Value="@HealthyCount.ToString()" />
+                <MetricCard Label="Manual Edits" Value="@report.ManuallyModifiedArtifacts.Count.ToString()" />
+                <MetricCard Label="Cleanup Available" Value="@(report.CleanupRecommended ? "Yes" : "No")" />
+            </div>
+            <p>@(IssueCount == 0 ? $"{HealthyCount} generated files look healthy." : $"{IssueCount} need review, {HealthyCount} healthy/generated.")</p>
+        </Cards>
+
+        <Cards Title="Needs Attention">
+            @foreach (var path in IssuePaths)
+            {
+                <div class="list-row"><strong>@IssueStatus(path)</strong><code>@path</code></div>
+            }
+            @if (!IssuePaths.Any())
+            {
+                <EmptyState Message="No generated file issues found." />
+            }
+        </Cards>
+
+        <details class="mt-3">
+            <summary>Safe generated files (@HealthyCount)</summary>
+            @foreach (var artifact in report.Artifacts.Where(a => a.Status == "Generated").OrderBy(a => a.RelativePath).Take(300))
+            {
+                <div class="list-row compact"><strong>@artifact.Type</strong><code>@artifact.RelativePath</code></div>
+            }
+        </details>
+
+        <details class="mt-3">
+            <summary>Technical artifact records</summary>
+            @foreach (var artifact in report.Artifacts.OrderBy(a => a.RelativePath))
+            {
+                <div class="list-row compact">
+                    <strong>@artifact.Status</strong>
+                    <span>@artifact.Type</span>
+                    <code>@artifact.RelativePath</code>
+                </div>
+            }
+        </details>
+    }
+
+    @if (preview != null)
+    {
+        <div class="mt-3">
+            <CleanupPreviewPanel Preview="@preview" />
         </div>
     }
-</Cards>
+</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
@@ -48,6 +81,16 @@
     private CleanupPreviewDto? preview;
     private bool loadingPreview;
     private bool showConfirmCleanup;
+
+    private IEnumerable<string> IssuePaths => (report?.ManuallyModifiedArtifacts ?? [])
+        .Concat(report?.MissingArtifacts ?? [])
+        .Concat(report?.StaleArtifacts ?? [])
+        .Concat(report?.DeprecatedArtifacts ?? [])
+        .Concat(report?.OrphanedArtifacts ?? [])
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private int IssueCount => IssuePaths.Count();
+    private int HealthyCount => Math.Max(0, (report?.Artifacts.Count ?? 0) - IssueCount);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -57,6 +100,16 @@
     private async Task LoadArtifacts()
     {
         report = await Api.GetArtifactsAsync(ProjectId);
+    }
+
+    private string IssueStatus(string path)
+    {
+        if (report?.ManuallyModifiedArtifacts.Contains(path) == true) return "Manually modified";
+        if (report?.MissingArtifacts.Contains(path) == true) return "Missing";
+        if (report?.StaleArtifacts.Contains(path) == true) return "Stale";
+        if (report?.DeprecatedArtifacts.Contains(path) == true) return "Deprecated";
+        if (report?.OrphanedArtifacts.Contains(path) == true) return "Orphaned";
+        return "Needs review";
     }
 
     private async Task LoadPreview()
@@ -93,11 +146,11 @@
     }
 }
 
-<ConfirmActionDialog 
+<ConfirmActionDialog
     @bind-IsVisible="showConfirmCleanup"
     Title="Confirm Cleanup"
     ConfirmText="Run Cleanup"
     ConfirmButtonClass="btn-danger"
     OnConfirm="RunCleanup">
-    <DangerousActionWarning Message="@($"This will delete {preview?.SafeToDeleteCount} files identified as safe to remove (orphaned or deprecated). Manually modified files and missing records will NOT be deleted.")" />
+    <DangerousActionWarning Message="@($"This will delete {preview?.SafeToDeleteCount} files identified as safe to remove. Manually modified files and missing records will not be deleted.")" />
 </ConfirmActionDialog>

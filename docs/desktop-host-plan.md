@@ -2,6 +2,8 @@
 
 This document outlines the transition from the current `AppHost` (CLI-based orchestrator) to a full `SourceWorker.Desktop` application using MAUI Blazor Hybrid.
 
+Product focus: Desktop should feel like a local project understanding and agent handoff app, not an internal diagnostics dashboard. The primary project workflow is Agent Handoff Mode: scan a repo, review scan completeness, preview clean context, copy/export the handoff, and give it to another AI coding agent. SourceWorker itself does not edit code, run terminal agent tasks, apply patches, or automatically write AI output to files.
+
 ## Phase 1: AppHost (MVP 2.0) - DONE
 - CLI-based bootstrap using `dotnet run --project src/services/SourceWorker.AppHost`.
 - Orchestrates `LocalApi` and `Dashboard` processes.
@@ -24,6 +26,9 @@ MVP 2.4 implemented:
 - Publish scripts for `artifacts/desktop/win-x64/SourceWorker.Desktop.exe`.
 
 ## Phase 3: Desktop Integration - NEXT
+- **Correct Navigation Model**: Keep global navigation to Home, Projects, Settings, and Advanced. Handoff, Ask, Docs, Packs, Scan Health, Code, Artifacts, Jobs, and Context Browser live inside the selected project workspace.
+- **Agent Handoff UX Polish**: Keep Agent Handoff as the primary project experience after selecting a repo.
+- **Advanced Surfaces**: Keep diagnostics, logs, dogfood, and global All Jobs under Advanced so the app feels like a handoff builder rather than an internal cockpit.
 - **System Tray / Menu Bar**: Allow the app to run in the background.
 - **Single Instance**: Prevent multiple instances of the Local API from starting.
 - **Notifications**: Show OS-level notifications for long-running jobs (e.g., project scan completed).

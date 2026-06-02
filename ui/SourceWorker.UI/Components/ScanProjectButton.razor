@@ -11,7 +11,7 @@
             {
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             }
-            <i class="bi bi-play-fill me-1"></i> Scan Project
+            <i class="bi bi-play-fill me-1"></i> @(scanning ? "Scanning..." : HasPreviousScan ? "Rescan" : "Scan project")
         </button>
         @if (!availability.IsEnabled && !string.IsNullOrEmpty(availability.DisabledReason))
         {
@@ -26,6 +26,7 @@
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public bool HasPreviousScan { get; set; }
     [Parameter] public EventCallback OnScanCompleted { get; set; }
 
     private Guid jobId = Guid.Empty;

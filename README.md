@@ -1,8 +1,60 @@
 # SourceWorker
 
-SourceWorker is a local-first AI context management foundation for codebases. The current engine scans projects, persists local state, imports instruction files, generates `.ai-context`, runs rule-based recipes, routes generated outputs, creates context packs, tracks generated artifacts, extracts lightweight C# code intelligence, and exposes a Blazor dashboard over a hardened Local API with Bearer token authentication.
+SourceWorker is a local-first project understanding and AI context handoff app for codebases. Its job is to make a repository understandable and portable for AI agents: scan the project, summarize its structure, validate scan completeness, generate clean context packs, and produce an Agent Handoff that can be copied into Codex, Junie, ChatGPT, Cursor, Claude Code, or another coding assistant.
 
-MVP 2.4 adds a Windows-first `SourceWorker.Desktop` MAUI Blazor Hybrid app. It reuses `SourceWorker.UI`, starts/manages `SourceWorker.LocalApi` internally, configures `SourceWorker.ApiClient` with the local URL/token, and can be published as a runnable `.exe`. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, patch application, full installer/updater, and production code signing are still intentionally not included.
+SourceWorker is not a coding agent, terminal runner, patch applier, CI replacement, or autonomous editor. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, patch application, full installer/updater, and production code signing are still intentionally not included.
+
+## Primary Product Flow
+
+```text
+Open SourceWorker
+→ Select or register project
+→ Scan / understand
+→ Review scan completeness
+→ Build Agent Context Pack
+→ Preview what the AI agent will receive
+→ Copy/export/open handoff
+→ Give it to Codex, Junie, ChatGPT, Cursor, Claude Code, or another agent
+```
+
+MVP 2.7 corrects the navigation model and consolidates the product UX around one daily loop:
+
+```text
+Pick repo -> scan -> understand -> copy handoff for agent
+```
+
+Global navigation is intentionally reduced to Home, Projects, Settings, and Advanced. Project-specific pages only appear after selecting a project.
+
+Project workspace navigation:
+
+- Overview
+- Handoff
+- Ask
+- Docs
+- Packs
+- Scan Health
+- Code
+- Artifacts
+- Jobs
+
+Advanced global pages are Diagnostics, Logs, Dogfood, and All Jobs. Project Jobs are the normal place to watch scan/export progress; global jobs are for diagnostics. Artifacts are presented as Generated Files Health, not as a primary user concept.
+
+The primary generated file is:
+
+```text
+.ai-context/agent-handoff.md
+```
+
+It is clean markdown without the old heavy generated metadata block. Full lifecycle metadata remains in `.ai-context/index.yaml` and Localite generated artifact records.
+
+Handoff quality rules:
+
+- infer project purpose from README/project names/symbols/tests before falling back to generated docs
+- describe useful project structure even when a repo is not clean architecture
+- exclude `.ai-context/**` and `instructions/Result/**` TODOs from source TODO summaries
+- do not show SourceWorker internal flows in non-SourceWorker projects
+- infer candidate domain flows for libraries from public APIs, tests, and source folders
+- hide SourceWorker metadata markers in normal markdown previews
 
 ## Architecture
 

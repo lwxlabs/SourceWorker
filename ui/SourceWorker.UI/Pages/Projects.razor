@@ -1,5 +1,6 @@
 @page "/projects"
 @inject ISourceWorkerApiClient Api
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
     <h1>Projects</h1>
@@ -20,13 +21,18 @@
     <ProjectRegistrationForm OnSuccess="HandleRegistrationSuccess" OnCancel="() => showRegistration = false" />
 }
 
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="state error">@error</div>
+}
+
 @if (loading)
 {
     <LoadingState />
 }
 else
 {
-    <ProjectPicker Projects="@projects" />
+    <ProjectPicker Projects="@projects" OnRemove="RemoveProject" />
 }
 
 @code {
@@ -36,6 +42,7 @@ else
     private bool includeMissing = false;
     private bool loading = true;
     private bool showRegistration = false;
+    private string? error;
 
     protected override async Task OnInitializedAsync()
     {
@@ -48,10 +55,12 @@ else
         try 
         {
             projects = await Api.GetProjectsSummaryAsync(includeTestProjects, includeMissing, search);
+            error = null;
         }
-        catch 
+        catch (Exception ex)
         {
             projects = [];
+            error = ex.Message;
         }
         finally
         {
@@ -70,6 +79,24 @@ else
         if (e.Key == "Enter")
         {
             await LoadProjects();
+        }
+    }
+
+    private async Task RemoveProject(ProjectSummaryDto project)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", [$"Remove '{project.Name}' from SourceWorker? This does not delete files from disk."]))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteProjectAsync(project.Id);
+            await LoadProjects();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
         }
     }
 }

@@ -33,7 +33,7 @@ public sealed class InstructionCommandTests
 
         var services = new ServiceCollection()
             .AddSourceWorkerApplication()
-            .AddSourceWorkerInfrastructure()
+            .AddTestSourceWorkerInfrastructure()
             .AddSourceWorkerJobs(addHostedWorker: false)
             .BuildServiceProvider();
 
@@ -63,3 +63,4 @@ public sealed class InstructionCommandTests
         Assert.Contains(doctor.MissingSourcePaths, path => path.OriginalPath == "missing.cs");
     }
 }
+

@@ -4,8 +4,12 @@
 @inject ToastService Toast
 @inject DashboardActionService Actions
 
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="docs">
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Backend Docs</h1>
+    <div>
+        <h1>Backend Docs</h1>
+        <p class="text-muted mb-0">Canonical docs come from <code>.ai-context/docs/backend</code>. The external <code>instructions/Result/Backend</code> mirror is only an export target.</p>
+    </div>
     @{ var availability = Actions.GetAvailability(DashboardActionKind.ExportDocs); }
     <button class="btn btn-outline-primary" @onclick="ExportDocs" disabled="@(!availability.IsEnabled || exporting)" title="@availability.DisabledReason">
         @if (exporting)
@@ -17,6 +21,7 @@
 </div>
 
 <BackendDocsViewer ProjectId="@ProjectId" />
+</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

@@ -1,0 +1,21 @@
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ToastService Toast
+
+<div class="project-actions">
+    <ScanProjectButton ProjectId="@Context.ProjectId" HasPreviousScan="@Context.LastScanUtc.HasValue" OnScanCompleted="OnRefreshRequested" />
+    <a class="btn btn-primary" href="/projects/@Context.ProjectId/handoff">Open Handoff</a>
+    <a class="btn" href="/projects/@Context.ProjectId/ai">Ask</a>
+    <button class="btn" @onclick="CopyHandoff" disabled="@(Context.Handoff is null)">Copy Handoff</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectWorkspaceContext Context { get; set; } = default!;
+    [Parameter] public EventCallback OnRefreshRequested { get; set; }
+
+    private async Task CopyHandoff()
+    {
+        if (Context.Handoff is null) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [Context.Handoff.Markdown]);
+        Toast.ShowSuccess("Handoff copied.");
+    }
+}

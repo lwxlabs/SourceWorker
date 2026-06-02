@@ -82,7 +82,7 @@
 
     private async Task Browse()
     {
-        var selected = await FolderPicker.PickFolderAsync();
+        var selected = await FolderPicker.PickFolderAsync(path);
         if (!string.IsNullOrWhiteSpace(selected))
         {
             path = selected;
