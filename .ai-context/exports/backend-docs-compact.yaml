@@ -4,8 +4,8 @@ internalSourcePath: .ai-context/docs/backend
 externalOutputPath: instructions/Result/Backend
 targetPlatform: MarkdownFolder
 publishMode: mirror
-lastExportUtc: "2026-06-02T14:25:05.3701538+00:00"
-lastExportScanRunId: "90ef7b49-b6f0-4ddb-9b37-a8193a5a94f7"
+lastExportUtc: "2026-06-02T21:10:36.9438282+00:00"
+lastExportScanRunId: "524b0fea-14f1-40fb-8c59-0e51bf95d28b"
 generatedFiles:
   - README.md
   - 01-project-structure.md

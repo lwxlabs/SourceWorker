@@ -28,6 +28,7 @@ MVP 2.4 implemented:
 ## Phase 3: Desktop Integration - NEXT
 - **Correct Navigation Model**: Keep global navigation to Home, Projects, Settings, and Advanced. Handoff, Ask, Docs, Packs, Scan Health, Code, Artifacts, Jobs, and Context Browser live inside the selected project workspace.
 - **Agent Handoff UX Polish**: Keep Agent Handoff as the primary project experience after selecting a repo.
+- **AI Explanation Writer**: Keep Explanation as a selected-project tab. It may save `.ai-context/docs/backend/07-ai-explanation.md` only after explicit user confirmation and must not write source files.
 - **Advanced Surfaces**: Keep diagnostics, logs, dogfood, and global All Jobs under Advanced so the app feels like a handoff builder rather than an internal cockpit.
 - **System Tray / Menu Bar**: Allow the app to run in the background.
 - **Single Instance**: Prevent multiple instances of the Local API from starting.

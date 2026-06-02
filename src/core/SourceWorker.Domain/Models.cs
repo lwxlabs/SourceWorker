@@ -364,6 +364,68 @@ public sealed record AiRun(
     string? OutputText,
     string? OutputHash);
 
+public enum ExplanationProfile { DeveloperOnboarding, ArchitectureDeepDive, PublicApiGuide, MaintenanceGuide, TestAndQualityGuide, FullProjectExplanation }
+public enum AiExplanationQualityStatus { Good, NeedsReview, Failed }
+
+public sealed record AiExplanationRequest(
+    Guid ProjectId,
+    string ProviderId,
+    string Model,
+    string ContextPackId,
+    ExplanationProfile ExplanationProfile,
+    string? UserInstruction,
+    bool IncludeSourceSnippets,
+    bool IncludeTests,
+    bool IncludeGeneratedDocs,
+    bool IncludePublicApi,
+    bool IncludeFlows,
+    bool IncludeArchitecture,
+    int MaxInputTokens,
+    int MaxOutputTokens,
+    bool StorePrompt,
+    bool StoreOutput);
+
+public sealed record AiExplanationPreview(
+    Guid ProjectId,
+    string ProviderId,
+    AiProviderKind ProviderKind,
+    string Model,
+    string ContextPackId,
+    ExplanationProfile ExplanationProfile,
+    IReadOnlyList<AiExplanationSourceFile> IncludedFiles,
+    IReadOnlyList<string> MissingFiles,
+    IReadOnlyList<AiSafetyWarning> SafetyWarnings,
+    AiTokenEstimate TokenEstimate,
+    AiCostEstimate CostEstimate,
+    string PromptText,
+    string PromptHash,
+    bool IsBlocked);
+
+public sealed record AiExplanationResult(
+    Guid Id,
+    Guid ProjectId,
+    string ProviderId,
+    string Model,
+    AiRunStatus Status,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset? CompletedUtc,
+    string PromptHash,
+    string? OutputHash,
+    int EstimatedInputTokens,
+    int EstimatedOutputTokens,
+    IReadOnlyList<AiSafetyWarning> Warnings,
+    IReadOnlyList<AiExplanationSection> Sections,
+    string? Markdown,
+    string SuggestedFilePath,
+    string? Error,
+    AiExplanationQualityReport? Quality);
+
+public sealed record AiExplanationSection(string Title, string Markdown);
+public sealed record AiExplanationSourceFile(string RelativePath, string Kind, int? StartLine, int? EndLine, int TokenEstimate, bool Included, string? Warning = null);
+public sealed record AiExplanationSaveRequest(Guid ProjectId, Guid RunId, bool ConfirmOverwrite = false);
+public sealed record AiExplanationSaveResult(Guid ProjectId, Guid RunId, bool Saved, string SuggestedFilePath, string? SavedFilePath, IReadOnlyList<string> Warnings);
+public sealed record AiExplanationQualityReport(AiExplanationQualityStatus Status, IReadOnlyList<string> PassedChecks, IReadOnlyList<string> Warnings);
+
 public sealed record AiProviderValidationResult(string ProviderId, AiProviderKind Kind, bool IsValid, IReadOnlyList<AiProviderValidationIssue> Issues, AiProviderSetupState SetupState);
 public sealed record AiProviderValidationIssue(string Code, string Severity, string Message, string? Field = null);
 public sealed record AiProviderSetupState(bool IsConfigured, bool HasModel, bool HasSecretWhenRequired, bool HasValidBaseUrl, bool IsLocalProvider, string? MaskedSecretHint);

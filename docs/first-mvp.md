@@ -237,6 +237,13 @@ MVP 2.1 adds protected AI preview endpoints:
 - `PUT /api/projects/{id}/ai/settings`
 - `POST /api/projects/{id}/ai/quick-ask/preview`
 - `POST /api/projects/{id}/ai/quick-ask/run`
+- `GET /api/projects/{id}/ai/explanation/options`
+- `POST /api/projects/{id}/ai/explanation/preview`
+- `POST /api/projects/{id}/ai/explanation/run`
+- `GET /api/projects/{id}/ai/explanation/runs`
+- `GET /api/projects/{id}/ai/explanation/runs/{runId}`
+- `POST /api/projects/{id}/ai/explanation/runs/{runId}/save`
+- `DELETE /api/projects/{id}/ai/explanation/runs/{runId}`
 - `GET /api/dogfood/sessions`
 - `POST /api/dogfood/sessions`
 - `GET /api/dogfood/sessions/{sessionId}`
@@ -310,6 +317,16 @@ MVP 2.2 adds dogfood readiness and AI hardening for daily use: provider validati
 
 MVP 2.3 adds the first practical dogfood feedback loop: dogfood sessions, friction issue capture/export, next recommended actions, project path validation, project-level AI defaults, Quick Ask on the project dashboard, and a lightweight local logs page. The UI remains Local API-driven and AI output remains preview-only.
 
+MVP 2.8 adds the AI Explanation page:
+
+- route: `/projects/{projectId}/explanation`
+- output: `.ai-context/docs/backend/07-ai-explanation.md`
+- preview builds prompt, included file list, warnings, and token estimate only
+- run calls the configured AI provider and stores an explanation run
+- save writes the generated docs file only after explicit user confirmation
+- existing manually modified explanation files require overwrite confirmation
+- source files are never written from AI output
+
 ## AI Provider Preview
 
 - AI core logic lives in `src/libs/SourceWorker.AI`.
@@ -359,6 +376,7 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 - `.ai-context/packs/onboarding.pack.yaml`
 - `.ai-context/packs/current-branch.pack.yaml`
 - `.ai-context/packs/dogfood-feedback.pack.yaml`
+- `.ai-context/packs/ai-explanation.pack.yaml`
 - `.ai-context/exports/backend-docs-compact.yaml`
 - `.ai-context/diagrams/*.mmd`
 - `instructions/Result/Backend/README.md`
@@ -368,6 +386,10 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 - `instructions/Result/Backend/04-configuration-and-secrets.md`
 - `instructions/Result/Backend/05-tasks-and-risks.md`
 - `instructions/Result/Backend/06-verification-checklist.md`
+
+AI Explanation Writer can additionally write, after explicit save:
+
+- `.ai-context/docs/backend/07-ai-explanation.md`
 
 `backend-docs-compact` uses scan data, imported instructions, detected routes, service registrations, configuration usage, tests, background workers, and rule-based flows. Flow diagrams are generated as simple Mermaid flowcharts for high-confidence flows.
 

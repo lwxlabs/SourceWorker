@@ -246,6 +246,23 @@ app.MapPost("/api/projects/{id:guid}/ai/quick-ask/run", async (Guid id, QuickAsk
     => Results.Ok(await flow.Send(new RunQuickAskCommand(request with { ProjectId = id }), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/ai/packs/{packId}/quality", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetAiPackQualityQuery(id, packId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/explanation/options", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiExplanationOptionsQuery(id), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/explanation/preview", async (Guid id, AiExplanationRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new PreviewAiExplanationCommand(request with { ProjectId = id }), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/explanation/run", async (Guid id, AiExplanationRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new RunAiExplanationCommand(request with { ProjectId = id }), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/explanation/runs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiExplanationRunsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}", async (Guid id, Guid runId, IRequestFlow flow, CancellationToken cancellationToken) =>
+{
+    var run = await flow.Send(new GetAiExplanationRunQuery(id, runId), cancellationToken);
+    return run is null ? Results.NotFound() : Results.Ok(run);
+});
+app.MapPost("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}/save", async (Guid id, Guid runId, AiExplanationSaveApiRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new SaveAiExplanationCommand(new AiExplanationSaveRequest(id, runId, request.ConfirmOverwrite)), cancellationToken)));
+app.MapDelete("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}", async (Guid id, Guid runId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new DeleteAiExplanationRunCommand(id, runId), cancellationToken) ? Results.Ok() : Results.NotFound());
 app.MapGet("/api/dogfood/status", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetDogfoodStatusQuery(), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/dogfood/status", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
@@ -289,6 +306,7 @@ public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Mode
 public sealed record ValidateAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, int MaxOutputTokens = 1200);
 public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null);
 public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);
+public sealed record AiExplanationSaveApiRequest(bool ConfirmOverwrite = false);
 public sealed record ValidateProjectPathRequest(string Path);
 public sealed record StartDogfoodSessionRequest(IReadOnlyList<DogfoodSessionProject> Projects);
 public sealed record UpdateIssueStatusRequest(string Status);

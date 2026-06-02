@@ -1,0 +1,17 @@
+id: ai-explanation
+name: AI Project Explanation
+description: Human-readable AI-generated project explanation plus supporting handoff and architecture context.
+audience: developer
+purpose: Use after generating 07-ai-explanation.md for onboarding, documentation, and agent handoff.
+maxRecommendedUse: compact
+tokenEstimate: 0
+freshnessStatus: missing-files
+sourceScanRunId: "524b0fea-14f1-40fb-8c59-0e51bf95d28b"
+generatedUtc: "2026-06-02T21:10:36.9475983+00:00"
+files:
+  - .ai-context/docs/backend/07-ai-explanation.md
+  - .ai-context/agent-handoff.md
+  - .ai-context/docs/backend/02-architecture.md
+  - .ai-context/docs/backend/03-important-files-and-flows.md
+missingFiles:
+  - .ai-context/docs/backend/07-ai-explanation.md

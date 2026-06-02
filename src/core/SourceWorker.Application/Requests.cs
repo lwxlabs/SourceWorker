@@ -56,6 +56,13 @@ public sealed record DeleteAiRunCommand(Guid ProjectId, Guid RunId) : IRequest<b
 public sealed record GetAiUsageQuery : IRequest<AiUsageSummary>;
 public sealed record GetProjectAiUsageQuery(Guid ProjectId) : IRequest<AiUsageSummary>;
 public sealed record GetAiPackQualityQuery(Guid ProjectId, string PackId) : IRequest<AiContextPackQualityReport>;
+public sealed record GetAiExplanationOptionsQuery(Guid ProjectId) : IRequest<AiExplanationOptions>;
+public sealed record PreviewAiExplanationCommand(AiExplanationRequest Request) : IRequest<AiExplanationPreview>;
+public sealed record RunAiExplanationCommand(AiExplanationRequest Request) : IRequest<AiExplanationResult>;
+public sealed record GetAiExplanationRunsQuery(Guid ProjectId) : IRequest<IReadOnlyList<AiExplanationResult>>;
+public sealed record GetAiExplanationRunQuery(Guid ProjectId, Guid RunId) : IRequest<AiExplanationResult?>;
+public sealed record SaveAiExplanationCommand(AiExplanationSaveRequest Request) : IRequest<AiExplanationSaveResult>;
+public sealed record DeleteAiExplanationRunCommand(Guid ProjectId, Guid RunId) : IRequest<bool>;
 public sealed record GetDogfoodStatusQuery : IRequest<DogfoodProjectReadiness>;
 public sealed record GetProjectDogfoodStatusQuery(Guid ProjectId) : IRequest<DogfoodProjectReadiness>;
 public sealed record GetDiagnosticsSummaryQuery : IRequest<DiagnosticsSummary>;
@@ -534,6 +541,34 @@ public sealed class GetProjectAiUsageQueryHandler(IAiUsageService usage) : IRequ
 public sealed class GetAiPackQualityQueryHandler(IAiContextPackQualityService quality) : IRequestHandler<GetAiPackQualityQuery, AiContextPackQualityReport>
 {
     public Task<AiContextPackQualityReport> Handle(GetAiPackQualityQuery request, CancellationToken cancellationToken) => quality.CheckAsync(request.ProjectId, request.PackId, cancellationToken);
+}
+public sealed class GetAiExplanationOptionsQueryHandler(IAiExplanationService service) : IRequestHandler<GetAiExplanationOptionsQuery, AiExplanationOptions>
+{
+    public Task<AiExplanationOptions> Handle(GetAiExplanationOptionsQuery request, CancellationToken cancellationToken) => service.GetOptionsAsync(request.ProjectId, cancellationToken);
+}
+public sealed class PreviewAiExplanationCommandHandler(IAiExplanationService service) : IRequestHandler<PreviewAiExplanationCommand, AiExplanationPreview>
+{
+    public Task<AiExplanationPreview> Handle(PreviewAiExplanationCommand request, CancellationToken cancellationToken) => service.PreviewAsync(request.Request, cancellationToken);
+}
+public sealed class RunAiExplanationCommandHandler(IAiExplanationService service) : IRequestHandler<RunAiExplanationCommand, AiExplanationResult>
+{
+    public Task<AiExplanationResult> Handle(RunAiExplanationCommand request, CancellationToken cancellationToken) => service.RunAsync(request.Request, cancellationToken);
+}
+public sealed class GetAiExplanationRunsQueryHandler(IAiExplanationService service) : IRequestHandler<GetAiExplanationRunsQuery, IReadOnlyList<AiExplanationResult>>
+{
+    public Task<IReadOnlyList<AiExplanationResult>> Handle(GetAiExplanationRunsQuery request, CancellationToken cancellationToken) => service.GetRunsAsync(request.ProjectId, cancellationToken);
+}
+public sealed class GetAiExplanationRunQueryHandler(IAiExplanationService service) : IRequestHandler<GetAiExplanationRunQuery, AiExplanationResult?>
+{
+    public Task<AiExplanationResult?> Handle(GetAiExplanationRunQuery request, CancellationToken cancellationToken) => service.GetRunAsync(request.ProjectId, request.RunId, cancellationToken);
+}
+public sealed class SaveAiExplanationCommandHandler(IAiExplanationService service) : IRequestHandler<SaveAiExplanationCommand, AiExplanationSaveResult>
+{
+    public Task<AiExplanationSaveResult> Handle(SaveAiExplanationCommand request, CancellationToken cancellationToken) => service.SaveAsync(request.Request, cancellationToken);
+}
+public sealed class DeleteAiExplanationRunCommandHandler(IAiExplanationService service) : IRequestHandler<DeleteAiExplanationRunCommand, bool>
+{
+    public Task<bool> Handle(DeleteAiExplanationRunCommand request, CancellationToken cancellationToken) => service.DeleteRunAsync(request.ProjectId, request.RunId, cancellationToken);
 }
 public sealed class GetDogfoodStatusQueryHandler(IDogfoodReadinessService dogfood) : IRequestHandler<GetDogfoodStatusQuery, DogfoodProjectReadiness>
 {

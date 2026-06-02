@@ -1,0 +1,276 @@
+@page "/projects/{ProjectId:guid}/explanation"
+@inject ISourceWorkerApiClient Api
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ToastService Toast
+
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="explanation">
+    <section class="handoff-hero">
+        <div>
+            <p class="eyebrow">AI Explanation</p>
+            <h2>Generate a project explanation</h2>
+            <p>Generate a human-readable explanation from scanned context. This does not edit source code and only saves a generated docs file when you explicitly click save.</p>
+        </div>
+        <div class="project-actions">
+            <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy)">Preview Prompt</button>
+            <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy)">Generate Explanation</button>
+            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || busy)">Save as 07-ai-explanation.md</button>
+            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(result?.Markdown)">Copy Explanation</button>
+        </div>
+    </section>
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <ErrorState Message="@error" />
+    }
+    else
+    {
+        <Cards Title="Provider and Profile">
+            <div class="grid two">
+                <label>
+                    Provider
+                    <select class="form-select" @bind="providerId">
+                        @foreach (var provider in options?.Providers ?? [])
+                        {
+                            <option value="@provider.ProviderId">@provider.Kind - @provider.Message</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Model
+                    <input class="form-control" @bind="model" placeholder="model name" />
+                </label>
+                <label>
+                    Explanation profile
+                    <select class="form-select" @bind="profile">
+                        @foreach (var item in options?.Profiles ?? Enum.GetValues<ExplanationProfile>())
+                        {
+                            <option value="@item">@item</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Context pack
+                    <select class="form-select" @bind="packId">
+                        @foreach (var pack in options?.Packs ?? [])
+                        {
+                            <option value="@pack.Pack.Id">@pack.Pack.Name</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="checkbox-row">
+                <label><input type="checkbox" @bind="includeSourceSnippets" /> Include source snippets</label>
+                <label><input type="checkbox" @bind="includeTests" /> Include tests</label>
+                <label><input type="checkbox" @bind="includeGeneratedDocs" /> Include generated docs</label>
+                <label><input type="checkbox" @bind="includePublicApi" /> Include public API</label>
+                <label><input type="checkbox" @bind="includeFlows" /> Include flows</label>
+                <label><input type="checkbox" @bind="includeArchitecture" /> Include architecture</label>
+            </div>
+            <label>
+                Optional instruction
+                <textarea class="form-control" rows="3" @bind="instruction" placeholder="Example: Explain this for a senior developer joining the project tomorrow."></textarea>
+            </label>
+            <div class="grid two">
+                <label>
+                    Max input tokens
+                    <input class="form-control" type="number" @bind="maxInputTokens" />
+                </label>
+                <label>
+                    Max output tokens
+                    <input class="form-control" type="number" @bind="maxOutputTokens" />
+                </label>
+            </div>
+        </Cards>
+
+        @if (preview is not null)
+        {
+            <Cards Title="Prompt Preview">
+                <div class="metric-grid">
+                    <MetricCard Label="Prompt tokens" Value="@preview.TokenEstimate.PromptTokens.ToString()" />
+                    <MetricCard Label="Output tokens" Value="@preview.TokenEstimate.MaxOutputTokens.ToString()" />
+                    <MetricCard Label="Total tokens" Value="@preview.TokenEstimate.TotalTokens.ToString()" />
+                    <MetricCard Label="Prompt hash" Value="@preview.PromptHash[..Math.Min(10, preview.PromptHash.Length)]" />
+                </div>
+                @if (preview.ProviderKind != AiProviderKind.Ollama)
+                {
+                    <p class="callout warn">This provider is online or external. Selected project context will be sent to the configured AI provider.</p>
+                }
+                @foreach (var warning in preview.SafetyWarnings)
+                {
+                    <div class="list-row"><strong>@warning.Severity</strong><span>@warning.Message</span></div>
+                }
+                <details>
+                    <summary>Included files (@preview.IncludedFiles.Count(f => f.Included))</summary>
+                    @foreach (var file in preview.IncludedFiles)
+                    {
+                        <div class="list-row"><strong>@file.RelativePath</strong><span>@(file.Included ? $"{file.TokenEstimate} tokens" : file.Warning)</span></div>
+                    }
+                </details>
+                <details>
+                    <summary>Prompt text</summary>
+                    <pre>@preview.PromptText</pre>
+                </details>
+            </Cards>
+        }
+
+        @if (result is not null)
+        {
+            <Cards Title="Generated Explanation">
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="pill">@result.Status</span>
+                    @if (result.Quality is not null)
+                    {
+                        <span class="pill @(result.Quality.Status == AiExplanationQualityStatus.Good ? "ok" : "warn")">Quality: @result.Quality.Status</span>
+                    }
+                    <span class="pill">Path: @result.SuggestedFilePath</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(result.Error))
+                {
+                    <p class="callout bad">@result.Error</p>
+                }
+                @if (result.Quality?.Warnings.Count > 0)
+                {
+                    @foreach (var warning in result.Quality.Warnings)
+                    {
+                        <div class="list-row"><strong>Quality</strong><span>@warning</span></div>
+                    }
+                }
+                <MarkdownViewer Content="@result.Markdown" />
+            </Cards>
+        }
+
+        @if (saveResult is not null)
+        {
+            <Cards Title="Save Result">
+                <p>@(saveResult.Saved ? $"Saved to {saveResult.SavedFilePath}" : "Not saved")</p>
+                @foreach (var warning in saveResult.Warnings)
+                {
+                    <div class="list-row"><strong>Warning</strong><span>@warning</span></div>
+                }
+                @if (!saveResult.Saved && saveResult.Warnings.Any(w => w.Contains("manually modified", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <button class="btn btn-outline-danger" @onclick="ForceSaveAsync">Confirm overwrite generated explanation</button>
+                }
+            </Cards>
+        }
+    }
+</ProjectWorkspaceLayout>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private AiExplanationOptionsDto? options;
+    private AiExplanationPreviewDto? preview;
+    private AiExplanationResultDto? result;
+    private AiExplanationSaveResultDto? saveResult;
+    private string? providerId;
+    private string model = "";
+    private string packId = "backend-docs";
+    private ExplanationProfile profile = ExplanationProfile.FullProjectExplanation;
+    private string? instruction;
+    private bool includeSourceSnippets = true;
+    private bool includeTests = true;
+    private bool includeGeneratedDocs = true;
+    private bool includePublicApi = true;
+    private bool includeFlows = true;
+    private bool includeArchitecture = true;
+    private int maxInputTokens = 60000;
+    private int maxOutputTokens = 3000;
+    private bool loading = true;
+    private bool busy;
+    private string? error;
+
+    private bool CanPreview => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(packId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try
+        {
+            options = await Api.GetAiExplanationOptionsAsync(ProjectId);
+            providerId = options.Providers.FirstOrDefault(p => p.Status != AiProviderStatus.Disabled)?.ProviderId ?? options.Providers.FirstOrDefault()?.ProviderId;
+            model = options.Providers.FirstOrDefault(p => p.ProviderId == providerId)?.Kind == AiProviderKind.Ollama ? "llama3.1" : "gpt-4.1-mini";
+            packId = options.Packs.Any(p => p.Pack.Id == "backend-docs") ? "backend-docs" : options.Packs.FirstOrDefault()?.Pack.Id ?? "ai-handoff";
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private AiExplanationRequestDto Request()
+        => new(ProjectId, providerId ?? "", model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens, false, true);
+
+    private async Task PreviewAsync()
+    {
+        busy = true;
+        try
+        {
+            preview = await Api.PreviewAiExplanationAsync(ProjectId, Request());
+            Toast.ShowSuccess("Explanation prompt previewed.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        busy = true;
+        try
+        {
+            result = await Api.RunAiExplanationAsync(ProjectId, Request());
+            Toast.ShowSuccess(result.Status == AiRunStatus.Completed ? "Explanation generated." : $"Explanation ended: {result.Status}");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task SaveAsync(bool force = false)
+    {
+        if (result is null) return;
+        busy = true;
+        try
+        {
+            saveResult = await Api.SaveAiExplanationAsync(ProjectId, result.Id, force);
+            Toast.ShowSuccess(saveResult.Saved ? "AI explanation saved." : "AI explanation was not saved.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private Task ForceSaveAsync() => SaveAsync(true);
+
+    private async Task CopyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(result?.Markdown)) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [result.Markdown]);
+        Toast.ShowSuccess("Explanation copied.");
+    }
+}

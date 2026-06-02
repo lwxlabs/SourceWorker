@@ -341,6 +341,34 @@ public interface IAiContextPackQualityService
     Task<AiContextPackQualityReport> CheckAsync(Guid projectId, string packId, CancellationToken cancellationToken);
 }
 
+public interface IAiExplanationPromptBuilder
+{
+    Task<AiExplanationPreview> BuildPreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken);
+}
+
+public interface IAiExplanationQualityService
+{
+    AiExplanationQualityReport Check(string markdown);
+}
+
+public interface IAiExplanationService
+{
+    Task<AiExplanationOptions> GetOptionsAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<AiExplanationPreview> PreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken);
+    Task<AiExplanationResult> RunAsync(AiExplanationRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AiExplanationResult>> GetRunsAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<AiExplanationResult?> GetRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken);
+    Task<AiExplanationSaveResult> SaveAsync(AiExplanationSaveRequest request, CancellationToken cancellationToken);
+    Task<bool> DeleteRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken);
+}
+
+public sealed record AiExplanationOptions(
+    Guid ProjectId,
+    IReadOnlyList<AiProviderHealthResult> Providers,
+    IReadOnlyList<ContextPackManifest> Packs,
+    string SuggestedFilePath,
+    IReadOnlyList<ExplanationProfile> Profiles);
+
 public interface IDogfoodReadinessService
 {
     Task<DogfoodProjectReadiness> GetGlobalStatusAsync(CancellationToken cancellationToken);

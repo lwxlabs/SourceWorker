@@ -59,6 +59,13 @@ public interface ISourceWorkerApiClient
     Task<AiUsageSummaryDto> GetAiUsageAsync(CancellationToken cancellationToken = default);
     Task<AiUsageSummaryDto> GetProjectAiUsageAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<AiContextPackQualityReportDto> GetAiPackQualityAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
+    Task<AiExplanationOptionsDto> GetAiExplanationOptionsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<AiExplanationPreviewDto> PreviewAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
+    Task<AiExplanationResultDto> RunAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiExplanationResultDto>> GetAiExplanationRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<AiExplanationResultDto?> GetAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
+    Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
     Task<DogfoodProjectReadinessDto> GetDogfoodStatusAsync(CancellationToken cancellationToken = default);
     Task<DogfoodProjectReadinessDto> GetProjectDogfoodStatusAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<DiagnosticsSummaryDto> GetDiagnosticsSummaryAsync(CancellationToken cancellationToken = default);

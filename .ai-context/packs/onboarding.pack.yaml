@@ -6,8 +6,8 @@ purpose: Onboard quickly into the repository.
 maxRecommendedUse: compact
 tokenEstimate: 0
 freshnessStatus: fresh
-sourceScanRunId: "90ef7b49-b6f0-4ddb-9b37-a8193a5a94f7"
-generatedUtc: "2026-06-02T14:25:05.3779416+00:00"
+sourceScanRunId: "524b0fea-14f1-40fb-8c59-0e51bf95d28b"
+generatedUtc: "2026-06-02T21:10:36.9475983+00:00"
 files:
   - .ai-context/project.md
   - .ai-context/architecture.md

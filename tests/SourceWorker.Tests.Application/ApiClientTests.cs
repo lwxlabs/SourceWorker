@@ -253,6 +253,45 @@ public sealed class ApiClientTests
     }
 
     [Fact]
+    public async Task ApiClient_explanation_methods_include_bearer_token_and_parse_responses()
+    {
+        var projectId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var sawAuth = false;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            sawAuth = request.Headers.Authorization?.Scheme == "Bearer" && request.Headers.Authorization.Parameter == "test-token";
+            return request.RequestUri?.AbsolutePath switch
+            {
+                var path when path == $"/api/projects/{projectId}/ai/explanation/options" => $$"""{"projectId":"{{projectId}}","providers":[{"providerId":"Ollama","kind":1,"status":0,"message":"Provider is configured.","checkedUtc":"2026-05-31T00:00:00Z","maskedApiKey":null}],"packs":[],"suggestedFilePath":".ai-context/docs/backend/07-ai-explanation.md","profiles":[5]}""",
+                var path when path == $"/api/projects/{projectId}/ai/explanation/preview" => $$"""{"projectId":"{{projectId}}","providerId":"Ollama","providerKind":1,"model":"llama3.1","contextPackId":"backend-docs","explanationProfile":5,"includedFiles":[],"missingFiles":[],"safetyWarnings":[],"tokenEstimate":{"promptTokens":10,"maxOutputTokens":20,"totalTokens":30},"costEstimate":{"promptCostUsd":null,"outputCostUsd":null,"totalCostUsd":null,"currency":"USD"},"promptText":"prompt","promptHash":"hash","isBlocked":false}""",
+                var path when path == $"/api/projects/{projectId}/ai/explanation/run" => ResultJson(projectId, runId),
+                var path when path == $"/api/projects/{projectId}/ai/explanation/runs" => $"[{ResultJson(projectId, runId)}]",
+                var path when path == $"/api/projects/{projectId}/ai/explanation/runs/{runId}" => ResultJson(projectId, runId),
+                var path when path == $"/api/projects/{projectId}/ai/explanation/runs/{runId}/save" => $$"""{"projectId":"{{projectId}}","runId":"{{runId}}","saved":true,"suggestedFilePath":".ai-context/docs/backend/07-ai-explanation.md","savedFilePath":"C:\\Repo\\.ai-context\\docs\\backend\\07-ai-explanation.md","warnings":[]}""",
+                _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
+            };
+        }))
+        { BaseAddress = new Uri("http://localhost:5000") };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions { BearerToken = "test-token" });
+
+        var options = await client.GetAiExplanationOptionsAsync(projectId);
+        var preview = await client.PreviewAiExplanationAsync(projectId, ExplanationRequest(projectId));
+        var run = await client.RunAiExplanationAsync(projectId, ExplanationRequest(projectId));
+        var runs = await client.GetAiExplanationRunsAsync(projectId);
+        var detail = await client.GetAiExplanationRunAsync(projectId, runId);
+        var save = await client.SaveAiExplanationAsync(projectId, runId);
+
+        Assert.True(sawAuth);
+        Assert.Equal(".ai-context/docs/backend/07-ai-explanation.md", options.SuggestedFilePath);
+        Assert.Equal("prompt", preview.PromptText);
+        Assert.Equal(runId, run.Id);
+        Assert.Single(runs);
+        Assert.Equal(runId, detail?.Id);
+        Assert.True(save.Saved);
+    }
+
+    [Fact]
     public async Task Api_client_can_get_runtime_info()
     {
         using var http = new HttpClient(new StubHandler(request => 
@@ -280,4 +319,10 @@ public sealed class ApiClientTests
                 Content = new StringContent(responseFactory(request), System.Text.Encoding.UTF8, "application/json")
             });
     }
+
+    private static AiExplanationRequestDto ExplanationRequest(Guid projectId)
+        => new(projectId, "Ollama", "llama3.1", "backend-docs", ExplanationProfile.FullProjectExplanation, "Explain", true, true, true, true, true, true, 60000, 20, false, true);
+
+    private static string ResultJson(Guid projectId, Guid runId)
+        => $"{{\"id\":\"{runId}\",\"projectId\":\"{projectId}\",\"providerId\":\"Ollama\",\"model\":\"llama3.1\",\"status\":2,\"createdUtc\":\"2026-05-31T00:00:00Z\",\"completedUtc\":\"2026-05-31T00:00:01Z\",\"promptHash\":\"hash\",\"outputHash\":\"out\",\"estimatedInputTokens\":10,\"estimatedOutputTokens\":20,\"warnings\":[],\"sections\":[],\"markdown\":\"# AI Project Explanation\",\"suggestedFilePath\":\".ai-context/docs/backend/07-ai-explanation.md\",\"error\":null,\"quality\":{{\"status\":0,\"passedChecks\":[],\"warnings\":[]}}}}";
 }

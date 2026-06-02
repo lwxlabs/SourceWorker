@@ -60,6 +60,13 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetAiUsageQuery, SourceWorker.Domain.AiUsageSummary>, GetAiUsageQueryHandler>();
         services.AddScoped<IRequestHandler<GetProjectAiUsageQuery, SourceWorker.Domain.AiUsageSummary>, GetProjectAiUsageQueryHandler>();
         services.AddScoped<IRequestHandler<GetAiPackQualityQuery, SourceWorker.Domain.AiContextPackQualityReport>, GetAiPackQualityQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiExplanationOptionsQuery, SourceWorker.Application.AiExplanationOptions>, GetAiExplanationOptionsQueryHandler>();
+        services.AddScoped<IRequestHandler<PreviewAiExplanationCommand, SourceWorker.Domain.AiExplanationPreview>, PreviewAiExplanationCommandHandler>();
+        services.AddScoped<IRequestHandler<RunAiExplanationCommand, SourceWorker.Domain.AiExplanationResult>, RunAiExplanationCommandHandler>();
+        services.AddScoped<IRequestHandler<GetAiExplanationRunsQuery, IReadOnlyList<SourceWorker.Domain.AiExplanationResult>>, GetAiExplanationRunsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiExplanationRunQuery, SourceWorker.Domain.AiExplanationResult?>, GetAiExplanationRunQueryHandler>();
+        services.AddScoped<IRequestHandler<SaveAiExplanationCommand, SourceWorker.Domain.AiExplanationSaveResult>, SaveAiExplanationCommandHandler>();
+        services.AddScoped<IRequestHandler<DeleteAiExplanationRunCommand, bool>, DeleteAiExplanationRunCommandHandler>();
         services.AddScoped<IRequestHandler<GetDogfoodStatusQuery, SourceWorker.Domain.DogfoodProjectReadiness>, GetDogfoodStatusQueryHandler>();
         services.AddScoped<IRequestHandler<GetProjectDogfoodStatusQuery, SourceWorker.Domain.DogfoodProjectReadiness>, GetProjectDogfoodStatusQueryHandler>();
         services.AddScoped<IRequestHandler<GetDiagnosticsSummaryQuery, SourceWorker.Domain.DiagnosticsSummary>, GetDiagnosticsSummaryQueryHandler>();

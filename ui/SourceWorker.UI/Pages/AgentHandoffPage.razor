@@ -40,6 +40,20 @@
             </div>
         </Cards>
 
+        <Cards Title="AI Explanation">
+            <div class="list-row">
+                <strong>@(explanationExists ? "Generated" : "Not generated")</strong>
+                <span>.ai-context/docs/backend/07-ai-explanation.md</span>
+            </div>
+            <div class="project-actions">
+                <a class="btn btn-primary" href="/projects/@ProjectId/explanation">@(explanationExists ? "Open explanation" : "Generate explanation")</a>
+                @if (explanationExists)
+                {
+                    <button class="btn" @onclick="CopyExplanation">Copy explanation</button>
+                }
+            </div>
+        </Cards>
+
         <Cards Title="Handoff Preview">
             <MarkdownViewer Content="@handoff?.Markdown" />
         </Cards>
@@ -91,8 +105,10 @@
     private IReadOnlyList<CodeSymbol> symbols = [];
     private IReadOnlyList<CodeFlow> flows = [];
     private IReadOnlyList<TestInfo> tests = [];
+    private string? explanationMarkdown;
     private bool loading = true;
     private string? error;
+    private bool explanationExists => !string.IsNullOrWhiteSpace(explanationMarkdown);
 
     private string ProjectName => project?.Name ?? "Project";
     private string HandoffReadiness => completeness is { Score: >= 80 } ? "Handoff ready" : "Needs scan";
@@ -114,6 +130,8 @@
             symbols = await Api.GetSymbolsAsync(ProjectId);
             flows = await Api.GetFlowsAsync(ProjectId);
             tests = await Api.GetTestsAsync(ProjectId);
+            try { explanationMarkdown = await Api.ReadContextAsync(ProjectId, ".ai-context/docs/backend/07-ai-explanation.md"); }
+            catch { explanationMarkdown = null; }
             error = null;
         }
         catch (Exception ex)
@@ -135,6 +153,12 @@
 
     private Task CopyCodexPrompt() => CopyPrompt("codex", "Codex");
     private Task CopyJuniePrompt() => CopyPrompt("junie", "Junie");
+    private async Task CopyExplanation()
+    {
+        if (string.IsNullOrWhiteSpace(explanationMarkdown)) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [explanationMarkdown]);
+        Toast.ShowSuccess("AI explanation copied.");
+    }
 
     private async Task CopyPrompt(string templateId, string label)
     {

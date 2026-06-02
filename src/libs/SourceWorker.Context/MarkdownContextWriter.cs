@@ -167,6 +167,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Architecture notes: `.ai-context/architecture.md`
         - Tasks and risks: `.ai-context/tasks.md`
         - Canonical backend docs: `.ai-context/docs/backend/`
+        {AiExplanationLine(scan.Project)}
         - Context packs: `.ai-context/packs/`
 
         ## How An Agent Should Work Here
@@ -260,6 +261,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         - Quick coding handoff pack: `.ai-context/packs/ai-handoff.pack.yaml`
         - Backend architecture pack: `.ai-context/packs/backend-docs.pack.yaml`
         - Canonical backend docs: `.ai-context/docs/backend/`
+        {AiExplanationLine(scan.Project)}
         - Tasks and risks: `.ai-context/tasks.md`
         - Scan details: `.ai-context/scans/latest-scan.md`
 
@@ -842,6 +844,11 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         if (scan.Projects.Count > 0) return "Project structure is organized primarily by .NET project files.";
         return "Architecture could not be inferred because no solution/project structure was detected yet.";
     }
+
+    private static string AiExplanationLine(Project project)
+        => File.Exists(Path.Combine(project.RootPath, ".ai-context", "docs", "backend", "07-ai-explanation.md"))
+            ? "- AI explanation: `.ai-context/docs/backend/07-ai-explanation.md`"
+            : "- AI explanation: not generated yet (`.ai-context/docs/backend/07-ai-explanation.md`)";
 
     private static IEnumerable<string> StructureLines(ProjectScanResult scan, ProjectHandoffProfile profile)
     {

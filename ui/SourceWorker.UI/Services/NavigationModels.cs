@@ -34,6 +34,7 @@ public static class SourceWorkerNavigation
     [
         new("overview", "Overview", "", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("handoff", "Handoff", "handoff", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
+        new("explanation", "Explanation", "explanation", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("ask", "Ask", "ai", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("docs", "Docs", "docs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("packs", "Packs", "packs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)

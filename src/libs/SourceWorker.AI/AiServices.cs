@@ -23,6 +23,9 @@ public static class DependencyInjection
         services.AddSingleton<IAiSettingsRepository, InMemoryAiSettingsRepository>();
         services.AddSingleton<IAiUsageService, AiUsageService>();
         services.AddSingleton<IAiContextPackQualityService, AiContextPackQualityService>();
+        services.AddSingleton<IAiExplanationPromptBuilder, AiExplanationPromptBuilder>();
+        services.AddSingleton<IAiExplanationQualityService, AiExplanationQualityService>();
+        services.AddSingleton<IAiExplanationService, AiExplanationService>();
         services.AddSingleton<IDogfoodReadinessService, DogfoodReadinessService>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsService>();
         services.AddSingleton<IDogfoodSessionService, DogfoodSessionService>();
@@ -357,6 +360,407 @@ public sealed class AiContextPackQualityService(IProjectRepository projects, ICo
         if (fresh.FreshnessScore < 70) issues.Add(new("low-freshness", "Medium", $"Context freshness is {fresh.FreshnessScore}."));
         var score = Math.Max(0, 100 - issues.Count(i => i.Severity == "High") * 30 - issues.Count(i => i.Severity != "High") * 10);
         return new AiContextPackQualityReport(projectId, packId, score, score >= 80, issues);
+    }
+}
+
+public sealed class AiExplanationPromptBuilder(
+    IProjectRepository projects,
+    IContextPackService packs,
+    IAiProviderConfigurationRepository configurations,
+    IAiModelCatalogService models,
+    IAiTokenEstimator tokens,
+    IAiSafetyService safety,
+    ICodeSymbolRepository symbols,
+    ITestInfoRepository tests) : IAiExplanationPromptBuilder
+{
+    private static readonly string SuggestedPath = ".ai-context/docs/backend/07-ai-explanation.md";
+
+    public async Task<AiExplanationPreview> BuildPreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
+        var pack = await packs.GetAsync(project, request.ContextPackId, cancellationToken);
+        var modelName = string.IsNullOrWhiteSpace(request.Model) ? configuration.Model : request.Model;
+        var included = new List<AiExplanationSourceFile>();
+        var context = await BuildContextAsync(project, request, included, cancellationToken);
+        var providerKind = configuration.Kind;
+        var prompt = BuildPrompt(project, request, modelName, context);
+        var estimate = tokens.Estimate(prompt, request.MaxOutputTokens);
+        var model = models.GetModels(providerKind).FirstOrDefault(m => m.Id.Equals(modelName, StringComparison.OrdinalIgnoreCase));
+        var warnings = safety.Check(prompt, pack).Warnings.ToList();
+        if (providerKind != AiProviderKind.Ollama)
+        {
+            warnings.Add(new AiSafetyWarning("online-provider", "Medium", "This sends selected project context to the configured AI provider."));
+        }
+
+        if (request.IncludeSourceSnippets)
+        {
+            warnings.Add(new AiSafetyWarning("source-snippets-included", "Medium", "Selected source snippets will be sent."));
+        }
+
+        return new AiExplanationPreview(
+            project.Id,
+            request.ProviderId,
+            providerKind,
+            modelName,
+            request.ContextPackId,
+            request.ExplanationProfile,
+            included,
+            pack?.MissingFiles ?? [],
+            warnings,
+            estimate,
+            tokens.EstimateCost(estimate, model),
+            prompt,
+            AiContextPackPromptBuilder.Hash(prompt),
+            warnings.Any(w => w.Severity.Equals("High", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private async Task<string> BuildContextAsync(Project project, AiExplanationRequest request, List<AiExplanationSourceFile> included, CancellationToken cancellationToken)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("## Project Context Inputs");
+        builder.AppendLine();
+
+        var coreFiles = new List<string> { ".ai-context/agent-handoff.md" };
+        if (request.IncludeGeneratedDocs)
+        {
+            coreFiles.AddRange([
+                ".ai-context/docs/backend/01-project-structure.md",
+                ".ai-context/docs/backend/02-architecture.md",
+                ".ai-context/docs/backend/03-important-files-and-flows.md",
+                ".ai-context/docs/backend/04-configuration-and-secrets.md",
+                ".ai-context/docs/backend/05-tasks-and-risks.md",
+                ".ai-context/docs/backend/06-verification-checklist.md"
+            ]);
+        }
+
+        coreFiles.Add("README.md");
+        foreach (var relative in coreFiles.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            await AppendFileAsync(project, relative, "generated-context", 240, builder, included, cancellationToken);
+        }
+
+        if (request.IncludeSourceSnippets || request.IncludePublicApi)
+        {
+            var symbolFiles = (await symbols.GetByProjectAsync(project.Id, cancellationToken))
+                .Where(s => !IsGeneratedOrForbidden(s.RelativePath) && !IsTestPath(s.RelativePath))
+                .OrderByDescending(s => s.Accessibility.Equals("public", StringComparison.OrdinalIgnoreCase))
+                .ThenBy(s => s.RelativePath.Count(c => c is '/' or '\\'))
+                .Select(s => s.RelativePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(20)
+                .ToArray();
+
+            foreach (var relative in symbolFiles)
+            {
+                await AppendFileAsync(project, relative, "source-snippet", 120, builder, included, cancellationToken);
+            }
+        }
+
+        if (request.IncludeTests)
+        {
+            var testFiles = (await tests.GetByProjectAsync(project.Id, cancellationToken))
+                .Where(t => !IsGeneratedOrForbidden(t.RelativePath))
+                .Select(t => t.RelativePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToArray();
+
+            foreach (var relative in testFiles)
+            {
+                await AppendFileAsync(project, relative, "test-snippet", 80, builder, included, cancellationToken);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private async Task AppendFileAsync(Project project, string relativePath, string kind, int maxLines, StringBuilder builder, List<AiExplanationSourceFile> included, CancellationToken cancellationToken)
+    {
+        if (IsGeneratedOrForbidden(relativePath) && !relativePath.StartsWith(".ai-context/docs/backend", StringComparison.OrdinalIgnoreCase) && !relativePath.Equals(".ai-context/agent-handoff.md", StringComparison.OrdinalIgnoreCase))
+        {
+            included.Add(new AiExplanationSourceFile(relativePath, kind, null, null, 0, false, "Skipped generated or forbidden path."));
+            return;
+        }
+
+        var root = Path.GetFullPath(project.RootPath);
+        var absolute = Path.GetFullPath(Path.Combine(root, relativePath));
+        if (!absolute.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(absolute))
+        {
+            included.Add(new AiExplanationSourceFile(relativePath, kind, null, null, 0, false, "File was not found."));
+            return;
+        }
+
+        if (LooksSecretProne(relativePath))
+        {
+            included.Add(new AiExplanationSourceFile(relativePath, kind, null, null, 0, false, "Skipped secret-prone file."));
+            return;
+        }
+
+        var lines = (await File.ReadAllLinesAsync(absolute, cancellationToken)).Take(maxLines).ToArray();
+        var text = StripSourceWorkerMetadata(string.Join(Environment.NewLine, lines));
+        builder.AppendLine();
+        builder.AppendLine("---");
+        builder.AppendLine($"Source: `{relativePath}`");
+        builder.AppendLine($"Kind: {kind}");
+        builder.AppendLine("---");
+        builder.AppendLine(text);
+        builder.AppendLine();
+        included.Add(new AiExplanationSourceFile(relativePath, kind, 1, lines.Length, tokens.Estimate(text, 0).PromptTokens, true));
+    }
+
+    private static string BuildPrompt(Project project, AiExplanationRequest request, string modelName, string context)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("You are writing a senior-developer project explanation from SourceWorker context.");
+        builder.AppendLine("SourceWorker is not asking you to edit source code, produce patches, or run terminal commands.");
+        builder.AppendLine("Generate readable markdown only.");
+        builder.AppendLine();
+        builder.AppendLine("Rules:");
+        builder.AppendLine("- Do not invent facts.");
+        builder.AppendLine("- Say \"not detected\" or \"unknown\" when needed.");
+        builder.AppendLine("- Prefer evidence from supplied source files, tests, README, and scanned context.");
+        builder.AppendLine("- Do not propose code changes unless asked.");
+        builder.AppendLine("- Do not output patches.");
+        builder.AppendLine("- Do not include secrets.");
+        builder.AppendLine("- Do not repeat raw scan metadata.");
+        builder.AppendLine("- Do not mention SourceWorker internals unless explaining generated context.");
+        builder.AppendLine();
+        builder.AppendLine($"Project: {project.Name}");
+        builder.AppendLine($"Profile: {request.ExplanationProfile}");
+        builder.AppendLine($"Model: {modelName}");
+        if (!string.IsNullOrWhiteSpace(request.UserInstruction))
+        {
+            builder.AppendLine();
+            builder.AppendLine("User instruction:");
+            builder.AppendLine(request.UserInstruction);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Write exactly these sections:");
+        builder.AppendLine("# AI Project Explanation");
+        builder.AppendLine("## 1. What This Project Is");
+        builder.AppendLine("## 2. Mental Model");
+        builder.AppendLine("## 3. Solution / Project Structure");
+        builder.AppendLine("## 4. Main Runtime Flow");
+        builder.AppendLine("## 5. Public API / Main Entry Points");
+        builder.AppendLine("## 6. Data / Storage / External Systems");
+        builder.AppendLine("## 7. Configuration");
+        builder.AppendLine("## 8. Tests And Quality");
+        builder.AppendLine("## 9. Important Files To Read First");
+        builder.AppendLine("## 10. Risks / Unknowns");
+        builder.AppendLine("## 11. How An AI Coding Agent Should Continue");
+        builder.AppendLine();
+        builder.AppendLine(context);
+        return builder.ToString();
+    }
+
+    private static bool IsTestPath(string relativePath) => relativePath.Contains(".Tests", StringComparison.OrdinalIgnoreCase) || relativePath.Contains("/tests/", StringComparison.OrdinalIgnoreCase) || relativePath.Contains("\\tests\\", StringComparison.OrdinalIgnoreCase);
+    private static bool IsGeneratedOrForbidden(string relativePath)
+    {
+        var path = relativePath.Replace('\\', '/');
+        return path.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(".vs/", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(".idea/", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("instructions/Result/", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".pack.yaml", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksSecretProne(string relativePath)
+        => relativePath.EndsWith(".env", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("private", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("appsettings.Production", StringComparison.OrdinalIgnoreCase);
+
+    internal static string StripSourceWorkerMetadata(string text)
+    {
+        var normalized = text.Replace("\r\n", "\n");
+        normalized = Regex.Replace(normalized, @"<!--\s*SourceWorker:Generated;.*?-->\s*", "", RegexOptions.Singleline);
+        normalized = Regex.Replace(normalized, @"<!--\s*GeneratedBy:\s*SourceWorker.*?-->\s*", "", RegexOptions.Singleline);
+        return normalized.Trim();
+    }
+
+    public static string SuggestedFilePath => SuggestedPath;
+}
+
+public sealed class AiExplanationQualityService : IAiExplanationQualityService
+{
+    private static readonly string[] Required =
+    [
+        "What This Project Is",
+        "Mental Model",
+        "Solution / Project Structure",
+        "Main Runtime Flow",
+        "Public API / Main Entry Points",
+        "Tests And Quality",
+        "Important Files To Read First",
+        "Risks / Unknowns",
+        "How An AI Coding Agent Should Continue"
+    ];
+
+    public AiExplanationQualityReport Check(string markdown)
+    {
+        var passed = new List<string>();
+        var warnings = new List<string>();
+        if (markdown.Trim().StartsWith("# AI Project Explanation", StringComparison.OrdinalIgnoreCase)) passed.Add("title");
+        else warnings.Add("Missing expected title.");
+
+        foreach (var section in Required)
+        {
+            if (markdown.Contains(section, StringComparison.OrdinalIgnoreCase)) passed.Add(section);
+            else warnings.Add($"Missing section: {section}.");
+        }
+
+        if (markdown.Length < 800) warnings.Add("Explanation is very short.");
+        if (markdown.Contains("as an AI language model", StringComparison.OrdinalIgnoreCase)) warnings.Add("Contains generic AI disclaimer language.");
+        if (markdown.Contains("```diff", StringComparison.OrdinalIgnoreCase) || markdown.Contains("--- a/", StringComparison.OrdinalIgnoreCase)) warnings.Add("Looks like it includes patch content.");
+        if (markdown.Contains("SourceWorker prompt", StringComparison.OrdinalIgnoreCase)) warnings.Add("Mentions prompt internals.");
+        var status = warnings.Count == 0 ? AiExplanationQualityStatus.Good : warnings.Count <= 3 ? AiExplanationQualityStatus.NeedsReview : AiExplanationQualityStatus.Failed;
+        return new AiExplanationQualityReport(status, passed, warnings);
+    }
+}
+
+public sealed class AiExplanationService(
+    IProjectRepository projects,
+    IContextPackService packs,
+    IAiProviderConfigurationRepository configurations,
+    IAiProviderRegistry registry,
+    IAiExplanationPromptBuilder promptBuilder,
+    IAiExplanationQualityService quality,
+    IAiRunRepository runs,
+    IGeneratedArtifactRepository artifacts,
+    IScanRunRepository scanRuns) : IAiExplanationService
+{
+    public async Task<AiExplanationOptions> GetOptionsAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var configs = await configurations.ListAsync(cancellationToken);
+        var providers = registry.ListProviders().Select(provider =>
+        {
+            var config = configs.FirstOrDefault(c => c.Kind == provider.Kind);
+            return new AiProviderHealthResult(provider.Id, provider.Kind, config is null ? AiProviderStatus.NotConfigured : AiProviderStatus.NotConfigured, config is null ? "Provider is not configured." : "Provider is configured.", DateTimeOffset.UtcNow, config?.MaskedApiKey);
+        }).ToArray();
+        return new AiExplanationOptions(project.Id, providers, await packs.ListAsync(project, cancellationToken), AiExplanationPromptBuilder.SuggestedFilePath, Enum.GetValues<ExplanationProfile>());
+    }
+
+    public Task<AiExplanationPreview> PreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken)
+        => promptBuilder.BuildPreviewAsync(request, cancellationToken);
+
+    public async Task<AiExplanationResult> RunAsync(AiExplanationRequest request, CancellationToken cancellationToken)
+    {
+        var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
+        var preview = await PreviewAsync(request, cancellationToken);
+        if (preview.IsBlocked)
+        {
+            var blocked = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.SafetyBlocked, null, "High-risk safety warning blocked explanation generation."), cancellationToken);
+            return ToResult(blocked, quality);
+        }
+
+        var running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
+        try
+        {
+            var provider = registry.GetProvider(request.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
+            var modelConfig = string.IsNullOrWhiteSpace(request.Model) ? configuration : configuration with { Model = request.Model };
+            var output = await provider.RunAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken);
+            var completed = await runs.SaveAsync(running with { Status = AiRunStatus.Completed, CompletedUtc = DateTimeOffset.UtcNow, OutputText = request.StoreOutput ? output.Text : output.Text, OutputHash = output.OutputHash }, cancellationToken);
+            return ToResult(completed, quality);
+        }
+        catch (Exception ex)
+        {
+            var failed = await runs.SaveAsync(running with { Status = AiRunStatus.Failed, CompletedUtc = DateTimeOffset.UtcNow, Error = ex.Message }, cancellationToken);
+            return ToResult(failed, quality);
+        }
+    }
+
+    public async Task<IReadOnlyList<AiExplanationResult>> GetRunsAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await runs.GetByProjectAsync(projectId, cancellationToken))
+            .Where(IsExplanationRun)
+            .OrderByDescending(r => r.CreatedUtc)
+            .Select(r => ToResult(r, quality))
+            .ToArray();
+
+    public async Task<AiExplanationResult?> GetRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken)
+    {
+        var run = await runs.GetAsync(runId, cancellationToken);
+        return run is null || run.ProjectId != projectId || !IsExplanationRun(run) ? null : ToResult(run, quality);
+    }
+
+    public async Task<AiExplanationSaveResult> SaveAsync(AiExplanationSaveRequest request, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var run = await runs.GetAsync(request.RunId, cancellationToken);
+        if (run is null || run.ProjectId != request.ProjectId || !IsExplanationRun(run)) return new AiExplanationSaveResult(request.ProjectId, request.RunId, false, AiExplanationPromptBuilder.SuggestedFilePath, null, ["Explanation run was not found."]);
+        if (run.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(run.OutputText)) return new AiExplanationSaveResult(request.ProjectId, request.RunId, false, AiExplanationPromptBuilder.SuggestedFilePath, null, ["Only completed explanation runs can be saved."]);
+
+        var relative = AiExplanationPromptBuilder.SuggestedFilePath;
+        var absolute = Path.GetFullPath(Path.Combine(project.RootPath, relative));
+        var root = Path.GetFullPath(project.RootPath);
+        if (!absolute.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Explanation output path must stay inside the project root.");
+
+        var existingArtifact = await artifacts.GetByPathAsync(project.Id, relative, cancellationToken);
+        if (File.Exists(absolute))
+        {
+            var existingHash = AiContextPackPromptBuilder.Hash(await File.ReadAllTextAsync(absolute, cancellationToken));
+            var manuallyModified = existingArtifact is null || !existingArtifact.ContentHash.Equals(existingHash, StringComparison.OrdinalIgnoreCase);
+            if (manuallyModified && !request.ConfirmOverwrite)
+            {
+                return new AiExplanationSaveResult(project.Id, run.Id, false, relative, null, ["07-ai-explanation.md already exists and appears manually modified. Confirm overwrite to replace it."]);
+            }
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
+        var markdown = AiExplanationPromptBuilder.StripSourceWorkerMetadata(run.OutputText);
+        await File.WriteAllTextAsync(absolute, markdown, cancellationToken);
+        var hash = AiContextPackPromptBuilder.Hash(markdown);
+        var latestScan = await scanRuns.GetLatestAsync(project.Id, cancellationToken);
+        await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), project.Id, latestScan?.Id, "ai-explanation", relative, absolute, GeneratedArtifactType.InternalGeneratedDoc, hash, DateTimeOffset.UtcNow, run.PromptHash, GeneratedArtifactStatus.Generated, "SourceWorker.AI.Explanation", $"Provider={run.ProviderId}; Model={run.Model}; RunId={run.Id}"), cancellationToken);
+        return new AiExplanationSaveResult(project.Id, run.Id, true, relative, absolute, []);
+    }
+
+    public async Task<bool> DeleteRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken)
+    {
+        var run = await runs.GetAsync(runId, cancellationToken);
+        if (run is null || run.ProjectId != projectId || !IsExplanationRun(run)) return false;
+        await runs.DeleteAsync(runId, cancellationToken);
+        return true;
+    }
+
+    private static AiRun NewRun(AiExplanationRequest request, AiProviderConfiguration configuration, AiExplanationPreview preview, AiRunStatus status, string? output, string? error)
+        => new(Guid.NewGuid(), request.ProjectId, request.ProviderId, configuration.Kind, string.IsNullOrWhiteSpace(request.Model) ? configuration.Model : request.Model, ExplanationPackId(request), request.UserInstruction, preview.PromptHash, request.StorePrompt, request.StorePrompt ? preview.PromptText : null, preview.IncludedFiles.Where(f => f.Included).Select(f => f.RelativePath).ToArray(), preview.SafetyWarnings, preview.TokenEstimate, status, DateTimeOffset.UtcNow, status is AiRunStatus.Completed or AiRunStatus.Failed or AiRunStatus.SafetyBlocked ? DateTimeOffset.UtcNow : null, error, output, output is null ? null : AiContextPackPromptBuilder.Hash(output));
+
+    private static string ExplanationPackId(AiExplanationRequest request) => $"ai-explanation:{request.ContextPackId}:{request.ExplanationProfile}";
+    private static bool IsExplanationRun(AiRun run) => run.PackId.StartsWith("ai-explanation:", StringComparison.OrdinalIgnoreCase);
+    private static AiExplanationResult ToResult(AiRun run, IAiExplanationQualityService quality)
+    {
+        var sections = SplitSections(run.OutputText);
+        var report = string.IsNullOrWhiteSpace(run.OutputText) ? null : quality.Check(run.OutputText);
+        return new AiExplanationResult(run.Id, run.ProjectId, run.ProviderId, run.Model, run.Status, run.CreatedUtc, run.CompletedUtc, run.PromptHash, run.OutputHash, run.TokenEstimate.PromptTokens, run.TokenEstimate.MaxOutputTokens, run.SafetyWarnings, sections, run.OutputText, AiExplanationPromptBuilder.SuggestedFilePath, run.Error, report);
+    }
+
+    private static IReadOnlyList<AiExplanationSection> SplitSections(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return [];
+        var sections = new List<AiExplanationSection>();
+        var currentTitle = "AI Project Explanation";
+        var current = new StringBuilder();
+        foreach (var line in markdown.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                if (current.Length > 0) sections.Add(new AiExplanationSection(currentTitle, current.ToString().Trim()));
+                currentTitle = line[3..].Trim();
+                current.Clear();
+            }
+            else
+            {
+                current.AppendLine(line);
+            }
+        }
+        if (current.Length > 0) sections.Add(new AiExplanationSection(currentTitle, current.ToString().Trim()));
+        return sections;
     }
 }
 

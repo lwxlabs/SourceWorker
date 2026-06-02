@@ -277,6 +277,46 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public Task<AiContextPackQualityReportDto> GetAiPackQualityAsync(Guid projectId, string packId, CancellationToken cancellationToken = default)
         => Required<AiContextPackQualityReportDto>($"/api/projects/{projectId}/ai/packs/{Uri.EscapeDataString(packId)}/quality", cancellationToken);
 
+    public Task<AiExplanationOptionsDto> GetAiExplanationOptionsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<AiExplanationOptionsDto>($"/api/projects/{projectId}/ai/explanation/options", cancellationToken);
+
+    public async Task<AiExplanationPreviewDto> PreviewAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/preview", request with { ProjectId = projectId }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiExplanationPreviewDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI explanation preview response was empty.");
+    }
+
+    public async Task<AiExplanationResultDto> RunAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/run", request with { ProjectId = projectId }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiExplanationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI explanation run response was empty.");
+    }
+
+    public async Task<IReadOnlyList<AiExplanationResultDto>> GetAiExplanationRunsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<AiExplanationResultDto[]>($"/api/projects/{projectId}/ai/explanation/runs", cancellationToken) ?? [];
+
+    public Task<AiExplanationResultDto?> GetAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
+        => GetAsync<AiExplanationResultDto>($"/api/projects/{projectId}/ai/explanation/runs/{runId}", cancellationToken);
+
+    public async Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/runs/{runId}/save", new AiExplanationSaveRequestDto(confirmOverwrite), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiExplanationSaveResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI explanation save response was empty.");
+    }
+
+    public async Task<bool> DeleteAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}/ai/explanation/runs/{runId}", cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
     public Task<DogfoodProjectReadinessDto> GetDogfoodStatusAsync(CancellationToken cancellationToken = default)
         => Required<DogfoodProjectReadinessDto>("/api/dogfood/status", cancellationToken);
 

@@ -1,8 +1,8 @@
 # SourceWorker Current Progress
 
-Date: 2026-06-01
+Date: 2026-06-02
 
-SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, and MVP 2.7 corrected project workspace navigation.
+SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, MVP 2.7 corrected project workspace navigation, and MVP 2.8 AI Explanation Writer.
 
 Product statement:
 
@@ -165,6 +165,79 @@ Handoff quality improvements:
 - test fakes/mocks/sample classes are deprioritized
 - Localite-style library handoffs emphasize interfaces, context/store APIs, public operations, and tests instead of fake test entities
 - Imported Instructions no longer prints duplicate empty-state text
+
+## MVP 2.8 AI Explanation Writer
+
+MVP 2.8 adds an explicit AI-powered explanation flow for deeper project understanding.
+
+Generated file:
+
+```text
+.ai-context/docs/backend/07-ai-explanation.md
+```
+
+This file is not created by normal scan. It is written only after the user explicitly opens the project Explanation tab, previews/runs an AI explanation, reviews the result, and clicks save.
+
+Product boundary:
+- SourceWorker may write generated context/docs after explicit user confirmation.
+- SourceWorker does not write source files from AI output.
+- SourceWorker does not apply patches.
+- SourceWorker does not run terminal tasks from AI output.
+- SourceWorker does not become an autonomous coding agent.
+
+Project workspace route:
+
+```text
+/projects/{projectId}/explanation
+```
+
+Explanation flow:
+- options endpoint loads providers, packs, suggested file path, and profiles
+- preview endpoint builds prompt, included file list, safety warnings, and token/cost estimate only
+- run endpoint calls the configured provider and stores an explanation run
+- save endpoint writes `.ai-context/docs/backend/07-ai-explanation.md` only after explicit save
+- save tracks the file as an `InternalGeneratedDoc` generated artifact with recipe id `ai-explanation`
+- manually modified existing explanation files require overwrite confirmation
+
+Explanation profiles:
+- Developer Onboarding
+- Architecture Deep Dive
+- Public API Guide
+- Maintenance Guide
+- Test And Quality Guide
+- Full Project Explanation
+
+Prompt inputs are bounded and prioritized:
+- `.ai-context/agent-handoff.md`
+- deterministic backend docs `01` through `06`
+- README
+- ranked public API/source snippets
+- representative tests when selected
+
+Prompt inputs exclude generated pack YAML, `bin/`, `obj/`, `.git/`, `.vs/`, `.idea/`, `.env`, secret-prone files, databases, API keys, tokens, private keys, and appsettings secret-like values.
+
+The prompt asks the provider to generate:
+- what the project is
+- mental model
+- solution/project structure
+- main runtime flow
+- public API/main entry points
+- data/storage/external systems
+- configuration
+- tests and quality
+- important files to read first
+- risks/unknowns
+- how an AI coding agent should continue
+
+Safety and quality:
+- online providers show a privacy warning
+- source snippets show a sending-context warning
+- high-risk secret detections block the explanation run
+- output quality checks required sections, useful length, generic AI disclaimers, patch-like output, and prompt-internal leakage
+
+New context pack:
+- `ai-explanation` = AI Project Explanation
+- includes `.ai-context/docs/backend/07-ai-explanation.md`, `.ai-context/agent-handoff.md`, `.ai-context/docs/backend/02-architecture.md`, and `.ai-context/docs/backend/03-important-files-and-flows.md`
 
 ## Current Architecture
 
@@ -343,6 +416,7 @@ No AI CLI commands were added in MVP 2.1. AI preview is Local API and dashboard 
 - `/projects`
 - `/projects/{projectId}`
 - `/projects/{projectId}/handoff`
+- `/projects/{projectId}/explanation`
 - `/projects/{projectId}/context`
 - `/projects/{projectId}/docs`
 - `/projects/{projectId}/packs`
@@ -376,6 +450,7 @@ Dashboard behavior:
 - build "Ask With Context" prompt previews from packs
 - run preview-only AI requests
 - view AI run history
+- generate, preview, review, and explicitly save AI project explanations
 - validate provider setup
 - diagnose provider connection issues
 - inspect AI usage and pack readiness
@@ -476,6 +551,7 @@ MVP 2.3 daily-use additions:
 - `instructions/imported/imported-instructions.md` when imported
 - `instructions/imported/source-path-validation.md` when imported
 - `docs/backend/*.md`
+- `docs/backend/07-ai-explanation.md` when explicitly generated
 - `packs/*.pack.yaml`
 - `dogfood/` feedback exports when explicitly exported
 - `exports/backend-docs-compact.yaml`
@@ -569,6 +645,15 @@ MVP 2.3 protected endpoints:
 - `GET /api/projects/{id}/next-actions`
 - `GET /api/logs`
 
+MVP 2.8 protected endpoints:
+- `GET /api/projects/{id}/ai/explanation/options`
+- `POST /api/projects/{id}/ai/explanation/preview`
+- `POST /api/projects/{id}/ai/explanation/run`
+- `GET /api/projects/{id}/ai/explanation/runs`
+- `GET /api/projects/{id}/ai/explanation/runs/{runId}`
+- `POST /api/projects/{id}/ai/explanation/runs/{runId}/save`
+- `DELETE /api/projects/{id}/ai/explanation/runs/{runId}`
+
 All protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
 
 No new Local API endpoints were required for MVP 2.4. Desktop consumes the existing runtime, project, dashboard, dogfood, diagnostics, AI, and context endpoints through `SourceWorker.ApiClient`.
@@ -611,6 +696,15 @@ MVP 2.4 adds targeted coverage for:
 - Desktop project build
 - UI/Dashboard builds after the folder picker seam
 - ApiClient regression coverage
+
+MVP 2.8 adds targeted coverage for:
+- explanation prompt assembly from handoff/docs/source snippets
+- generated metadata stripping from explanation prompts
+- explicit save writing only `.ai-context/docs/backend/07-ai-explanation.md`
+- generated artifact tracking for saved explanations
+- explanation output quality checks
+- explanation ApiClient methods and bearer token usage
+- Local API explanation endpoint authorization and preview behavior
 
 ## Test Execution Rules For Codex
 
@@ -681,6 +775,18 @@ C:\Users\louie\Desktop\SourceWorker.lnk
 ```
 
 Full solution tests were intentionally not run for MVP 2.4 because the changed surface was Hosting/AppHost orchestration, Desktop, UI host seams, publish scripts, and docs. `CliCommandTests` were intentionally skipped because no CLI command parsing, output, or behavior changed.
+
+These targeted commands passed during MVP 2.8:
+
+```powershell
+dotnet build SourceWorker.slnx
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Explanation --no-build
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai --no-build
+dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Explanation --no-build
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient --no-build
+dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
+dotnet build ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj
+```
 
 ## Next Recommended Step
 
