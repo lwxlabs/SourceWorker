@@ -87,13 +87,41 @@ public sealed class ProcessLauncher(ILogger<ProcessLauncher> logger) : IProcessL
     public Task StopProcessAsync(int processId)
     {
         var process = managedProcesses.FirstOrDefault(p => p.Id == processId);
-        if (process is not null && !process.HasExited)
+        try
         {
-            logger.LogInformation("Stopping process {Pid}", processId);
-            process.Kill(entireProcessTree: true);
+            process ??= Process.GetProcessById(processId);
+            if (!process.HasExited)
+            {
+                logger.LogInformation("Stopping process {Pid}", processId);
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+        }
+        catch (ArgumentException)
+        {
+            logger.LogDebug("Process {Pid} was already stopped", processId);
+        }
+        catch (InvalidOperationException)
+        {
+            logger.LogDebug("Process {Pid} was already stopped", processId);
         }
 
         return Task.CompletedTask;
+    }
+
+    public async Task StopAllAsync()
+    {
+        foreach (var process in managedProcesses.ToArray())
+        {
+            if (process.HasExited) continue;
+            await StopProcessAsync(process.Id);
+        }
+
+        managedProcesses.RemoveAll(process =>
+        {
+            try { return process.HasExited; }
+            catch { return true; }
+        });
     }
 
     public bool IsProcessRunning(int processId)

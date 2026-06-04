@@ -6,6 +6,7 @@ public interface IProcessLauncher
 {
     Task<ManagedProcessInfo> StartProcessAsync(string name, string command, string arguments, IDictionary<string, string>? environmentVariables = null);
     Task StopProcessAsync(int processId);
+    Task StopAllAsync();
     bool IsProcessRunning(int processId);
 }
 

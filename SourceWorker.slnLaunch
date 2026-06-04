@@ -1,0 +1,16 @@
+[
+  {
+    "Name": "Desktop + Local API",
+    "Projects": [
+      {
+        "Path": "src\\services\\SourceWorker.LocalApi\\SourceWorker.LocalApi.csproj",
+        "Action": "Start",
+        "DebugTarget": "DesktopDebug"
+      },
+      {
+        "Path": "ui\\SourceWorker.Desktop\\SourceWorker.Desktop.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

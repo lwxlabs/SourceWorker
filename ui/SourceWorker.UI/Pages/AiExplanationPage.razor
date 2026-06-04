@@ -1,4 +1,5 @@
 @page "/projects/{ProjectId:guid}/explanation"
+@implements IDisposable
 @inject ISourceWorkerApiClient Api
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject ToastService Toast
@@ -8,13 +9,30 @@
         <div>
             <p class="eyebrow">AI Explanation</p>
             <h2>Generate a project explanation</h2>
-            <p>Generate a human-readable explanation from scanned context. This does not edit source code and only saves a generated docs file when you explicitly click save.</p>
+            <p>Generate a human-readable explanation from scanned context. This does not edit source code. A successful generation is saved as a generated docs file, and you can edit and save it again afterward.</p>
+            @if (!busy && !string.IsNullOrWhiteSpace(operationMessage))
+            {
+                <p class="callout @operationTone">@operationMessage</p>
+            }
+            @if (currentActivity is not null)
+            {
+                <div class="activity-feed">
+                    <strong>Current provider activity</strong>
+                    <div class="activity-line @currentActivity.Tone">
+                        <span>@currentActivity.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+                        <strong>@currentActivity.Phase</strong>
+                        <span>@currentActivity.Message</span>
+                    </div>
+                </div>
+            }
         </div>
         <div class="project-actions">
             <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy)">Preview Prompt</button>
             <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy)">Generate Explanation</button>
-            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || busy)">Save as 07-ai-explanation.md</button>
-            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(result?.Markdown)">Copy Explanation</button>
+            <button class="btn btn-outline-danger" @onclick="CancelRunAsync" disabled="@(activeJobId is null)">Cancel</button>
+            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(editedMarkdown) || busy)">Save edited explanation</button>
+            <a class="btn" href="@($"/projects/{ProjectId}/markdown?file=.ai-context/docs/backend/07-ai-explanation.md")">Open in Markdown Workspace</a>
+            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(editedMarkdown)">Copy Explanation</button>
         </div>
     </section>
 
@@ -29,10 +47,14 @@
     else
     {
         <Cards Title="Provider and Profile">
+            @if (busy)
+            {
+                <p class="callout info">Working on the explanation request. Local models can take a while; LM Studio Developer Logs will show token/context details while this runs.</p>
+            }
             <div class="grid two">
                 <label>
                     Provider
-                    <select class="form-select" @bind="providerId">
+                    <select class="form-select" @bind="providerId" @bind:after="ProviderChangedAsync">
                         @foreach (var provider in options?.Providers ?? [])
                         {
                             <option value="@provider.ProviderId">@provider.Kind - @provider.Message</option>
@@ -41,11 +63,30 @@
                 </label>
                 <label>
                     Model
-                    <input class="form-control" @bind="model" placeholder="model name" />
+                    @if (modelOptions.Count > 0)
+                    {
+                        <select class="form-select" value="@model" @onchange="ModelChangedAsync">
+                            @foreach (var availableModel in modelOptions)
+                            {
+                                <option value="@availableModel">@availableModel</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="form-control" @bind="model" @bind:after="SaveSettingsAsync" placeholder="model name" />
+                    }
+                    <div class="field-actions">
+                        <button type="button" class="btn btn-sm" @onclick="RefreshModelsAsync" disabled="@busy">Refresh models</button>
+                        @if (!string.IsNullOrWhiteSpace(modelListWarning))
+                        {
+                            <span class="muted">@modelListWarning</span>
+                        }
+                    </div>
                 </label>
                 <label>
                     Explanation profile
-                    <select class="form-select" @bind="profile">
+                    <select class="form-select" @bind="profile" @bind:after="SaveSettingsAsync">
                         @foreach (var item in options?.Profiles ?? Enum.GetValues<ExplanationProfile>())
                         {
                             <option value="@item">@item</option>
@@ -54,7 +95,7 @@
                 </label>
                 <label>
                     Context pack
-                    <select class="form-select" @bind="packId">
+                    <select class="form-select" @bind="packId" @bind:after="SaveSettingsAsync">
                         @foreach (var pack in options?.Packs ?? [])
                         {
                             <option value="@pack.Pack.Id">@pack.Pack.Name</option>
@@ -63,25 +104,25 @@
                 </label>
             </div>
             <div class="checkbox-row">
-                <label><input type="checkbox" @bind="includeSourceSnippets" /> Include source snippets</label>
-                <label><input type="checkbox" @bind="includeTests" /> Include tests</label>
-                <label><input type="checkbox" @bind="includeGeneratedDocs" /> Include generated docs</label>
-                <label><input type="checkbox" @bind="includePublicApi" /> Include public API</label>
-                <label><input type="checkbox" @bind="includeFlows" /> Include flows</label>
-                <label><input type="checkbox" @bind="includeArchitecture" /> Include architecture</label>
+                <label><input type="checkbox" @bind="includeSourceSnippets" @bind:after="SaveSettingsAsync" /> Include source snippets</label>
+                <label><input type="checkbox" @bind="includeTests" @bind:after="SaveSettingsAsync" /> Include tests</label>
+                <label><input type="checkbox" @bind="includeGeneratedDocs" @bind:after="SaveSettingsAsync" /> Include generated docs</label>
+                <label><input type="checkbox" @bind="includePublicApi" @bind:after="SaveSettingsAsync" /> Include public API</label>
+                <label><input type="checkbox" @bind="includeFlows" @bind:after="SaveSettingsAsync" /> Include flows</label>
+                <label><input type="checkbox" @bind="includeArchitecture" @bind:after="SaveSettingsAsync" /> Include architecture</label>
             </div>
             <label>
                 Optional instruction
-                <textarea class="form-control" rows="3" @bind="instruction" placeholder="Example: Explain this for a senior developer joining the project tomorrow."></textarea>
+                <textarea class="form-control" rows="3" @bind="instruction" @bind:after="SaveSettingsAsync" placeholder="Example: Explain this for a senior developer joining the project tomorrow."></textarea>
             </label>
             <div class="grid two">
                 <label>
                     Max input tokens
-                    <input class="form-control" type="number" @bind="maxInputTokens" />
+                    <input class="form-control" type="number" @bind="maxInputTokens" @bind:after="SaveSettingsAsync" />
                 </label>
                 <label>
                     Max output tokens
-                    <input class="form-control" type="number" @bind="maxOutputTokens" />
+                    <input class="form-control" type="number" @bind="maxOutputTokens" @bind:after="SaveSettingsAsync" />
                 </label>
             </div>
         </Cards>
@@ -117,29 +158,49 @@
             </Cards>
         }
 
-        @if (result is not null)
+        @if (busy || !string.IsNullOrWhiteSpace(liveMarkdownPreview))
+        {
+            <Cards Title="Generated Explanation">
+                @if (string.IsNullOrWhiteSpace(liveMarkdownPreview))
+                {
+                    <p class="callout info">Waiting for the provider to start sending answer text. The Local API owns this job, so you can navigate away while it continues.</p>
+                }
+                else
+                {
+                    <p class="callout info">Receiving answer text. This preview updates from the backend job status and will become editable after completion.</p>
+                    <div class="markdown-live-preview">
+                        <pre>@liveMarkdownPreview</pre>
+                    </div>
+                }
+            </Cards>
+        }
+        else if (result is not null || !string.IsNullOrWhiteSpace(editedMarkdown))
         {
             <Cards Title="Generated Explanation">
                 <div class="d-flex gap-2 flex-wrap">
-                    <span class="pill">@result.Status</span>
-                    @if (result.Quality is not null)
+                    <span class="pill">@(result?.Status.ToString() ?? "Receiving")</span>
+                    @if (result?.Quality is not null)
                     {
                         <span class="pill @(result.Quality.Status == AiExplanationQualityStatus.Good ? "ok" : "warn")">Quality: @result.Quality.Status</span>
                     }
-                    <span class="pill">Path: @result.SuggestedFilePath</span>
+                    <span class="pill">Path: @(result?.SuggestedFilePath ?? ".ai-context/docs/backend/07-ai-explanation.md")</span>
                 </div>
-                @if (!string.IsNullOrWhiteSpace(result.Error))
+                @if (!string.IsNullOrWhiteSpace(result?.Error))
                 {
                     <p class="callout bad">@result.Error</p>
                 }
-                @if (result.Quality?.Warnings.Count > 0)
+                @if (result?.Status == AiRunStatus.Completed && string.IsNullOrWhiteSpace(editedMarkdown))
+                {
+                    <p class="callout warn">The provider finished but returned no explanation text. Try a smaller context pack, reduce included files, or increase the local model context length.</p>
+                }
+                @if (result?.Quality?.Warnings.Count > 0)
                 {
                     @foreach (var warning in result.Quality.Warnings)
                     {
                         <div class="list-row"><strong>Quality</strong><span>@warning</span></div>
                     }
                 }
-                <MarkdownViewer Content="@result.Markdown" />
+                <MarkdownEditor @bind-Value="editedMarkdown" ValueHTMLChanged="OnExplanationHtmlChanged" EnableMermaid="true" EnableHighlight="true" />
             </Cards>
         }
 
@@ -167,6 +228,8 @@
     private AiExplanationPreviewDto? preview;
     private AiExplanationResultDto? result;
     private AiExplanationSaveResultDto? saveResult;
+    private string editedMarkdown = "";
+    private string? editedHtml;
     private string? providerId;
     private string model = "";
     private string packId = "backend-docs";
@@ -183,8 +246,21 @@
     private bool loading = true;
     private bool busy;
     private string? error;
+    private bool settingsLoaded;
+    private string? operationMessage;
+    private string operationTone = "info";
+    private ProviderActivityLine? currentActivity;
+    private readonly List<string> modelOptions = [];
+    private string? modelListWarning;
+    private Guid? activeJobId;
+    private CancellationTokenSource? pollingCancellation;
+    private string? liveMarkdownPreview;
+    private string? lastJobSnapshotKey;
+    private bool completionToastShown;
 
     private bool CanPreview => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(packId);
+    private string SettingsKey => $"sourceworker:explanation-settings:{ProjectId}";
+    private string JobKey => $"sourceworker:explanation-job:{ProjectId}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -195,6 +271,9 @@
             providerId = options.Providers.FirstOrDefault(p => p.Status != AiProviderStatus.Disabled)?.ProviderId ?? options.Providers.FirstOrDefault()?.ProviderId;
             model = options.Providers.FirstOrDefault(p => p.ProviderId == providerId)?.Kind == AiProviderKind.Ollama ? "llama3.1" : "gpt-4.1-mini";
             packId = options.Packs.Any(p => p.Pack.Id == "backend-docs") ? "backend-docs" : options.Packs.FirstOrDefault()?.Pack.Id ?? "ai-handoff";
+            await LoadSettingsAsync();
+            await EnsureModelForProviderAsync();
+            await ResumeActiveJobAsync();
             error = null;
         }
         catch (Exception ex)
@@ -213,13 +292,23 @@
     private async Task PreviewAsync()
     {
         busy = true;
+        operationTone = "info";
+        operationMessage = "Building explanation prompt preview...";
+        AddActivity("Preparing", "Building the prompt and selecting context files.", replaceLastSamePhase: true);
+        await InvokeAsync(StateHasChanged);
         try
         {
+            await SaveSettingsAsync();
             preview = await Api.PreviewAiExplanationAsync(ProjectId, Request());
+            operationMessage = $"Prompt preview ready: {preview.TokenEstimate.PromptTokens} input tokens, {preview.TokenEstimate.MaxOutputTokens} output tokens.";
+            AddActivity("Prompt ready", $"{preview.TokenEstimate.PromptTokens} input tokens, {preview.TokenEstimate.MaxOutputTokens} max output tokens, {preview.IncludedFiles.Count(f => f.Included)} included files.");
+            operationTone = preview.IsBlocked ? "bad" : preview.SafetyWarnings.Count > 0 ? "warn" : "info";
             Toast.ShowSuccess("Explanation prompt previewed.");
         }
         catch (Exception ex)
         {
+            operationTone = "bad";
+            operationMessage = ex.Message;
             Toast.ShowError(ex.Message);
         }
         finally
@@ -230,20 +319,345 @@
 
     private async Task RunAsync()
     {
+        if (busy) return;
+        await SaveSettingsAsync();
+
+        var request = Request();
         busy = true;
+        operationTone = "info";
+        operationMessage = "Starting explanation generation in the Local API...";
+        currentActivity = null;
+        liveMarkdownPreview = null;
+        result = null;
+        editedMarkdown = "";
+        saveResult = null;
+        completionToastShown = false;
+        lastJobSnapshotKey = null;
+        AddActivity("Starting", "Starting backend explanation job.");
+        await InvokeAsync(StateHasChanged);
+
         try
         {
-            result = await Api.RunAiExplanationAsync(ProjectId, Request());
-            Toast.ShowSuccess(result.Status == AiRunStatus.Completed ? "Explanation generated." : $"Explanation ended: {result.Status}");
+            var status = await Api.StartAiExplanationJobAsync(ProjectId, request);
+            activeJobId = status.JobId;
+            await JS.InvokeAsync<object>("localStorage.setItem", [JobKey, status.JobId.ToString()]);
+            ApplyJobStatus(status);
+            StartPolling(status.JobId);
+            Toast.ShowSuccess("Explanation generation started.");
         }
         catch (Exception ex)
         {
+            activeJobId = null;
+            busy = false;
+            operationTone = "bad";
+            operationMessage = ex.Message;
+            AddActivity("Failed", ex.Message, "bad");
+            Toast.ShowError(ex.Message);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void StartPolling(Guid jobId)
+    {
+        pollingCancellation?.Cancel();
+        pollingCancellation?.Dispose();
+        pollingCancellation = new CancellationTokenSource();
+        _ = PollJobAsync(jobId, pollingCancellation.Token);
+    }
+
+    private async Task PollJobAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                var status = await Api.GetAiExplanationJobAsync(ProjectId, jobId, cancellationToken);
+                if (status is null)
+                {
+                    activeJobId = null;
+                    busy = false;
+                    operationTone = "bad";
+                    operationMessage = "The Local API no longer has this explanation job. Check logs or start a new generation.";
+                    AddActivity("Not found", operationMessage, "bad");
+                    await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
+                    await InvokeAsync(StateHasChanged);
+                    break;
+                }
+
+                var changed = ApplyJobStatus(status);
+                if (changed)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+
+                if (status.IsCompleted || status.IsFailed || status.IsCancelled)
+                {
+                    activeJobId = null;
+                    busy = false;
+                    await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
+                    await InvokeAsync(StateHasChanged);
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The component stopped polling because the user navigated away. The backend job keeps running.
+        }
+        catch (Exception ex)
+        {
+            activeJobId = null;
+            busy = false;
+            operationTone = "bad";
+            operationMessage = ex.Message;
+            AddActivity("Failed", ex.Message, "bad");
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CancelRunAsync()
+    {
+        if (activeJobId is null) return;
+        operationTone = "warn";
+        operationMessage = "Cancelling explanation generation...";
+        AddActivity("Cancelling", "Cancellation requested. LM Studio may take a moment to release the running prediction.", "warn");
+        try
+        {
+            var status = await Api.CancelAiExplanationJobAsync(ProjectId, activeJobId.Value);
+            if (status is not null)
+            {
+                ApplyJobStatus(status);
+            }
+            Toast.ShowSuccess("Explanation generation cancellation requested.");
+        }
+        catch (Exception ex)
+        {
+            operationTone = "bad";
+            operationMessage = ex.Message;
             Toast.ShowError(ex.Message);
         }
-        finally
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ApplyJobStatus(AiExplanationJobStatusDto status)
+    {
+        var snapshotKey = $"{status.Phase}|{status.OutputCharacters}|{status.IsCompleted}|{status.IsFailed}|{status.IsCancelled}|{status.Message}|{status.Result?.Status}|{status.Result?.OutputHash}";
+        if (snapshotKey == lastJobSnapshotKey)
         {
-            busy = false;
+            return false;
         }
+
+        lastJobSnapshotKey = snapshotKey;
+        activeJobId = status.IsCompleted || status.IsFailed || status.IsCancelled ? null : status.JobId;
+        busy = !status.IsCompleted && !status.IsFailed && !status.IsCancelled;
+        operationTone = status.IsFailed ? "bad" : status.IsCancelled ? "warn" : "info";
+        operationMessage = status.Message;
+        liveMarkdownPreview = status.MarkdownPreview;
+
+        var tone = status.IsFailed ? "bad" : status.IsCancelled ? "warn" : status.IsCompleted ? "ok" : "info";
+        AddActivity(PhaseLabel(status.Phase), status.Message, tone);
+
+        if (status.Result is not null)
+        {
+            result = status.Result;
+            if (!string.IsNullOrWhiteSpace(status.Result.Markdown))
+            {
+                editedMarkdown = status.Result.Markdown;
+                liveMarkdownPreview = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(status.Result.Error))
+            {
+                operationTone = "bad";
+                operationMessage = status.Result.Error;
+            }
+        }
+
+        if (status.IsCompleted && !completionToastShown)
+        {
+            completionToastShown = true;
+            var hasMarkdown = !string.IsNullOrWhiteSpace(editedMarkdown);
+            operationTone = hasMarkdown ? "info" : "bad";
+            operationMessage = hasMarkdown
+                ? $"Explanation generated and saved: {editedMarkdown.Length} markdown characters. You can review or edit it here."
+                : result?.Error ?? "Explanation completed without saved markdown.";
+            Toast.ShowSuccess(hasMarkdown ? "Explanation generated and saved." : "Explanation finished without markdown.");
+        }
+        else if ((status.IsFailed || status.IsCancelled) && !completionToastShown)
+        {
+            completionToastShown = true;
+            Toast.ShowError(status.IsCancelled ? "Explanation generation cancelled." : operationMessage ?? "Explanation generation failed.");
+        }
+
+        return true;
+    }
+
+    private async Task ResumeActiveJobAsync()
+    {
+        var value = await JS.InvokeAsync<string?>("localStorage.getItem", [JobKey]);
+        if (!Guid.TryParse(value, out var jobId)) return;
+
+        try
+        {
+            var status = await Api.GetAiExplanationJobAsync(ProjectId, jobId);
+            if (status is null || status.IsCompleted || status.IsFailed || status.IsCancelled)
+            {
+                await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
+                if (status is not null)
+                {
+                    ApplyJobStatus(status);
+                }
+                return;
+            }
+
+            activeJobId = jobId;
+            busy = true;
+            ApplyJobStatus(status);
+            StartPolling(jobId);
+        }
+        catch
+        {
+            await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
+        }
+    }
+
+    private static string PhaseLabel(string phase)
+        => phase switch
+        {
+            "starting" => "Starting",
+            "preview" => "Prompt ready",
+            "prompt-processing" => "Prompt processing",
+            "reasoning" => "Reasoning",
+            "answer-streaming" => "Writing answer",
+            "provider-completed" => "Provider completed",
+            "saving" => "Saving file",
+            "saved" => "Saved",
+            "save-warning" => "Save warning",
+            "completed" => "Completed",
+            "failed" => "Failed",
+            "cancelled" => "Cancelled",
+            _ => phase
+        };
+
+    private void AddActivity(string phase, string message, string tone = "info", bool replaceLastSamePhase = false)
+    {
+        currentActivity = new ProviderActivityLine(DateTimeOffset.UtcNow, phase, message, tone);
+    }
+
+    private async Task ProviderChangedAsync()
+    {
+        await EnsureModelForProviderAsync(force: true);
+        await SaveSettingsAsync();
+    }
+
+    private async Task ModelChangedAsync(ChangeEventArgs args)
+    {
+        model = args.Value?.ToString() ?? "";
+        await SaveSettingsAsync();
+    }
+
+    private async Task RefreshModelsAsync()
+    {
+        await EnsureModelForProviderAsync(force: true);
+        await SaveSettingsAsync();
+    }
+
+    private async Task EnsureModelForProviderAsync(bool force = false)
+    {
+        if (string.IsNullOrWhiteSpace(providerId)) return;
+        var keepExisting = !force && !string.IsNullOrWhiteSpace(model) && model != "gpt-4.1-mini";
+
+        var provider = options?.Providers.FirstOrDefault(p => p.ProviderId == providerId);
+        if (provider is null) return;
+
+        try
+        {
+            var models = await Api.GetAiProviderModelsAsync(providerId);
+            modelOptions.Clear();
+            modelOptions.AddRange(models.Models
+                .Where(m => !m.Contains("embedding", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            modelListWarning = models.Warning;
+
+            var candidates = modelOptions.ToArray();
+            var selected = keepExisting
+                ? candidates.FirstOrDefault(m => m.Equals(model, StringComparison.OrdinalIgnoreCase))
+                : null;
+            selected ??= force
+                ? candidates.FirstOrDefault(m => m.Contains("qwen/qwen3.5", StringComparison.OrdinalIgnoreCase))
+                : null;
+            selected ??= candidates.FirstOrDefault(m => m.Contains("qwen/qwen3.5", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault(m => m.Contains("qwen3.5", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault(m => m.Contains("devstral", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault(m => m.Contains("mistral", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault(m => m.Contains("llama", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault(m => m.Contains("qwen", StringComparison.OrdinalIgnoreCase))
+                ?? candidates.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(selected))
+            {
+                model = selected;
+                return;
+            }
+        }
+        catch
+        {
+            // Model discovery is best-effort; fall back to provider-kind defaults below.
+        }
+
+        model = provider.Kind switch
+        {
+            AiProviderKind.OpenAiCompatible => "qwen2.5-coder-7b-instruct",
+            AiProviderKind.Ollama => "llama3.1",
+            AiProviderKind.OpenAI => "gpt-4.1-mini",
+            AiProviderKind.Gemini => "gemini-2.5-flash",
+            _ => model
+        };
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        return $"{Math.Max(0, (int)elapsed.TotalSeconds)}s";
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        if (settingsLoaded) return;
+        settingsLoaded = true;
+        var json = await JS.InvokeAsync<string?>("localStorage.getItem", [SettingsKey]);
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        try
+        {
+            var saved = System.Text.Json.JsonSerializer.Deserialize<ExplanationPageSettings>(json);
+            if (saved is null) return;
+            if (!string.IsNullOrWhiteSpace(saved.ProviderId)) providerId = saved.ProviderId;
+            if (!string.IsNullOrWhiteSpace(saved.Model)) model = saved.Model;
+            if (!string.IsNullOrWhiteSpace(saved.PackId)) packId = saved.PackId;
+            profile = saved.Profile;
+            instruction = saved.Instruction;
+            includeSourceSnippets = saved.IncludeSourceSnippets;
+            includeTests = saved.IncludeTests;
+            includeGeneratedDocs = saved.IncludeGeneratedDocs;
+            includePublicApi = saved.IncludePublicApi;
+            includeFlows = saved.IncludeFlows;
+            includeArchitecture = saved.IncludeArchitecture;
+            maxInputTokens = saved.MaxInputTokens;
+            maxOutputTokens = saved.MaxOutputTokens;
+        }
+        catch
+        {
+            // Ignore stale browser-local settings; the current form defaults remain valid.
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        if (!settingsLoaded) return;
+        var settings = new ExplanationPageSettings(providerId, model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens);
+        var json = System.Text.Json.JsonSerializer.Serialize(settings);
+        await JS.InvokeAsync<object>("localStorage.setItem", [SettingsKey, json]);
     }
 
     private async Task SaveAsync(bool force = false)
@@ -252,7 +666,7 @@
         busy = true;
         try
         {
-            saveResult = await Api.SaveAiExplanationAsync(ProjectId, result.Id, force);
+            saveResult = await Api.SaveAiExplanationAsync(ProjectId, result.Id, force, editedMarkdown);
             Toast.ShowSuccess(saveResult.Saved ? "AI explanation saved." : "AI explanation was not saved.");
         }
         catch (Exception ex)
@@ -269,8 +683,38 @@
 
     private async Task CopyAsync()
     {
-        if (string.IsNullOrWhiteSpace(result?.Markdown)) return;
-        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [result.Markdown]);
+        if (string.IsNullOrWhiteSpace(editedMarkdown)) return;
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [editedMarkdown]);
         Toast.ShowSuccess("Explanation copied.");
     }
+
+    private Task OnExplanationHtmlChanged(string html)
+    {
+        editedHtml = html;
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        pollingCancellation?.Cancel();
+        pollingCancellation?.Dispose();
+        pollingCancellation = null;
+    }
+
+    private sealed record ExplanationPageSettings(
+        string? ProviderId,
+        string Model,
+        string PackId,
+        ExplanationProfile Profile,
+        string? Instruction,
+        bool IncludeSourceSnippets,
+        bool IncludeTests,
+        bool IncludeGeneratedDocs,
+        bool IncludePublicApi,
+        bool IncludeFlows,
+        bool IncludeArchitecture,
+        int MaxInputTokens,
+        int MaxOutputTokens);
+
+    private sealed record ProviderActivityLine(DateTimeOffset Time, string Phase, string Message, string Tone);
 }

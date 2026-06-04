@@ -198,6 +198,17 @@ public interface IContextBrowserService
 public interface IContextSearchService { Task<ContextBrowserQueryResult> SearchAsync(Project project, string query, CancellationToken cancellationToken); }
 public interface IAgentHandoffService { Task<AgentHandoff> GetAsync(Project project, CancellationToken cancellationToken); }
 public interface IScanCompletenessService { Task<ScanCompletenessReport> GetAsync(Project project, CancellationToken cancellationToken); }
+public interface IMarkdownWorkspaceService
+{
+    Task<IReadOnlyList<MarkdownFileSummary>> ListFilesAsync(Project project, MarkdownWorkspaceScope? scope, bool includeTechnical, bool includeExternalMirror, bool includeUserMarkdown, CancellationToken cancellationToken);
+    Task<MarkdownFileContent> ReadAsync(Project project, string relativePath, CancellationToken cancellationToken);
+    Task<MarkdownFileSaveResult> SaveAsync(Project project, MarkdownFileSaveRequest request, CancellationToken cancellationToken);
+    MarkdownValidationResult Validate(string markdown);
+}
+public interface IMarkdownFileReader { Task<MarkdownFileContent> ReadAsync(Project project, string relativePath, CancellationToken cancellationToken); }
+public interface IMarkdownFileWriter { Task<MarkdownFileSaveResult> SaveAsync(Project project, MarkdownFileSaveRequest request, CancellationToken cancellationToken); }
+public interface IMarkdownSavePolicyService { MarkdownValidationResult ValidatePath(Project project, string relativePath, bool allowTechnical); }
+public interface IMermaidMarkdownValidator { MarkdownValidationResult Validate(string markdown); }
 
 public interface IOutputProfileService { Task<IReadOnlyList<OutputProfile>> GetProfilesAsync(Project project, CancellationToken cancellationToken); }
 public interface IOutputRoutingService { Task<IReadOnlyList<OutputRoute>> GetRoutesAsync(Project project, string recipeId, CancellationToken cancellationToken); }
@@ -277,6 +288,11 @@ public interface IAiProvider
     Task<AiRunOutput> RunAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken);
 }
 
+public interface IAiStreamingProvider : IAiProvider
+{
+    IAsyncEnumerable<AiProviderStreamUpdate> StreamAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken);
+}
+
 public interface IAiProviderRegistry
 {
     IReadOnlyList<IAiProvider> ListProviders();
@@ -292,6 +308,12 @@ public interface IAiProviderConfigurationRepository
 
 public interface IAiModelCatalogService { IReadOnlyList<AiModelInfo> GetModels(AiProviderKind providerKind); }
 public interface IAiModelCatalogProvider { Task<AiModelCatalog> GetCatalogAsync(AiProviderKind providerKind, CancellationToken cancellationToken); }
+public interface IAiProviderCatalogService
+{
+    AiProviderCatalog GetCatalog();
+    IReadOnlyList<AiProviderPresetInfo> GetPresets();
+    Task<AiProviderModelList> GetModelsAsync(string providerId, CancellationToken cancellationToken);
+}
 public interface IAiPromptBuilder { Task<AiPromptPreview> BuildPreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken); }
 public interface IAiPromptPreviewService { Task<AiPromptPreview> PreviewAsync(Guid projectId, string providerId, string packId, string? userInstruction, int maxOutputTokens, string? templateId, CancellationToken cancellationToken); }
 public interface IAiTokenEstimator { AiTokenEstimate Estimate(string prompt, int maxOutputTokens); AiCostEstimate EstimateCost(AiTokenEstimate tokens, AiModelInfo? model); }
@@ -356,6 +378,7 @@ public interface IAiExplanationService
     Task<AiExplanationOptions> GetOptionsAsync(Guid projectId, CancellationToken cancellationToken);
     Task<AiExplanationPreview> PreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken);
     Task<AiExplanationResult> RunAsync(AiExplanationRequest request, CancellationToken cancellationToken);
+    IAsyncEnumerable<AiExplanationStreamUpdate> RunStreamingAsync(AiExplanationRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<AiExplanationResult>> GetRunsAsync(Guid projectId, CancellationToken cancellationToken);
     Task<AiExplanationResult?> GetRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken);
     Task<AiExplanationSaveResult> SaveAsync(AiExplanationSaveRequest request, CancellationToken cancellationToken);

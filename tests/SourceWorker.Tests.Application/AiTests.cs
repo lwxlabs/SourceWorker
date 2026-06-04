@@ -74,6 +74,29 @@ public sealed class AiTests
     }
 
     [Fact]
+    public async Task Provider_validation_detects_missing_gemini_key_and_model()
+    {
+        var service = new AiProviderValidationService(new SecretStore(), new ConfigRepo(), new Registry());
+
+        var result = await service.ValidateAsync(AiProviderKind.Gemini, "", "https://generativelanguage.googleapis.com/v1beta", null, 1200, CancellationToken.None);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, i => i.Code == "missing-api-key");
+        Assert.Contains(result.Issues, i => i.Code == "missing-model");
+    }
+
+    [Fact]
+    public void Provider_catalog_returns_online_and_local_presets()
+    {
+        var catalog = new AiProviderCatalogService(new ConfigRepo()).GetCatalog();
+
+        Assert.Contains(catalog.Presets, p => p.Preset == ProviderPreset.OpenAI && p.DataLeavesMachine);
+        Assert.Contains(catalog.Presets, p => p.Preset == ProviderPreset.Gemini && p.DataLeavesMachine);
+        Assert.Contains(catalog.Presets, p => p.Preset == ProviderPreset.LMStudio && p is { IsLocal: true, DataLeavesMachine: false });
+        Assert.Contains(catalog.Presets, p => p.Preset == ProviderPreset.Ollama && p is { IsLocal: true, DataLeavesMachine: false });
+    }
+
+    [Fact]
     public async Task Ai_provider_validation_detects_invalid_url()
     {
         var service = new AiProviderValidationService(new SecretStore(), new ConfigRepo(), new Registry());

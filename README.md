@@ -2,7 +2,7 @@
 
 SourceWorker is a local-first project understanding and AI context handoff app for codebases. Its job is to make a repository understandable and portable for AI agents: scan the project, summarize its structure, validate scan completeness, generate clean context packs, and produce an Agent Handoff that can be copied into Codex, Junie, ChatGPT, Cursor, Claude Code, or another coding assistant.
 
-SourceWorker is not a coding agent, terminal runner, patch applier, CI replacement, or autonomous editor. AI output is preview-only and never writes files automatically. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, patch application, full installer/updater, and production code signing are still intentionally not included.
+SourceWorker is not a coding agent, terminal runner, patch applier, CI replacement, or autonomous editor. AI output is preview-only and never writes files automatically. SourceWorker may edit markdown files only when the user opens them in the Markdown Workspace and explicitly saves. MCP, cloud sync, licensing, terminal agent execution, autonomous code editing, patch application, full installer/updater, and production code signing are still intentionally not included.
 
 ## Primary Product Flow
 
@@ -62,11 +62,11 @@ Handoff quality rules:
 - `src/core/SourceWorker.Application` contains ports and use cases. Commands and queries are modeled with `LwX.Flow`-style request/handler abstractions.
 - `src/core/SourceWorker.Contracts` contains API/CLI-facing DTOs.
 - `src/libs/SourceWorker.Scanner` contains project scanning plus deterministic C# code intelligence and rule-based flow extraction.
-- `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, and exposes read-only context browsing.
+- `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, exposes context browsing, and owns the safe Markdown Workspace file policy.
 - `src/libs/SourceWorker.Recipes` hosts rule-based recipe execution, including `backend-docs-compact`.
 - `src/libs/SourceWorker.AI` owns AI prompt building, context-pack prompting, token/cost estimates, safety checks, redaction preview, and AI run orchestration.
 - Dogfood, friction capture, next-action, project path validation, project AI defaults, Quick Ask, and log records follow the same clean architecture flow: dependency-free Domain models, Application ports/handlers, Localite repositories, Local API endpoints, ApiClient methods, and dashboard pages.
-- `src/infrastructure/SourceWorker.AI.Providers` implements OpenAI, Ollama, OpenAI-compatible providers, and local AppData secret storage.
+- `src/infrastructure/SourceWorker.AI.Providers` implements OpenAI, Gemini, Ollama, OpenAI-compatible providers, provider presets, and local AppData secret storage.
 - `src/infrastructure/SourceWorker.Storage.Localite` wires table-backed Localite/SQLite storage. Secrets are intentionally not stored.
 - `src/infrastructure/SourceWorker.Git` provides basic Git inspection.
 - `src/services/SourceWorker.Cli` exposes `scan`, `status`, and `handoff`.
@@ -229,6 +229,39 @@ Profiles:
 The explanation prompt uses bounded context: Agent Handoff, deterministic backend docs, README, ranked public API/source snippets, and representative tests. It excludes secret-prone files, generated pack YAML, databases, `bin/`, `obj/`, `.git/`, `.vs/`, `.idea/`, `.env`, API keys, tokens, and private keys.
 
 The saved explanation is tracked as a generated artifact and appears in the Docs page after `06-verification-checklist.md`.
+
+## Markdown Workspace And Providers
+
+MVP 2.9 adds a real in-app Markdown workspace and a global Providers page.
+
+Markdown Workspace:
+
+- route: `/projects/{projectId}/markdown`
+- uses `PSC.Blazor.Components.MarkdownEditor`
+- supports Mermaid rendering and syntax highlighting
+- lists safe project markdown grouped as Agent Handoff, Backend Docs, AI Explanation, Context Docs, Instructions, User Markdown, External Mirror, and Technical Markdown
+- allows editing `.md` and `.markdown` only
+- blocks source code, YAML/JSON, `.env`, database files, `.git`, `bin`, `obj`, `.vs`, and `.idea`
+- validates Mermaid fenced blocks before save
+- requires explicit save and never autosaves
+
+Docs and Explanation integration:
+
+- backend docs remain canonical under `.ai-context/docs/backend`
+- `07-ai-explanation.md` can be edited before saving from the Explanation page
+- Docs can open backend files in the Markdown Workspace
+- external mirrored docs under `instructions/Result/Backend` are not the default editing target
+
+Providers:
+
+- global route: `/providers`
+- online providers: OpenAI, Gemini, and OpenAI-compatible online endpoints
+- local providers: Ollama, LM Studio through OpenAI-compatible, LocalAI/vLLM-style presets
+- OpenAI uses the Responses API first with `store=false`, with chat completions fallback where needed
+- Gemini uses `generateContent`
+- LM Studio uses the OpenAI-compatible preset at `http://localhost:1234/v1`
+- Ollama uses local `/api/tags` and `/api/chat`
+- provider secrets stay in local AppData secret storage and API/UI responses expose masked metadata only
 
 ## Dogfood Tutorial
 

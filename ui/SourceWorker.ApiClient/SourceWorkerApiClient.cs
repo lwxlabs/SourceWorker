@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace SourceWorker.ApiClient;
@@ -149,6 +150,32 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await httpClient.GetStringAsync($"/api/projects/{projectId}/context-browser/files/{EscapeRelativePath(relativePath)}", cancellationToken);
     }
 
+    public async Task<IReadOnlyList<MarkdownFileSummaryDto>> GetMarkdownFilesAsync(Guid projectId, MarkdownWorkspaceScope? scope = null, bool includeTechnical = false, bool includeExternalMirror = false, bool includeUserMarkdown = true, CancellationToken cancellationToken = default)
+    {
+        var query = $"/api/projects/{projectId}/markdown/files?includeTechnical={includeTechnical.ToString().ToLowerInvariant()}&includeExternalMirror={includeExternalMirror.ToString().ToLowerInvariant()}&includeUserMarkdown={includeUserMarkdown.ToString().ToLowerInvariant()}";
+        if (scope is not null) query += $"&scope={Uri.EscapeDataString(scope.Value.ToString())}";
+        return await GetAsync<MarkdownFileSummaryDto[]>(query, cancellationToken) ?? [];
+    }
+
+    public Task<MarkdownFileContentDto> GetMarkdownFileAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default)
+        => Required<MarkdownFileContentDto>($"/api/projects/{projectId}/markdown/files/{EscapeRelativePath(relativePath)}", cancellationToken);
+
+    public async Task<MarkdownFileSaveResultDto> SaveMarkdownFileAsync(Guid projectId, string relativePath, MarkdownFileSaveRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync($"/api/projects/{projectId}/markdown/files/{EscapeRelativePath(relativePath)}", request with { RelativePath = relativePath }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<MarkdownFileSaveResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Markdown save response was empty.");
+    }
+
+    public async Task<MarkdownValidationResultDto> ValidateMarkdownAsync(Guid projectId, string markdown, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/markdown/validate", new { markdown }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<MarkdownValidationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Markdown validation response was empty.");
+    }
+
     public Task<GeneratedOutputSet> GetOutputsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<GeneratedOutputSet>($"/api/projects/{projectId}/outputs", cancellationToken);
 
@@ -185,6 +212,15 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     public async Task<IReadOnlyList<AiProviderStatusDto>> GetAiProviderStatusesAsync(CancellationToken cancellationToken = default)
         => await GetAsync<AiProviderStatusDto[]>("/api/ai/providers/status", cancellationToken) ?? [];
+
+    public Task<AiProviderCatalogDto> GetAiProviderCatalogAsync(CancellationToken cancellationToken = default)
+        => Required<AiProviderCatalogDto>("/api/ai/providers/catalog", cancellationToken);
+
+    public async Task<IReadOnlyList<AiProviderPresetInfoDto>> GetAiProviderPresetsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<AiProviderPresetInfoDto[]>("/api/ai/providers/presets", cancellationToken) ?? [];
+
+    public Task<AiProviderModelListDto> GetAiProviderModelsAsync(string providerId, CancellationToken cancellationToken = default)
+        => Required<AiProviderModelListDto>($"/api/ai/providers/{Uri.EscapeDataString(providerId)}/models", cancellationToken);
 
     public async Task<AiProviderConfigurationResultDto> ConfigureAiProviderAsync(AiProviderConfigurationDto configuration, CancellationToken cancellationToken = default)
     {
@@ -296,16 +332,62 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await response.Content.ReadFromJsonAsync<AiExplanationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI explanation run response was empty.");
     }
 
+    public async IAsyncEnumerable<AiExplanationStreamUpdateDto> RunAiExplanationStreamingAsync(
+        Guid projectId,
+        AiExplanationRequestDto request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{projectId}/ai/explanation/run-stream")
+        {
+            Content = JsonContent.Create(request with { ProjectId = projectId }, options: JsonOptions)
+        };
+        using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream);
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(cancellationToken);
+            if (line is null) break;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var update = JsonSerializer.Deserialize<AiExplanationStreamUpdateDto>(line, JsonOptions);
+            if (update is not null) yield return update;
+        }
+    }
+
+    public async Task<AiExplanationJobStatusDto> StartAiExplanationJobAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/jobs", request with { ProjectId = projectId }, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiExplanationJobStatusDto>(JsonOptions, cancellationToken)
+            ?? throw new InvalidOperationException("AI explanation job response was empty.");
+    }
+
+    public Task<AiExplanationJobStatusDto?> GetAiExplanationJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
+        => GetAsync<AiExplanationJobStatusDto>($"/api/projects/{projectId}/ai/explanation/jobs/{jobId}", cancellationToken);
+
+    public async Task<AiExplanationJobStatusDto?> CancelAiExplanationJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/projects/{projectId}/ai/explanation/jobs/{jobId}/cancel", null, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiExplanationJobStatusDto>(JsonOptions, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AiExplanationResultDto>> GetAiExplanationRunsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => await GetAsync<AiExplanationResultDto[]>($"/api/projects/{projectId}/ai/explanation/runs", cancellationToken) ?? [];
 
     public Task<AiExplanationResultDto?> GetAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default)
         => GetAsync<AiExplanationResultDto>($"/api/projects/{projectId}/ai/explanation/runs/{runId}", cancellationToken);
 
-    public async Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, CancellationToken cancellationToken = default)
+    public async Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, string? markdownOverride = null, CancellationToken cancellationToken = default)
     {
         await ApplyTokenAsync();
-        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/runs/{runId}/save", new AiExplanationSaveRequestDto(confirmOverwrite), cancellationToken);
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/ai/explanation/runs/{runId}/save", new AiExplanationSaveRequestDto(confirmOverwrite, markdownOverride), cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<AiExplanationSaveResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("AI explanation save response was empty.");
     }

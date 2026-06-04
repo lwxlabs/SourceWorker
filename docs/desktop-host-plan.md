@@ -29,6 +29,8 @@ MVP 2.4 implemented:
 - **Correct Navigation Model**: Keep global navigation to Home, Projects, Settings, and Advanced. Handoff, Ask, Docs, Packs, Scan Health, Code, Artifacts, Jobs, and Context Browser live inside the selected project workspace.
 - **Agent Handoff UX Polish**: Keep Agent Handoff as the primary project experience after selecting a repo.
 - **AI Explanation Writer**: Keep Explanation as a selected-project tab. It may save `.ai-context/docs/backend/07-ai-explanation.md` only after explicit user confirmation and must not write source files.
+- **Markdown Workspace**: Keep Markdown as a selected-project tab. It may edit only safe `.md`/`.markdown` files through the protected Local API after explicit Save; it must not edit source code, YAML/JSON, secrets, databases, or generated technical state.
+- **Provider Management**: Keep Providers as a global app page. Online providers such as OpenAI and Gemini and local providers such as Ollama and LM Studio are configured once, with secrets masked and stored locally.
 - **Advanced Surfaces**: Keep diagnostics, logs, dogfood, and global All Jobs under Advanced so the app feels like a handoff builder rather than an internal cockpit.
 - **System Tray / Menu Bar**: Allow the app to run in the background.
 - **Single Instance**: Prevent multiple instances of the Local API from starting.
@@ -49,7 +51,7 @@ MVP 2.4 implemented:
 
 The current roadmap now has a working Windows-first MAUI Blazor Hybrid shell. It is not a full installer and does not include production code signing or update handling yet.
 
-MVP 2.4 still does not add autonomous code editing, terminal execution, MCP, cloud sync, licensing, patch application, or automatic AI file writes.
+MVP 2.4 and later still do not add autonomous code editing, terminal execution, MCP, cloud sync, licensing, patch application, or automatic AI file writes. MVP 2.9 adds explicit markdown editing only for safe markdown files opened by the user in the Markdown Workspace.
 
 MVP 2.2 adds dogfood readiness, provider validation, diagnostics, and AI preview polish in the reusable Blazor UI. These pages remain reusable by a future MAUI Blazor Hybrid host.
 

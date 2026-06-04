@@ -14,7 +14,8 @@ public static class SourceWorkerNavigation
     public static IReadOnlyList<AppNavigationItem> GlobalPrimary { get; } =
     [
         new("home", "Home", "/", NavigationScope.Global, NavigationVisibility.Always),
-        new("projects", "Projects", "/projects", NavigationScope.Global, NavigationVisibility.Always)
+        new("projects", "Projects", "/projects", NavigationScope.Global, NavigationVisibility.Always),
+        new("providers", "Providers", "/providers", NavigationScope.Global, NavigationVisibility.Always)
     ];
 
     public static IReadOnlyList<AppNavigationItem> GlobalSecondary { get; } =
@@ -37,7 +38,8 @@ public static class SourceWorkerNavigation
         new("explanation", "Explanation", "explanation", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("ask", "Ask", "ai", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("docs", "Docs", "docs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
-        new("packs", "Packs", "packs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
+        new("packs", "Packs", "packs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
+        new("markdown", "Markdown", "markdown", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
     ];
 
     public static IReadOnlyList<ProjectNavigationItem> ProjectAdvanced { get; } =

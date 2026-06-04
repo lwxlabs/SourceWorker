@@ -1,5 +1,6 @@
 using LwX.Flow;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 using SourceWorker.Application;
 using SourceWorker.Contracts;
 using SourceWorker.Domain;
@@ -15,6 +16,7 @@ builder.Services
     .AddSourceWorkerApplication()
     .AddSourceWorkerInfrastructure()
     .AddSourceWorkerJobs();
+builder.Services.AddSingleton<IAiExplanationJobService, AiExplanationJobService>();
 
 var app = builder.Build();
 
@@ -26,7 +28,7 @@ app.UseCors(policy => policy
 
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/health") || 
+    if (context.Request.Path.StartsWithSegments("/health") ||
         context.Request.Path.StartsWithSegments("/api/version") ||
         context.Request.Path.StartsWithSegments("/api/runtime/info"))
     {
@@ -42,7 +44,7 @@ app.Use(async (context, next) =>
     }
 
     var tokenService = context.RequestServices.GetRequiredService<ILocalApiTokenService>();
-    if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) || 
+    if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) ||
         !authHeader.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -68,7 +70,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "SourceWor
 
 app.MapGet("/api/version", (IAppVersionService versionService) => Results.Ok(versionService.GetVersion()));
 
-app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService, IAppVersionService versionService) => {
+app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService, IAppVersionService versionService) =>
+{
     var state = runtimeService.GetState();
     var version = versionService.GetVersion();
     return Results.Ok(new ApiRuntimeInfoDto(
@@ -87,7 +90,8 @@ app.MapGet("/api/runtime/info", (ILocalApiRuntimeService runtimeService, IAppVer
     ));
 });
 
-app.MapGet("/api/runtime/security", (ILocalApiRuntimeService runtimeService) => {
+app.MapGet("/api/runtime/security", (ILocalApiRuntimeService runtimeService) =>
+{
     var state = runtimeService.GetState();
     return Results.Ok(new ApiSecurityInfoDto(
         state.TokenEnabled,
@@ -97,7 +101,8 @@ app.MapGet("/api/runtime/security", (ILocalApiRuntimeService runtimeService) => 
     ));
 });
 
-app.MapPost("/api/runtime/token/rotate", (ILocalApiTokenService tokenService) => {
+app.MapPost("/api/runtime/token/rotate", (ILocalApiTokenService tokenService) =>
+{
     var newToken = tokenService.GenerateAndSaveToken();
     return Results.Ok(new { token = newToken });
 });
@@ -107,7 +112,7 @@ app.MapGet("/api/projects", async (
     [FromQuery] bool? includeMissing,
     [FromQuery] string? search,
     [FromQuery] int? limit,
-    IRequestFlow flow, 
+    IRequestFlow flow,
     CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetProjectsQuery(includeTestProjects, includeMissing, search, limit), cancellationToken)));
 
@@ -188,6 +193,14 @@ app.MapGet("/api/projects/{id:guid}/context-browser", async (Guid id, IRequestFl
 app.MapGet("/api/projects/{id:guid}/context-browser/files", async (Guid id, [FromQuery] bool showTechnical, [FromQuery] bool showExports, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextFilesQuery(id, showTechnical, showExports), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser/files/{*relativePath}", async (Guid id, string relativePath, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadContextFileQuery(id, relativePath), cancellationToken), "text/plain"));
 app.MapGet("/api/projects/{id:guid}/context-browser/search", async (Guid id, string query, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new SearchContextQuery(id, query), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/markdown/files", async (Guid id, [FromQuery] MarkdownWorkspaceScope? scope, [FromQuery] bool? includeTechnical, [FromQuery] bool? includeExternalMirror, [FromQuery] bool? includeUserMarkdown, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetMarkdownFilesQuery(id, scope, includeTechnical ?? false, includeExternalMirror ?? false, includeUserMarkdown ?? true), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/markdown/files/{*relativePath}", async (Guid id, string relativePath, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetMarkdownFileQuery(id, relativePath), cancellationToken)));
+app.MapPut("/api/projects/{id:guid}/markdown/files/{*relativePath}", async (Guid id, string relativePath, MarkdownFileSaveRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new SaveMarkdownFileCommand(id, request with { RelativePath = relativePath }), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/markdown/validate", async (Guid id, MarkdownValidateApiRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ValidateMarkdownCommand(id, request.Markdown), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/outputs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetOutputsQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/packs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetPacksQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/packs/{packId}", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) =>
@@ -203,6 +216,12 @@ app.MapGet("/api/ai/providers", async (IRequestFlow flow, CancellationToken canc
     => Results.Ok(await flow.Send(new GetAiProvidersQuery(), cancellationToken)));
 app.MapGet("/api/ai/providers/status", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetAiProviderStatusesQuery(), cancellationToken)));
+app.MapGet("/api/ai/providers/catalog", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiProviderCatalogQuery(), cancellationToken)));
+app.MapGet("/api/ai/providers/presets", async (IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiProviderPresetsQuery(), cancellationToken)));
+app.MapGet("/api/ai/providers/{providerId}/models", async (string providerId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetAiProviderModelsQuery(providerId), cancellationToken)));
 app.MapPost("/api/ai/providers/configure", async (ConfigureAiProviderRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new ConfigureAiProviderCommand(request.Kind, request.Model, request.BaseUrl, request.ApiKey, request.IsEnabled), cancellationToken)));
 app.MapPost("/api/ai/providers/validate", async (ValidateAiProviderRequest request, IRequestFlow flow, CancellationToken cancellationToken)
@@ -252,6 +271,23 @@ app.MapPost("/api/projects/{id:guid}/ai/explanation/preview", async (Guid id, Ai
     => Results.Ok(await flow.Send(new PreviewAiExplanationCommand(request with { ProjectId = id }), cancellationToken)));
 app.MapPost("/api/projects/{id:guid}/ai/explanation/run", async (Guid id, AiExplanationRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new RunAiExplanationCommand(request with { ProjectId = id }), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/ai/explanation/run-stream", async (Guid id, AiExplanationRequest request, IAiExplanationService service, HttpContext context, CancellationToken cancellationToken) =>
+{
+    context.Response.ContentType = "application/x-ndjson";
+    var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    await foreach (var update in service.RunStreamingAsync(request with { ProjectId = id }, cancellationToken))
+    {
+        await JsonSerializer.SerializeAsync(context.Response.Body, update, options, cancellationToken);
+        await context.Response.WriteAsync("\n", cancellationToken);
+        await context.Response.Body.FlushAsync(cancellationToken);
+    }
+});
+app.MapPost("/api/projects/{id:guid}/ai/explanation/jobs", (Guid id, AiExplanationRequest request, IAiExplanationJobService jobs)
+    => Results.Accepted($"/api/projects/{id}/ai/explanation/jobs", jobs.Start(id, request)));
+app.MapGet("/api/projects/{id:guid}/ai/explanation/jobs/{jobId:guid}", (Guid id, Guid jobId, IAiExplanationJobService jobs) =>
+    jobs.Get(id, jobId) is { } status ? Results.Ok(status) : Results.NotFound());
+app.MapPost("/api/projects/{id:guid}/ai/explanation/jobs/{jobId:guid}/cancel", (Guid id, Guid jobId, IAiExplanationJobService jobs) =>
+    jobs.Cancel(id, jobId) is { } status ? Results.Ok(status) : Results.NotFound());
 app.MapGet("/api/projects/{id:guid}/ai/explanation/runs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetAiExplanationRunsQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}", async (Guid id, Guid runId, IRequestFlow flow, CancellationToken cancellationToken) =>
@@ -260,7 +296,7 @@ app.MapGet("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}", async (Gu
     return run is null ? Results.NotFound() : Results.Ok(run);
 });
 app.MapPost("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}/save", async (Guid id, Guid runId, AiExplanationSaveApiRequest request, IRequestFlow flow, CancellationToken cancellationToken)
-    => Results.Ok(await flow.Send(new SaveAiExplanationCommand(new AiExplanationSaveRequest(id, runId, request.ConfirmOverwrite)), cancellationToken)));
+    => Results.Ok(await flow.Send(new SaveAiExplanationCommand(new AiExplanationSaveRequest(id, runId, request.ConfirmOverwrite, request.MarkdownOverride)), cancellationToken)));
 app.MapDelete("/api/projects/{id:guid}/ai/explanation/runs/{runId:guid}", async (Guid id, Guid runId, IRequestFlow flow, CancellationToken cancellationToken)
     => await flow.Send(new DeleteAiExplanationRunCommand(id, runId), cancellationToken) ? Results.Ok() : Results.NotFound());
 app.MapGet("/api/dogfood/status", async (IRequestFlow flow, CancellationToken cancellationToken)
@@ -304,9 +340,10 @@ public partial class Program;
 
 public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
 public sealed record ValidateAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, int MaxOutputTokens = 1200);
+public sealed record MarkdownValidateApiRequest(string Markdown);
 public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null);
 public sealed record AiRunRequest(string ProviderId, string PackId, string? UserInstruction, bool ConfirmSafetyWarnings, int MaxOutputTokens = 1200);
-public sealed record AiExplanationSaveApiRequest(bool ConfirmOverwrite = false);
+public sealed record AiExplanationSaveApiRequest(bool ConfirmOverwrite = false, string? MarkdownOverride = null);
 public sealed record ValidateProjectPathRequest(string Path);
 public sealed record StartDogfoodSessionRequest(IReadOnlyList<DogfoodSessionProject> Projects);
 public sealed record UpdateIssueStatusRequest(string Status);

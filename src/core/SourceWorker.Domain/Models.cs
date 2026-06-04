@@ -287,10 +287,51 @@ public sealed record AiProviderConfiguration(
     string? MaskedApiKey,
     DateTimeOffset UpdatedUtc);
 
-public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater }
+public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater, Gemini }
+public enum AiProviderType { OpenAI, Gemini, OpenAICompatible, Ollama }
+public enum ProviderPreset { OpenAI, Gemini, LMStudio, Ollama, OpenAICompatibleCustom, LocalAI, vLLM, OpenRouterLater }
 public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
 public enum AiModelCapability { Chat, StreamingLater, ToolCallingLater, VisionLater, Local }
 public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
+
+public sealed record AiProviderCatalog(
+    IReadOnlyList<AiProviderCatalogEntry> Providers,
+    IReadOnlyList<AiProviderPresetInfo> Presets,
+    DateTimeOffset GeneratedUtc);
+
+public sealed record AiProviderCatalogEntry(
+    AiProviderType ProviderType,
+    string DisplayName,
+    string DefaultBaseUrl,
+    IReadOnlyList<string> SuggestedModels,
+    bool RequiresApiKey,
+    bool IsLocal,
+    bool DataLeavesMachine,
+    AiProviderCapabilities Capabilities);
+
+public sealed record AiProviderPresetInfo(
+    ProviderPreset Preset,
+    string DisplayName,
+    AiProviderType ProviderType,
+    string DefaultBaseUrl,
+    string? DefaultModel,
+    bool ApiKeyRequired,
+    bool IsLocal,
+    bool DataLeavesMachine,
+    string Guidance);
+
+public sealed record AiProviderCapabilities(
+    bool SupportsResponsesApi,
+    bool SupportsChatCompletions,
+    bool SupportsGenerateContent,
+    bool SupportsStreaming,
+    bool SupportsStructuredOutput,
+    bool SupportsToolUse,
+    bool SupportsVision,
+    bool SupportsEmbeddings,
+    bool RecommendedForExplanation);
+
+public sealed record AiProviderModelList(string ProviderId, IReadOnlyList<string> Models, bool IsDiscovered, string? Warning);
 
 public sealed record AiModelInfo(string Id, string Name, AiProviderKind ProviderKind, IReadOnlyList<AiModelCapability> Capabilities, decimal? InputUsdPerMillionTokens = null, decimal? OutputUsdPerMillionTokens = null, int? ContextWindowTokens = null);
 public sealed record AiModelCatalog(AiProviderKind ProviderKind, IReadOnlyList<AiModelCatalogEntry> Models, bool SupportsDiscovery, DateTimeOffset GeneratedUtc);
@@ -342,6 +383,7 @@ public sealed record AiRunInput(
     int MaxOutputTokens = 1200);
 
 public sealed record AiRunOutput(string Text, string OutputHash, AiTokenEstimate? TokenEstimate = null, AiCostEstimate? CostEstimate = null);
+public sealed record AiProviderStreamUpdate(string? DeltaText, string Message, int OutputCharacters, DateTimeOffset TimestampUtc, bool IsCompleted = false);
 
 public sealed record AiRun(
     Guid Id,
@@ -401,6 +443,16 @@ public sealed record AiExplanationPreview(
     string PromptHash,
     bool IsBlocked);
 
+public sealed record AiExplanationStreamUpdate(
+    string Phase,
+    string Message,
+    string? DeltaMarkdown,
+    int OutputCharacters,
+    TimeSpan Elapsed,
+    AiExplanationResult? Result = null,
+    bool IsCompleted = false,
+    bool IsFailed = false);
+
 public sealed record AiExplanationResult(
     Guid Id,
     Guid ProjectId,
@@ -422,9 +474,36 @@ public sealed record AiExplanationResult(
 
 public sealed record AiExplanationSection(string Title, string Markdown);
 public sealed record AiExplanationSourceFile(string RelativePath, string Kind, int? StartLine, int? EndLine, int TokenEstimate, bool Included, string? Warning = null);
-public sealed record AiExplanationSaveRequest(Guid ProjectId, Guid RunId, bool ConfirmOverwrite = false);
+public sealed record AiExplanationSaveRequest(Guid ProjectId, Guid RunId, bool ConfirmOverwrite = false, string? MarkdownOverride = null);
 public sealed record AiExplanationSaveResult(Guid ProjectId, Guid RunId, bool Saved, string SuggestedFilePath, string? SavedFilePath, IReadOnlyList<string> Warnings);
 public sealed record AiExplanationQualityReport(AiExplanationQualityStatus Status, IReadOnlyList<string> PassedChecks, IReadOnlyList<string> Warnings);
+
+public enum MarkdownWorkspaceScope { ProjectContext, BackendDocs, Instructions, ExternalMirror, UserMarkdown, AllSafeMarkdown }
+public enum MarkdownFileKind { AgentHandoff, BackendDoc, AiExplanation, ContextDoc, ImportedInstruction, ExternalMirrorDoc, UserMarkdown, TechnicalMarkdown }
+public enum MarkdownFileChangeStatus { Clean, Generated, ManuallyModifiedGenerated, Missing, Conflict, Unsafe }
+public enum MarkdownSaveMode { Normal, ForceOverwriteGenerated, ForceOverwriteManualGenerated }
+
+public sealed record MarkdownFileSummary(
+    Guid ProjectId,
+    string RelativePath,
+    string DisplayName,
+    MarkdownFileKind Kind,
+    MarkdownWorkspaceScope Scope,
+    long SizeBytes,
+    DateTimeOffset LastModifiedUtc,
+    bool IsGenerated,
+    bool IsUserEditable,
+    bool IsSourceControlled,
+    bool IsExternalMirror,
+    bool IsTechnical,
+    bool HasSourceWorkerMarker,
+    bool IsManuallyModifiedGeneratedFile,
+    string? Warning);
+
+public sealed record MarkdownFileContent(MarkdownFileSummary Summary, string Markdown, string? RenderedHtml, string ContentHash, DateTimeOffset LastLoadedUtc);
+public sealed record MarkdownFileSaveRequest(string RelativePath, string Markdown, string? ExpectedContentHash, MarkdownSaveMode SaveMode = MarkdownSaveMode.Normal);
+public sealed record MarkdownFileSaveResult(bool Saved, string RelativePath, string NewContentHash, DateTimeOffset LastModifiedUtc, string? Warning, bool RequiresConfirmation);
+public sealed record MarkdownValidationResult(bool IsValid, IReadOnlyList<string> Warnings);
 
 public sealed record AiProviderValidationResult(string ProviderId, AiProviderKind Kind, bool IsValid, IReadOnlyList<AiProviderValidationIssue> Issues, AiProviderSetupState SetupState);
 public sealed record AiProviderValidationIssue(string Code, string Severity, string Message, string? Field = null);

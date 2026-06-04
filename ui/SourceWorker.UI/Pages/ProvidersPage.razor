@@ -1,0 +1,244 @@
+@page "/providers"
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+
+<section class="handoff-hero">
+    <div>
+        <p class="eyebrow">Providers</p>
+        <h2>AI provider management</h2>
+        <p>Configure online and local providers in one place. API keys stay local and are returned only as masked metadata.</p>
+    </div>
+    <div class="project-actions">
+        <button class="btn" @onclick="LoadAsync" disabled="@busy">Refresh</button>
+    </div>
+</section>
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else
+{
+    <Cards Title="Provider Defaults">
+        <div class="grid two">
+            <label>
+                Preset
+                <select class="form-select" @bind="selectedPresetName" @bind:after="ApplyPreset">
+                    @foreach (var preset in presets)
+                    {
+                        <option value="@preset.Preset.ToString()">@preset.DisplayName</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Provider kind
+                <select class="form-select" @bind="kind">
+                    @foreach (var item in Enum.GetValues<AiProviderKind>().Where(k => k is AiProviderKind.OpenAI or AiProviderKind.Gemini or AiProviderKind.Ollama or AiProviderKind.OpenAiCompatible))
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Model
+                <input class="form-control" @bind="model" placeholder="model id" />
+            </label>
+            <label>
+                Base URL
+                <input class="form-control" @bind="baseUrl" placeholder="https://api..." />
+            </label>
+            <label>
+                API key
+                <input class="form-control" type="password" @bind="apiKey" placeholder="Leave empty to keep existing key" />
+            </label>
+            <label>
+                Enabled
+                <input type="checkbox" @bind="enabled" />
+            </label>
+        </div>
+        <div class="project-actions">
+            <button class="btn" @onclick="ValidateAsync" disabled="@busy">Validate</button>
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@busy">Save Provider</button>
+        </div>
+        @if (validation is not null)
+        {
+            <div class="callout @(validation.IsValid ? "ok" : "warn")">
+                <strong>@(validation.IsValid ? "Valid" : "Needs attention")</strong>
+                @foreach (var issue in validation.Issues)
+                {
+                    <div>@issue.Severity: @issue.Message</div>
+                }
+            </div>
+        }
+    </Cards>
+
+    <Cards Title="Configured Providers">
+        <div class="grid two">
+            @foreach (var provider in statuses)
+            {
+                <article class="provider-card">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <h3>@provider.Kind</h3>
+                            <p class="muted">@provider.ProviderId</p>
+                        </div>
+                        <span class="pill @(provider.Status == AiProviderStatus.Healthy ? "ok" : provider.Status == AiProviderStatus.NotConfigured ? "" : "warn")">@provider.Status</span>
+                    </div>
+                    <p>@provider.Message</p>
+                    @if (!string.IsNullOrWhiteSpace(provider.MaskedApiKey))
+                    {
+                        <p class="muted">Key: @provider.MaskedApiKey</p>
+                    }
+                    <div class="project-actions">
+                        <button class="btn" @onclick="() => TestAsync(provider.ProviderId)" disabled="@busy">Test</button>
+                        <button class="btn" @onclick="() => DiagnoseAsync(provider.ProviderId)" disabled="@busy">Diagnose</button>
+                        <button class="btn" @onclick="() => LoadModelsAsync(provider.ProviderId)" disabled="@busy">Models</button>
+                    </div>
+                </article>
+            }
+        </div>
+    </Cards>
+
+    <Cards Title="Online Providers">
+        <div class="grid two">
+            @foreach (var provider in catalog?.Providers.Where(p => !p.IsLocal) ?? [])
+            {
+                <ProviderCatalogCard Provider="@provider" />
+            }
+        </div>
+    </Cards>
+
+    <Cards Title="Local Providers">
+        <div class="grid two">
+            @foreach (var provider in catalog?.Providers.Where(p => p.IsLocal) ?? [])
+            {
+                <ProviderCatalogCard Provider="@provider" />
+            }
+        </div>
+    </Cards>
+
+    @if (diagnostic is not null)
+    {
+        <Cards Title="Latest Diagnostic">
+            <p><strong>@diagnostic.Status</strong> @diagnostic.Summary</p>
+            @foreach (var action in diagnostic.SuggestedActions)
+            {
+                <div class="list-row"><strong>Next</strong><span>@action</span></div>
+            }
+        </Cards>
+    }
+    @if (modelList is not null)
+    {
+        <Cards Title="Model List">
+            @if (!string.IsNullOrWhiteSpace(modelList.Warning))
+            {
+                <p class="callout warn">@modelList.Warning</p>
+            }
+            @foreach (var item in modelList.Models)
+            {
+                <div class="list-row"><strong>@modelList.ProviderId</strong><span>@item</span></div>
+            }
+        </Cards>
+    }
+}
+
+@code {
+    private AiProviderCatalogDto? catalog;
+    private IReadOnlyList<AiProviderPresetInfoDto> presets = [];
+    private IReadOnlyList<AiProviderStatusDto> statuses = [];
+    private AiProviderValidationResultDto? validation;
+    private AiProviderConnectionDiagnosticDto? diagnostic;
+    private AiProviderModelListDto? modelList;
+    private string selectedPresetName = ProviderPreset.OpenAI.ToString();
+    private AiProviderKind kind = AiProviderKind.OpenAI;
+    private string model = "gpt-4.1-mini";
+    private string? baseUrl = "https://api.openai.com/v1";
+    private string? apiKey;
+    private bool enabled = true;
+    private bool loading = true;
+    private bool busy;
+    private string? error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            catalog = await Api.GetAiProviderCatalogAsync();
+            presets = await Api.GetAiProviderPresetsAsync();
+            statuses = await Api.GetAiProviderStatusesAsync();
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ApplyPreset()
+    {
+        var preset = presets.FirstOrDefault(p => p.Preset.ToString() == selectedPresetName);
+        if (preset is null) return;
+        kind = preset.ProviderType switch
+        {
+            AiProviderType.OpenAI => AiProviderKind.OpenAI,
+            AiProviderType.Gemini => AiProviderKind.Gemini,
+            AiProviderType.Ollama => AiProviderKind.Ollama,
+            _ => AiProviderKind.OpenAiCompatible
+        };
+        baseUrl = preset.DefaultBaseUrl;
+        model = preset.DefaultModel ?? "";
+    }
+
+    private async Task ValidateAsync()
+    {
+        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey, enabled));
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        try
+        {
+            await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey, enabled));
+            apiKey = null;
+            statuses = await Api.GetAiProviderStatusesAsync();
+            Toast.ShowSuccess("Provider saved.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task TestAsync(string providerId)
+    {
+        var result = await Api.TestAiProviderAsync(providerId);
+        Toast.ShowSuccess($"{result.Kind}: {result.Status}");
+        statuses = await Api.GetAiProviderStatusesAsync();
+    }
+
+    private async Task DiagnoseAsync(string providerId)
+    {
+        diagnostic = await Api.DiagnoseAiProviderAsync(providerId);
+    }
+
+    private async Task LoadModelsAsync(string providerId)
+    {
+        modelList = await Api.GetAiProviderModelsAsync(providerId);
+    }
+}

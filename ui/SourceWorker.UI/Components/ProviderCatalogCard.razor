@@ -1,0 +1,25 @@
+<article class="provider-card">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+            <h3>@Provider.DisplayName</h3>
+            <p class="muted">@Provider.ProviderType</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="pill @(Provider.IsLocal ? "ok" : "warn")">@(Provider.IsLocal ? "Local" : "Online")</span>
+            <span class="pill">@(Provider.DataLeavesMachine ? "Data leaves machine" : "Stays local")</span>
+        </div>
+    </div>
+    <p><strong>Base URL</strong> @Provider.DefaultBaseUrl</p>
+    <p><strong>Models</strong> @string.Join(", ", Provider.SuggestedModels)</p>
+    <p class="muted">Key required: @(Provider.RequiresApiKey ? "yes" : "no")</p>
+    <div class="d-flex gap-2 flex-wrap">
+        @if (Provider.Capabilities.SupportsResponsesApi) { <span class="pill">Responses API</span> }
+        @if (Provider.Capabilities.SupportsChatCompletions) { <span class="pill">Chat Completions</span> }
+        @if (Provider.Capabilities.SupportsGenerateContent) { <span class="pill">Generate Content</span> }
+        @if (Provider.Capabilities.RecommendedForExplanation) { <span class="pill ok">Explanation ready</span> }
+    </div>
+</article>
+
+@code {
+    [Parameter] public AiProviderCatalogEntryDto Provider { get; set; } = default!;
+}

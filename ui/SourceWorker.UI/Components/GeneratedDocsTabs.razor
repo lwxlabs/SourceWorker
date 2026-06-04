@@ -21,6 +21,9 @@
     }
     else
     {
+        <div class="project-actions">
+            <a class="btn" href="@($"/projects/{ProjectId}/markdown?file={Uri.EscapeDataString(SelectedFileOrDefault)}")">Edit in Markdown Workspace</a>
+        </div>
         <MarkdownViewer Content="@content" />
     }
 </div>

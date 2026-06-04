@@ -29,6 +29,10 @@ public sealed record GetContextBrowserQuery(Guid ProjectId) : IRequest<ContextBr
 public sealed record GetContextFilesQuery(Guid ProjectId, bool ShowTechnical = false, bool ShowExports = false) : IRequest<IReadOnlyList<ContextBrowserFile>>;
 public sealed record ReadContextFileQuery(Guid ProjectId, string RelativePath) : IRequest<string>;
 public sealed record SearchContextQuery(Guid ProjectId, string Query) : IRequest<ContextBrowserQueryResult>;
+public sealed record GetMarkdownFilesQuery(Guid ProjectId, MarkdownWorkspaceScope? Scope = null, bool IncludeTechnical = false, bool IncludeExternalMirror = false, bool IncludeUserMarkdown = true) : IRequest<IReadOnlyList<MarkdownFileSummary>>;
+public sealed record GetMarkdownFileQuery(Guid ProjectId, string RelativePath) : IRequest<MarkdownFileContent>;
+public sealed record SaveMarkdownFileCommand(Guid ProjectId, MarkdownFileSaveRequest Request) : IRequest<MarkdownFileSaveResult>;
+public sealed record ValidateMarkdownCommand(Guid ProjectId, string Markdown) : IRequest<MarkdownValidationResult>;
 public sealed record GetAgentHandoffQuery(Guid ProjectId) : IRequest<AgentHandoff>;
 public sealed record GetScanCompletenessQuery(Guid ProjectId) : IRequest<ScanCompletenessReport>;
 public sealed record GetOutputsQuery(Guid ProjectId) : IRequest<GeneratedOutputSet>;
@@ -40,6 +44,9 @@ public sealed record ExportPackDefaultCommand(Guid ProjectId, string PackId) : I
 public sealed record ExportDocsCommand(Guid ProjectId, string ExportProfileId) : IRequest<RunExportResponse>;
 public sealed record GetAiProvidersQuery : IRequest<IReadOnlyList<AiProviderHealthResult>>;
 public sealed record GetAiProviderStatusesQuery : IRequest<IReadOnlyList<AiProviderHealthResult>>;
+public sealed record GetAiProviderCatalogQuery : IRequest<AiProviderCatalog>;
+public sealed record GetAiProviderPresetsQuery : IRequest<IReadOnlyList<AiProviderPresetInfo>>;
+public sealed record GetAiProviderModelsQuery(string ProviderId) : IRequest<AiProviderModelList>;
 public sealed record ConfigureAiProviderCommand(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true) : IRequest<AiProviderConfiguration>;
 public sealed record TestAiProviderCommand(string ProviderId) : IRequest<AiProviderHealthResult>;
 public sealed record GetProjectAiPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
@@ -360,6 +367,10 @@ public sealed class GetContextBrowserQueryHandler(IProjectRepository projects, I
 public sealed class GetContextFilesQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextFilesQuery, IReadOnlyList<ContextBrowserFile>> { public async Task<IReadOnlyList<ContextBrowserFile>> Handle(GetContextFilesQuery request, CancellationToken cancellationToken) => await browser.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.ShowTechnical, request.ShowExports, cancellationToken); }
 public sealed class ReadContextFileQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<ReadContextFileQuery, string> { public async Task<string> Handle(ReadContextFileQuery request, CancellationToken cancellationToken) => await browser.ReadFileAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
 public sealed class SearchContextQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<SearchContextQuery, ContextBrowserQueryResult> { public async Task<ContextBrowserQueryResult> Handle(SearchContextQuery request, CancellationToken cancellationToken) => await browser.SearchAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Query, cancellationToken); }
+public sealed class GetMarkdownFilesQueryHandler(IProjectRepository projects, IMarkdownWorkspaceService markdown) : IRequestHandler<GetMarkdownFilesQuery, IReadOnlyList<MarkdownFileSummary>> { public async Task<IReadOnlyList<MarkdownFileSummary>> Handle(GetMarkdownFilesQuery request, CancellationToken cancellationToken) => await markdown.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Scope, request.IncludeTechnical, request.IncludeExternalMirror, request.IncludeUserMarkdown, cancellationToken); }
+public sealed class GetMarkdownFileQueryHandler(IProjectRepository projects, IMarkdownWorkspaceService markdown) : IRequestHandler<GetMarkdownFileQuery, MarkdownFileContent> { public async Task<MarkdownFileContent> Handle(GetMarkdownFileQuery request, CancellationToken cancellationToken) => await markdown.ReadAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
+public sealed class SaveMarkdownFileCommandHandler(IProjectRepository projects, IMarkdownWorkspaceService markdown) : IRequestHandler<SaveMarkdownFileCommand, MarkdownFileSaveResult> { public async Task<MarkdownFileSaveResult> Handle(SaveMarkdownFileCommand request, CancellationToken cancellationToken) => await markdown.SaveAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Request, cancellationToken); }
+public sealed class ValidateMarkdownCommandHandler(IMarkdownWorkspaceService markdown) : IRequestHandler<ValidateMarkdownCommand, MarkdownValidationResult> { public Task<MarkdownValidationResult> Handle(ValidateMarkdownCommand request, CancellationToken cancellationToken) => Task.FromResult(markdown.Validate(request.Markdown)); }
 public sealed class GetAgentHandoffQueryHandler(IProjectRepository projects, IAgentHandoffService handoff) : IRequestHandler<GetAgentHandoffQuery, AgentHandoff> { public async Task<AgentHandoff> Handle(GetAgentHandoffQuery request, CancellationToken cancellationToken) => await handoff.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetScanCompletenessQueryHandler(IProjectRepository projects, IScanCompletenessService completeness) : IRequestHandler<GetScanCompletenessQuery, ScanCompletenessReport> { public async Task<ScanCompletenessReport> Handle(GetScanCompletenessQuery request, CancellationToken cancellationToken) => await completeness.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetOutputsQueryHandler(IProjectRepository projects, IGeneratedOutputService outputs) : IRequestHandler<GetOutputsQuery, GeneratedOutputSet> { public async Task<GeneratedOutputSet> Handle(GetOutputsQuery request, CancellationToken cancellationToken) => await outputs.GetOutputSetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), "backend-docs-compact", cancellationToken); }
@@ -434,6 +445,18 @@ public sealed class GetAiProviderStatusesQueryHandler(IAiProviderRegistry regist
         }
         return results;
     }
+}
+public sealed class GetAiProviderCatalogQueryHandler(IAiProviderCatalogService catalog) : IRequestHandler<GetAiProviderCatalogQuery, AiProviderCatalog>
+{
+    public Task<AiProviderCatalog> Handle(GetAiProviderCatalogQuery request, CancellationToken cancellationToken) => Task.FromResult(catalog.GetCatalog());
+}
+public sealed class GetAiProviderPresetsQueryHandler(IAiProviderCatalogService catalog) : IRequestHandler<GetAiProviderPresetsQuery, IReadOnlyList<AiProviderPresetInfo>>
+{
+    public Task<IReadOnlyList<AiProviderPresetInfo>> Handle(GetAiProviderPresetsQuery request, CancellationToken cancellationToken) => Task.FromResult(catalog.GetPresets());
+}
+public sealed class GetAiProviderModelsQueryHandler(IAiProviderCatalogService catalog) : IRequestHandler<GetAiProviderModelsQuery, AiProviderModelList>
+{
+    public Task<AiProviderModelList> Handle(GetAiProviderModelsQuery request, CancellationToken cancellationToken) => catalog.GetModelsAsync(request.ProviderId, cancellationToken);
 }
 
 public sealed class ConfigureAiProviderCommandHandler(IAiProviderConfigurationRepository configurations, IAiSecretStore secrets) : IRequestHandler<ConfigureAiProviderCommand, AiProviderConfiguration>

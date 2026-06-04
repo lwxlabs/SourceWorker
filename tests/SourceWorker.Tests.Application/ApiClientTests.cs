@@ -292,6 +292,62 @@ public sealed class ApiClientTests
     }
 
     [Fact]
+    public async Task ApiClient_markdown_methods_include_bearer_token_and_parse_responses()
+    {
+        var projectId = Guid.NewGuid();
+        var sawAuth = false;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            sawAuth = request.Headers.Authorization?.Scheme == "Bearer" && request.Headers.Authorization.Parameter == "test-token";
+            return request.RequestUri?.AbsolutePath switch
+            {
+                var path when path == $"/api/projects/{projectId}/markdown/files" => $$"""[{"projectId":"{{projectId}}","relativePath":".ai-context/docs/backend/07-ai-explanation.md","displayName":"07-ai-explanation.md","kind":2,"scope":1,"sizeBytes":42,"lastModifiedUtc":"2026-05-31T00:00:00Z","isGenerated":true,"isUserEditable":true,"isSourceControlled":true,"isExternalMirror":false,"isTechnical":false,"hasSourceWorkerMarker":false,"isManuallyModifiedGeneratedFile":false,"warning":null}]""",
+                var path when path == $"/api/projects/{projectId}/markdown/files/.ai-context/docs/backend/07-ai-explanation.md" && request.Method == HttpMethod.Put => """{"saved":true,"relativePath":".ai-context/docs/backend/07-ai-explanation.md","newContentHash":"newhash","lastModifiedUtc":"2026-05-31T00:00:00Z","warning":null,"requiresConfirmation":false}""",
+                var path when path == $"/api/projects/{projectId}/markdown/files/.ai-context/docs/backend/07-ai-explanation.md" => $$"""{"summary":{"projectId":"{{projectId}}","relativePath":".ai-context/docs/backend/07-ai-explanation.md","displayName":"07-ai-explanation.md","kind":2,"scope":1,"sizeBytes":42,"lastModifiedUtc":"2026-05-31T00:00:00Z","isGenerated":true,"isUserEditable":true,"isSourceControlled":true,"isExternalMirror":false,"isTechnical":false,"hasSourceWorkerMarker":false,"isManuallyModifiedGeneratedFile":false,"warning":null},"markdown":"# Explanation","renderedHtml":null,"contentHash":"hash","lastLoadedUtc":"2026-05-31T00:00:00Z"}""",
+                var path when path == $"/api/projects/{projectId}/markdown/validate" => """{"isValid":true,"warnings":[]}""",
+                _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
+            };
+        }))
+        { BaseAddress = new Uri("http://localhost:5000") };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions { BearerToken = "test-token" });
+
+        var files = await client.GetMarkdownFilesAsync(projectId);
+        var file = await client.GetMarkdownFileAsync(projectId, ".ai-context/docs/backend/07-ai-explanation.md");
+        var validation = await client.ValidateMarkdownAsync(projectId, "# Explanation");
+        var saved = await client.SaveMarkdownFileAsync(projectId, ".ai-context/docs/backend/07-ai-explanation.md", new MarkdownFileSaveRequestDto(".ai-context/docs/backend/07-ai-explanation.md", "# Edited", "hash"));
+
+        Assert.True(sawAuth);
+        Assert.Single(files);
+        Assert.Equal("# Explanation", file.Markdown);
+        Assert.True(validation.IsValid);
+        Assert.True(saved.Saved);
+    }
+
+    [Fact]
+    public async Task ApiClient_provider_catalog_methods_parse_responses()
+    {
+        using var http = new HttpClient(new StubHandler(request => request.RequestUri?.AbsolutePath switch
+        {
+            "/api/ai/providers/catalog" => """{"providers":[{"providerType":0,"displayName":"OpenAI","defaultBaseUrl":"https://api.openai.com/v1","suggestedModels":["gpt-4.1"],"requiresApiKey":true,"isLocal":false,"dataLeavesMachine":true,"capabilities":{"supportsResponsesApi":true,"supportsChatCompletions":true,"supportsGenerateContent":false,"supportsStreaming":false,"supportsStructuredOutput":false,"supportsToolUse":false,"supportsVision":false,"supportsEmbeddings":false,"recommendedForExplanation":true}}],"presets":[],"generatedUtc":"2026-05-31T00:00:00Z"}""",
+            "/api/ai/providers/presets" => """[{"preset":2,"displayName":"LM Studio Local","providerType":2,"defaultBaseUrl":"http://localhost:1234/v1","defaultModel":null,"apiKeyRequired":false,"isLocal":true,"dataLeavesMachine":false,"guidance":"Start LM Studio."}]""",
+            "/api/ai/providers/Ollama/models" => """{"providerId":"Ollama","models":["llama3.1"],"isDiscovered":true,"warning":null}""",
+            _ => throw new InvalidOperationException($"Unexpected request {request.Method} {request.RequestUri}")
+        }))
+        { BaseAddress = new Uri("http://localhost:5000") };
+        var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions { BearerToken = "test-token" });
+
+        var catalog = await client.GetAiProviderCatalogAsync();
+        var presets = await client.GetAiProviderPresetsAsync();
+        var models = await client.GetAiProviderModelsAsync("Ollama");
+
+        Assert.Single(catalog.Providers);
+        Assert.True(catalog.Providers[0].Capabilities.SupportsResponsesApi);
+        Assert.Single(presets);
+        Assert.False(presets[0].DataLeavesMachine);
+        Assert.Contains("llama3.1", models.Models);
+    }
+
+    [Fact]
     public async Task Api_client_can_get_runtime_info()
     {
         using var http = new HttpClient(new StubHandler(request => 

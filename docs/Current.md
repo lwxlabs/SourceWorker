@@ -2,7 +2,7 @@
 
 Date: 2026-06-02
 
-SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, MVP 2.7 corrected project workspace navigation, and MVP 2.8 AI Explanation Writer.
+SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, MVP 2.7 corrected project workspace navigation, MVP 2.8 AI Explanation Writer, and MVP 2.9 Markdown Workspace + Provider Management.
 
 Product statement:
 
@@ -20,6 +20,7 @@ Still intentionally not included:
 - terminal agent execution
 - autonomous code editing
 - automatic AI file writes
+- automatic markdown autosave
 - full installer/updater
 - production code signing
 
@@ -239,16 +240,77 @@ New context pack:
 - `ai-explanation` = AI Project Explanation
 - includes `.ai-context/docs/backend/07-ai-explanation.md`, `.ai-context/agent-handoff.md`, `.ai-context/docs/backend/02-architecture.md`, and `.ai-context/docs/backend/03-important-files-and-flows.md`
 
+## MVP 2.9 Markdown Workspace And Provider Management
+
+MVP 2.9 makes SourceWorker feel more like a documentation workspace while keeping the product boundary tight.
+
+Markdown Workspace:
+- route: `/projects/{projectId}/markdown`
+- uses `PSC.Blazor.Components.MarkdownEditor`
+- enables Mermaid rendering and syntax highlighting
+- supports grouped markdown browsing for Agent Handoff, Backend Docs, AI Explanation, Context Docs, Instructions, User Markdown, External Mirror, and Technical Markdown
+- includes toggles for technical markdown, external mirror, generated files, and editable-only views
+- supports explicit Save, Reload, Copy markdown, Insert Mermaid flow, Preview, and split-style editing
+
+Markdown safety policy:
+- only `.md` and `.markdown` files are editable
+- source code, YAML, JSON, databases, `.env`, `.git`, `bin`, `obj`, `.vs`, and `.idea` are blocked
+- files must stay inside the selected project root
+- technical generated markdown is read-only unless the policy is explicitly expanded later
+- generated/manual-modified markdown requires confirmation before overwrite
+- no autosave is implemented
+- AI output is not saved automatically
+
+Mermaid policy:
+- Mermaid must be fenced with ```` ```mermaid ```` and a closing ```` ``` ````
+- generated diagrams should use `flowchart TD` or `flowchart LR`
+- node IDs should stay simple, with readable labels inside brackets
+- invalid or unfenced Mermaid produces warnings before save
+
+Docs and Explanation integration:
+- backend docs remain canonical under `.ai-context/docs/backend`
+- external docs under `instructions/Result/Backend` remain an export mirror, not the primary edit target
+- the Docs page can open backend docs in the Markdown Workspace
+- the Explanation page shows generated output in the Markdown editor so the user can edit before explicitly saving `.ai-context/docs/backend/07-ai-explanation.md`
+
+Global Providers page:
+- route: `/providers`
+- providers are app-wide, not project-tab configuration forms
+- Ask and Explanation pages choose provider/model and link to Manage Providers
+- Settings keeps privacy/history/UI preferences
+
+Provider support:
+- OpenAI: online provider, default base `https://api.openai.com/v1`, uses the Responses API first with `store=false`, with chat completions fallback
+- Gemini: online provider, default base `https://generativelanguage.googleapis.com/v1beta`, uses `models/{model}:generateContent` with `x-goog-api-key`
+- LM Studio: local preset using OpenAI-compatible provider at `http://localhost:1234/v1`
+- Ollama: local provider at `http://localhost:11434/api`, model listing via `/api/tags`, chat via `/api/chat`
+- OpenAI-compatible custom: user-defined base URL/key/model with user-selected local/online privacy classification
+
+Provider secret rules:
+- API keys are stored through local AppData secret storage, not Localite
+- Localite stores provider metadata and secret identifiers only
+- API/UI responses return masked key metadata only
+- diagnostics and logs must not include raw key values
+
+MVP 2.9 Local API endpoints:
+- `GET /api/projects/{id}/markdown/files`
+- `GET /api/projects/{id}/markdown/files/{*relativePath}`
+- `PUT /api/projects/{id}/markdown/files/{*relativePath}`
+- `POST /api/projects/{id}/markdown/validate`
+- `GET /api/ai/providers/catalog`
+- `GET /api/ai/providers/presets`
+- `GET /api/ai/providers/{providerId}/models`
+
 ## Current Architecture
 
 - `SourceWorker.Domain` is dependency-free and owns project, scan, instruction, recipe, job, artifact, freshness, cleanup, storage diagnostic, output routing, export, context pack, code intelligence, Local API, and AI preview domain models.
 - `SourceWorker.Application` owns LwX.Flow request handlers and ports. CLI, Local API, and UI-facing endpoints call application use cases only.
 - `SourceWorker.Scanner` scans project shape, file hashes, technologies, Git state, TODOs, lightweight C# symbols, routes, services, config usages, tests, and rule-based flows.
-- `SourceWorker.Context` writes `.ai-context`, validates imported source paths, routes generated outputs, writes context packs/export profiles, checks freshness, analyzes artifacts, performs safe cleanup, and exposes read-only context browsing.
+- `SourceWorker.Context` writes `.ai-context`, validates imported source paths, routes generated outputs, writes context packs/export profiles, checks freshness, analyzes artifacts, performs safe cleanup, exposes context browsing, and owns safe markdown workspace listing/reading/writing policy.
 - `SourceWorker.Recipes` owns rule-based recipes including `backend-docs-compact`.
 - `SourceWorker.AI` is the AI core library. It builds prompts from context packs, estimates tokens/costs, runs safety checks, redacts secret-like values, and orchestrates preview-only AI runs.
 - `SourceWorker.Storage.Localite` uses explicit table-backed Localite/SQLite storage.
-- `SourceWorker.AI.Providers` is the provider infrastructure library for OpenAI, Ollama, OpenAI-compatible endpoints, and local AppData AI secret storage.
+- `SourceWorker.AI.Providers` is the provider infrastructure library for OpenAI, Gemini, Ollama, OpenAI-compatible endpoints, provider presets, and local AppData AI secret storage.
 - `SourceWorker.Infrastructure` composes storage, scanner, context, recipes, AI core, AI providers, Git, and Local API runtime services.
 - `SourceWorker.LocalApi` is the protected HTTP boundary.
 - `SourceWorker.ApiClient` is the dashboard/client boundary. It has no Blazor dependency.
@@ -654,6 +716,15 @@ MVP 2.8 protected endpoints:
 - `POST /api/projects/{id}/ai/explanation/runs/{runId}/save`
 - `DELETE /api/projects/{id}/ai/explanation/runs/{runId}`
 
+MVP 2.9 protected endpoints:
+- `GET /api/projects/{id}/markdown/files`
+- `GET /api/projects/{id}/markdown/files/{*relativePath}`
+- `PUT /api/projects/{id}/markdown/files/{*relativePath}`
+- `POST /api/projects/{id}/markdown/validate`
+- `GET /api/ai/providers/catalog`
+- `GET /api/ai/providers/presets`
+- `GET /api/ai/providers/{providerId}/models`
+
 All protected endpoints require `Authorization: Bearer <token>` when token auth is enabled.
 
 No new Local API endpoints were required for MVP 2.4. Desktop consumes the existing runtime, project, dashboard, dogfood, diagnostics, AI, and context endpoints through `SourceWorker.ApiClient`.
@@ -705,6 +776,17 @@ MVP 2.8 adds targeted coverage for:
 - explanation output quality checks
 - explanation ApiClient methods and bearer token usage
 - Local API explanation endpoint authorization and preview behavior
+
+MVP 2.9 adds targeted coverage for:
+- safe markdown file listing, reading, saving, and path traversal blocking
+- blocking non-markdown saves such as `.cs`, `.json`, and `.yaml`
+- generated/manual-modified markdown confirmation behavior
+- Mermaid fenced block validation
+- provider catalog and presets for OpenAI, Gemini, LM Studio, and Ollama
+- Gemini validation and provider mapping
+- OpenAI Responses API request behavior with `store=false`
+- ApiClient markdown/provider methods and bearer token usage
+- Local API markdown/provider endpoint authorization
 
 ## Test Execution Rules For Codex
 
@@ -788,14 +870,38 @@ dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
 dotnet build ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj
 ```
 
+These targeted commands passed during MVP 2.9:
+
+```powershell
+dotnet build SourceWorker.slnx
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Markdown --no-build
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Provider --no-build
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Ai --no-build
+dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient --no-build
+dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Markdown --no-build
+dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Provider --no-build
+dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
+dotnet build ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj
+dotnet build ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj
+```
+
+MVP 2.9 verification notes:
+- full solution tests were intentionally skipped because the changed surface was markdown workspace, provider endpoints, provider infrastructure, ApiClient, UI pages, and docs
+- `CliCommandTests` were intentionally skipped because no CLI parsing, output, or behavior changed
+- solution build has an existing `SourceWorker.Tests.AppHost` `Microsoft.NET.Test.Sdk` preview resolution warning, but no build errors
+
 ## Next Recommended Step
 
-MVP 2.4 establishes the Windows-first desktop app. The next strong step is a real desktop dogfood pass:
+MVP 2.9 establishes the Markdown Workspace and global Providers page. The next strong step is a desktop dogfood pass focused on documentation editing and provider setup:
 - Start `SourceWorker.Desktop.exe` from `artifacts/desktop/win-x64` or the Desktop shortcut.
-- Register SourceWorker, Insights, Localite, and LwX.Flow.
-- Scan all four.
-- Open backend docs and packs.
-- Configure Ollama or OpenAI.
+- Open Providers and configure one local provider and one online provider if available.
+- Open a scanned project.
+- Generate or open `07-ai-explanation.md`.
+- Edit it in the Markdown Workspace.
+- Insert a Mermaid flow and verify preview rendering.
+- Save explicitly.
+- Confirm no source code files changed.
+- Confirm provider diagnostics and secret masking are understandable.
 - Preview `ai-handoff` and `backend-docs`.
 - Run one preview-only AI request and one Quick Ask.
 - Capture friction issues from confusing pages or errors.

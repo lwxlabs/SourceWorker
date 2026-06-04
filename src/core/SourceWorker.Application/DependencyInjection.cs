@@ -33,6 +33,10 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<GetContextFilesQuery, IReadOnlyList<SourceWorker.Domain.ContextBrowserFile>>, GetContextFilesQueryHandler>();
         services.AddScoped<IRequestHandler<ReadContextFileQuery, string>, ReadContextFileQueryHandler>();
         services.AddScoped<IRequestHandler<SearchContextQuery, SourceWorker.Domain.ContextBrowserQueryResult>, SearchContextQueryHandler>();
+        services.AddScoped<IRequestHandler<GetMarkdownFilesQuery, IReadOnlyList<SourceWorker.Domain.MarkdownFileSummary>>, GetMarkdownFilesQueryHandler>();
+        services.AddScoped<IRequestHandler<GetMarkdownFileQuery, SourceWorker.Domain.MarkdownFileContent>, GetMarkdownFileQueryHandler>();
+        services.AddScoped<IRequestHandler<SaveMarkdownFileCommand, SourceWorker.Domain.MarkdownFileSaveResult>, SaveMarkdownFileCommandHandler>();
+        services.AddScoped<IRequestHandler<ValidateMarkdownCommand, SourceWorker.Domain.MarkdownValidationResult>, ValidateMarkdownCommandHandler>();
         services.AddScoped<IRequestHandler<GetAgentHandoffQuery, SourceWorker.Domain.AgentHandoff>, GetAgentHandoffQueryHandler>();
         services.AddScoped<IRequestHandler<GetScanCompletenessQuery, SourceWorker.Domain.ScanCompletenessReport>, GetScanCompletenessQueryHandler>();
         services.AddScoped<IRequestHandler<GetOutputsQuery, SourceWorker.Domain.GeneratedOutputSet>, GetOutputsQueryHandler>();
@@ -44,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<ExportDocsCommand, SourceWorker.Contracts.RunExportResponse>, ExportDocsCommandHandler>();
         services.AddScoped<IRequestHandler<GetAiProvidersQuery, IReadOnlyList<SourceWorker.Domain.AiProviderHealthResult>>, GetAiProvidersQueryHandler>();
         services.AddScoped<IRequestHandler<GetAiProviderStatusesQuery, IReadOnlyList<SourceWorker.Domain.AiProviderHealthResult>>, GetAiProviderStatusesQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiProviderCatalogQuery, SourceWorker.Domain.AiProviderCatalog>, GetAiProviderCatalogQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiProviderPresetsQuery, IReadOnlyList<SourceWorker.Domain.AiProviderPresetInfo>>, GetAiProviderPresetsQueryHandler>();
+        services.AddScoped<IRequestHandler<GetAiProviderModelsQuery, SourceWorker.Domain.AiProviderModelList>, GetAiProviderModelsQueryHandler>();
         services.AddScoped<IRequestHandler<ConfigureAiProviderCommand, SourceWorker.Domain.AiProviderConfiguration>, ConfigureAiProviderCommandHandler>();
         services.AddScoped<IRequestHandler<TestAiProviderCommand, SourceWorker.Domain.AiProviderHealthResult>, TestAiProviderCommandHandler>();
         services.AddScoped<IRequestHandler<GetProjectAiPacksQuery, IReadOnlyList<SourceWorker.Domain.ContextPackManifest>>, GetProjectAiPacksQueryHandler>();

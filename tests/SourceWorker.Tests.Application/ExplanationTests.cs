@@ -1,6 +1,7 @@
 using SourceWorker.AI;
 using SourceWorker.Application;
 using SourceWorker.Domain;
+using System.Runtime.CompilerServices;
 
 namespace SourceWorker.Tests.Application;
 
@@ -61,6 +62,81 @@ public sealed class ExplanationTests
         Assert.True(File.Exists(Path.Combine(temp.Root, ".ai-context", "docs", "backend", "07-ai-explanation.md")));
         Assert.False(File.Exists(Path.Combine(temp.Root, "src", "PublicApi.cs")));
         Assert.Contains(artifacts.Items, a => a.RelativePath == ".ai-context/docs/backend/07-ai-explanation.md" && a.Type == GeneratedArtifactType.InternalGeneratedDoc);
+    }
+
+    [Fact]
+    public async Task Explanation_run_auto_saves_generated_explanation_file()
+    {
+        using var temp = new TempProject();
+        var project = new Project(Guid.NewGuid(), "Sample", temp.Root, DateTimeOffset.UtcNow);
+        var service = new AiExplanationService(
+            new ProjectRepo(project),
+            new PackRepo(),
+            new ConfigRepo(),
+            new ProviderRegistry(),
+            new PromptBuilder(),
+            new AiExplanationQualityService(),
+            new RunRepo(),
+            new ArtifactRepo(),
+            new ScanRepo(project.Id));
+
+        var result = await service.RunAsync(Request(project.Id), CancellationToken.None);
+
+        Assert.Equal(AiRunStatus.Completed, result.Status);
+        Assert.True(File.Exists(Path.Combine(temp.Root, ".ai-context", "docs", "backend", "07-ai-explanation.md")));
+    }
+
+    [Fact]
+    public async Task Explanation_stream_auto_saves_generated_explanation_file()
+    {
+        using var temp = new TempProject();
+        var project = new Project(Guid.NewGuid(), "Sample", temp.Root, DateTimeOffset.UtcNow);
+        var artifacts = new ArtifactRepo();
+        var service = new AiExplanationService(
+            new ProjectRepo(project),
+            new PackRepo(),
+            new ConfigRepo(),
+            new ProviderRegistry(new StreamingProvider()),
+            new PromptBuilder(),
+            new AiExplanationQualityService(),
+            new RunRepo(),
+            artifacts,
+            new ScanRepo(project.Id));
+
+        var updates = new List<AiExplanationStreamUpdate>();
+        await foreach (var update in service.RunStreamingAsync(Request(project.Id), CancellationToken.None))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Contains(updates, update => update.Phase == "saved");
+        Assert.Contains(updates, update => update.IsCompleted && update.Result?.Status == AiRunStatus.Completed);
+        Assert.True(File.Exists(Path.Combine(temp.Root, ".ai-context", "docs", "backend", "07-ai-explanation.md")));
+        Assert.Contains(artifacts.Items, a => a.RelativePath == ".ai-context/docs/backend/07-ai-explanation.md");
+    }
+
+    [Fact]
+    public async Task Explanation_run_fails_when_provider_returns_empty_text()
+    {
+        using var temp = new TempProject();
+        var project = new Project(Guid.NewGuid(), "Sample", temp.Root, DateTimeOffset.UtcNow);
+        var runs = new RunRepo();
+        var service = new AiExplanationService(
+            new ProjectRepo(project),
+            new PackRepo(),
+            new ConfigRepo(),
+            new ProviderRegistry(new EmptyProvider()),
+            new PromptBuilder(),
+            new AiExplanationQualityService(),
+            runs,
+            new ArtifactRepo(),
+            new ScanRepo(project.Id));
+
+        var result = await service.RunAsync(Request(project.Id), CancellationToken.None);
+
+        Assert.Equal(AiRunStatus.Failed, result.Status);
+        Assert.Contains("returned no explanation text", result.Error);
+        Assert.True(string.IsNullOrWhiteSpace(result.Markdown));
     }
 
     [Fact]
@@ -155,9 +231,9 @@ public sealed class ExplanationTests
         public Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class ProviderRegistry : IAiProviderRegistry
+    private sealed class ProviderRegistry(IAiProvider? configuredProvider = null) : IAiProviderRegistry
     {
-        private readonly IAiProvider provider = new Provider();
+        private readonly IAiProvider provider = configuredProvider ?? new Provider();
         public IAiProvider? GetProvider(string providerId) => provider;
         public IReadOnlyList<IAiProvider> ListProviders() => [provider];
     }
@@ -169,6 +245,32 @@ public sealed class ExplanationTests
         public Task<AiProviderHealthResult> CheckHealthAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken) => Task.FromResult(new AiProviderHealthResult(Id, Kind, AiProviderStatus.Healthy, "ok", DateTimeOffset.UtcNow));
         public Task<AiRunOutput> RunAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken)
             => Task.FromResult(new AiRunOutput(CompleteMarkdown, "output-hash"));
+    }
+
+    private sealed class StreamingProvider : IAiStreamingProvider
+    {
+        public string Id => "Ollama";
+        public AiProviderKind Kind => AiProviderKind.Ollama;
+        public Task<AiProviderHealthResult> CheckHealthAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken) => Task.FromResult(new AiProviderHealthResult(Id, Kind, AiProviderStatus.Healthy, "ok", DateTimeOffset.UtcNow));
+        public Task<AiRunOutput> RunAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken)
+            => Task.FromResult(new AiRunOutput(CompleteMarkdown, "output-hash"));
+
+        public async IAsyncEnumerable<AiProviderStreamUpdate> StreamAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return new AiProviderStreamUpdate(CompleteMarkdown[..80], "Writing answer...", 80, DateTimeOffset.UtcNow);
+            yield return new AiProviderStreamUpdate(CompleteMarkdown[80..], "Writing answer...", CompleteMarkdown.Length, DateTimeOffset.UtcNow);
+            yield return new AiProviderStreamUpdate(null, "Provider completed.", CompleteMarkdown.Length, DateTimeOffset.UtcNow, true);
+        }
+    }
+
+    private sealed class EmptyProvider : IAiProvider
+    {
+        public string Id => "Ollama";
+        public AiProviderKind Kind => AiProviderKind.Ollama;
+        public Task<AiProviderHealthResult> CheckHealthAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken) => Task.FromResult(new AiProviderHealthResult(Id, Kind, AiProviderStatus.Healthy, "ok", DateTimeOffset.UtcNow));
+        public Task<AiRunOutput> RunAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, CancellationToken cancellationToken)
+            => Task.FromResult(new AiRunOutput("", "empty-output-hash"));
     }
 
     private sealed class PromptBuilder : IAiExplanationPromptBuilder

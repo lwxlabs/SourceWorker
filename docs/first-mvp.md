@@ -327,12 +327,27 @@ MVP 2.8 adds the AI Explanation page:
 - existing manually modified explanation files require overwrite confirmation
 - source files are never written from AI output
 
+MVP 2.9 adds Markdown Workspace and Provider Management:
+
+- route: `/projects/{projectId}/markdown`
+- real Markdown editor using `PSC.Blazor.Components.MarkdownEditor`
+- Mermaid rendering and syntax highlighting
+- safe Local API-backed markdown listing, reading, validation, and saving
+- edits are limited to `.md` and `.markdown` files inside the selected project root
+- source code, YAML/JSON, `.env`, database files, `.git`, `bin`, `obj`, `.vs`, and `.idea` are blocked
+- no autosave; the user explicitly clicks Save
+- Explanation output can be edited before saving `07-ai-explanation.md`
+- global `/providers` page for OpenAI, Gemini, Ollama, LM Studio, and OpenAI-compatible presets
+- provider secrets stay in local AppData secret storage and are returned only as masked metadata
+
 ## AI Provider Preview
 
 - AI core logic lives in `src/libs/SourceWorker.AI`.
 - Provider and secret infrastructure lives in `src/infrastructure/SourceWorker.AI.Providers`.
-- OpenAI and OpenAI-compatible providers use an OpenAI-style chat completions request.
-- Ollama uses local `api/generate` with default base URL `http://localhost:11434`.
+- OpenAI uses the Responses API first with `store=false`, with chat completions fallback where needed.
+- Gemini uses `models/{model}:generateContent` with `x-goog-api-key`.
+- OpenAI-compatible providers support custom endpoints and the LM Studio preset at `http://localhost:1234/v1`.
+- Ollama uses local `/api/tags` and `/api/chat` with default base URL `http://localhost:11434/api`.
 - Token estimate is deterministic: characters divided by 4, rounded up.
 - Safety checks detect obvious API keys, token values, private keys, connection strings, missing pack files, stale context, and manually modified generated files.
 - Local secret storage is under AppData for MVP use. OS secret store integration is planned later.
@@ -366,6 +381,7 @@ It also runs the rule-based `backend-docs-compact` recipe and writes:
 - `.ai-context/docs/backend/04-configuration-and-secrets.md`
 - `.ai-context/docs/backend/05-tasks-and-risks.md`
 - `.ai-context/docs/backend/06-verification-checklist.md`
+- `.ai-context/docs/backend/07-ai-explanation.md` when explicitly generated and saved
 - `.ai-context/recipes/backend-docs-compact.yaml`
 - `.ai-context/recipes/ai-handoff.yaml`
 - `.ai-context/recipes/project-onboarding.yaml`

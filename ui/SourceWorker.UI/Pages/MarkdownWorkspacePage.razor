@@ -1,0 +1,213 @@
+@page "/projects/{ProjectId:guid}/markdown"
+@inject ISourceWorkerApiClient Api
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ToastService Toast
+
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="markdown">
+    <section class="handoff-hero">
+        <div>
+            <p class="eyebrow">Markdown Workspace</p>
+            <h2>Edit project markdown safely</h2>
+            <p>Open, preview, and explicitly save allowed markdown files. SourceWorker blocks source code, YAML, JSON, secrets, build folders, and paths outside the project root.</p>
+        </div>
+        <div class="project-actions">
+            <button class="btn" @onclick="LoadFilesAsync" disabled="@busy">Reload</button>
+            <button class="btn btn-primary" @onclick="@(() => SaveAsync())" disabled="@(!dirty || content is null || busy)">Save</button>
+            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(markdown)">Copy markdown</button>
+            <button class="btn" @onclick="InsertMermaid" disabled="@(content is null)">Insert Mermaid flow</button>
+        </div>
+    </section>
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <ErrorState Message="@error" />
+    }
+    else
+    {
+        <div class="markdown-workspace">
+            <aside class="markdown-files">
+                <div class="checkbox-row compact">
+                    <label><input type="checkbox" @bind="includeTechnical" @bind:after="LoadFilesAsync" /> Technical</label>
+                    <label><input type="checkbox" @bind="includeExternal" @bind:after="LoadFilesAsync" /> Exports</label>
+                    <label><input type="checkbox" @bind="onlyEditable" /> Editable only</label>
+                </div>
+                @foreach (var group in VisibleFiles.GroupBy(f => f.Scope).OrderBy(g => g.Key.ToString()))
+                {
+                    <h4>@GroupLabel(group.Key)</h4>
+                    @foreach (var file in group)
+                    {
+                        <button class="file-row @(content?.Summary.RelativePath == file.RelativePath ? "active" : "")" @onclick="() => OpenAsync(file.RelativePath)">
+                            <span>@file.DisplayName</span>
+                            <small>@file.RelativePath</small>
+                        </button>
+                    }
+                }
+            </aside>
+            <main class="markdown-editor-pane">
+                @if (content is null)
+                {
+                    <EmptyState Message="Choose Agent Handoff, backend docs, README, imported instructions, or another safe markdown file." />
+                }
+                else
+                {
+                    <div class="editor-header">
+                        <div>
+                            <h3>@content.Summary.DisplayName</h3>
+                            <p class="muted">@content.Summary.RelativePath</p>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            @if (content.Summary.IsGenerated) { <span class="pill">Generated</span> }
+                            @if (content.Summary.IsManuallyModifiedGeneratedFile) { <span class="pill warn">Manual edit</span> }
+                            @if (content.Summary.IsExternalMirror) { <span class="pill">External mirror</span> }
+                            @if (dirty) { <span class="pill warn">Unsaved changes</span> }
+                        </div>
+                    </div>
+                    @if (validation?.Warnings.Count > 0)
+                    {
+                        <div class="callout warn">
+                            @foreach (var warning in validation.Warnings)
+                            {
+                                <div>@warning</div>
+                            }
+                        </div>
+                    }
+                    @if (lastSave is not null && !lastSave.Saved && lastSave.RequiresConfirmation)
+                    {
+                        <div class="callout warn">
+                            @lastSave.Warning
+                            <button class="btn" @onclick="ForceSaveAsync">Confirm save</button>
+                        </div>
+                    }
+                    <MarkdownEditor @bind-Value="markdown" ValueHTMLChanged="OnHtmlChanged" EnableMermaid="true" EnableHighlight="true" />
+                }
+            </main>
+        </div>
+    }
+</ProjectWorkspaceLayout>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [SupplyParameterFromQuery(Name = "file")] public string? FilePath { get; set; }
+
+    private IReadOnlyList<MarkdownFileSummaryDto> files = [];
+    private MarkdownFileContentDto? content;
+    private MarkdownValidationResultDto? validation;
+    private MarkdownFileSaveResultDto? lastSave;
+    private string markdown = "";
+    private string? renderedHtml;
+    private bool loading = true;
+    private bool busy;
+    private bool dirty;
+    private bool includeTechnical;
+    private bool includeExternal;
+    private bool onlyEditable = true;
+    private string? error;
+
+    private IEnumerable<MarkdownFileSummaryDto> VisibleFiles => files.Where(f => !onlyEditable || f.IsUserEditable);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try
+        {
+            await LoadFilesAsync();
+            var initial = FilePath ?? files.FirstOrDefault(f => f.Kind == MarkdownFileKind.AiExplanation)?.RelativePath ?? files.FirstOrDefault()?.RelativePath;
+            if (!string.IsNullOrWhiteSpace(initial)) await OpenAsync(initial);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        files = await Api.GetMarkdownFilesAsync(ProjectId, includeTechnical: includeTechnical, includeExternalMirror: includeExternal, includeUserMarkdown: true);
+    }
+
+    private async Task OpenAsync(string relativePath)
+    {
+        content = await Api.GetMarkdownFileAsync(ProjectId, relativePath);
+        markdown = content.Markdown;
+        renderedHtml = content.RenderedHtml;
+        dirty = false;
+        validation = null;
+        lastSave = null;
+    }
+
+    private async Task SaveAsync(MarkdownSaveMode mode = MarkdownSaveMode.Normal)
+    {
+        if (content is null) return;
+        busy = true;
+        try
+        {
+            validation = await Api.ValidateMarkdownAsync(ProjectId, markdown);
+            lastSave = await Api.SaveMarkdownFileAsync(ProjectId, content.Summary.RelativePath, new MarkdownFileSaveRequestDto(content.Summary.RelativePath, markdown, content.ContentHash, mode));
+            if (lastSave.Saved)
+            {
+                Toast.ShowSuccess("Markdown saved.");
+                await OpenAsync(lastSave.RelativePath);
+            }
+            else
+            {
+                Toast.ShowError(lastSave.Warning ?? "Markdown was not saved.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private Task ForceSaveAsync() => SaveAsync(MarkdownSaveMode.ForceOverwriteManualGenerated);
+
+    private Task OnHtmlChanged(string html)
+    {
+        renderedHtml = html;
+        dirty = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task CopyAsync()
+    {
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [markdown]);
+        Toast.ShowSuccess("Markdown copied.");
+    }
+
+    private void InsertMermaid()
+    {
+        markdown += """
+
+```mermaid
+flowchart LR
+    A[Write Markdown] --> B{Preview?}
+    B -- yes --> C[Render Mermaid]
+    B -- no --> D[Keep editing]
+```
+""";
+        dirty = true;
+    }
+
+    private static string GroupLabel(MarkdownWorkspaceScope scope) => scope switch
+    {
+        MarkdownWorkspaceScope.BackendDocs => "Backend Docs",
+        MarkdownWorkspaceScope.ProjectContext => "Project Context",
+        MarkdownWorkspaceScope.Instructions => "Instructions",
+        MarkdownWorkspaceScope.ExternalMirror => "External Mirror",
+        MarkdownWorkspaceScope.UserMarkdown => "User Markdown",
+        _ => scope.ToString()
+    };
+}

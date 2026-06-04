@@ -35,6 +35,10 @@ public interface ISourceWorkerApiClient
     Task<ContextBrowserSummary> GetContextBrowserAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContextBrowserFile>> GetContextFilesAsync(Guid projectId, bool showTechnical = false, bool showExports = false, CancellationToken cancellationToken = default);
     Task<string> ReadContextAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MarkdownFileSummaryDto>> GetMarkdownFilesAsync(Guid projectId, MarkdownWorkspaceScope? scope = null, bool includeTechnical = false, bool includeExternalMirror = false, bool includeUserMarkdown = true, CancellationToken cancellationToken = default);
+    Task<MarkdownFileContentDto> GetMarkdownFileAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default);
+    Task<MarkdownFileSaveResultDto> SaveMarkdownFileAsync(Guid projectId, string relativePath, MarkdownFileSaveRequestDto request, CancellationToken cancellationToken = default);
+    Task<MarkdownValidationResultDto> ValidateMarkdownAsync(Guid projectId, string markdown, CancellationToken cancellationToken = default);
     Task<GeneratedOutputSet> GetOutputsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContextPackManifest>> GetPacksAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<ContextPackManifest?> GetPackAsync(Guid projectId, string packId, CancellationToken cancellationToken = default);
@@ -43,6 +47,9 @@ public interface ISourceWorkerApiClient
     Task<RunExportResponse> RunExportAsync(Guid projectId, string exportProfileId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AiProviderStatusDto>> GetAiProvidersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AiProviderStatusDto>> GetAiProviderStatusesAsync(CancellationToken cancellationToken = default);
+    Task<AiProviderCatalogDto> GetAiProviderCatalogAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiProviderPresetInfoDto>> GetAiProviderPresetsAsync(CancellationToken cancellationToken = default);
+    Task<AiProviderModelListDto> GetAiProviderModelsAsync(string providerId, CancellationToken cancellationToken = default);
     Task<AiProviderConfigurationResultDto> ConfigureAiProviderAsync(AiProviderConfigurationDto configuration, CancellationToken cancellationToken = default);
     Task<AiProviderValidationResultDto> ValidateAiProviderAsync(AiProviderConfigurationDto configuration, int maxOutputTokens = 1200, CancellationToken cancellationToken = default);
     Task<AiProviderStatusDto> TestAiProviderAsync(string providerId, CancellationToken cancellationToken = default);
@@ -62,9 +69,13 @@ public interface ISourceWorkerApiClient
     Task<AiExplanationOptionsDto> GetAiExplanationOptionsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<AiExplanationPreviewDto> PreviewAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
     Task<AiExplanationResultDto> RunAiExplanationAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<AiExplanationStreamUpdateDto> RunAiExplanationStreamingAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
+    Task<AiExplanationJobStatusDto> StartAiExplanationJobAsync(Guid projectId, AiExplanationRequestDto request, CancellationToken cancellationToken = default);
+    Task<AiExplanationJobStatusDto?> GetAiExplanationJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
+    Task<AiExplanationJobStatusDto?> CancelAiExplanationJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AiExplanationResultDto>> GetAiExplanationRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<AiExplanationResultDto?> GetAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
-    Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, CancellationToken cancellationToken = default);
+    Task<AiExplanationSaveResultDto> SaveAiExplanationAsync(Guid projectId, Guid runId, bool confirmOverwrite = false, string? markdownOverride = null, CancellationToken cancellationToken = default);
     Task<bool> DeleteAiExplanationRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken = default);
     Task<DogfoodProjectReadinessDto> GetDogfoodStatusAsync(CancellationToken cancellationToken = default);
     Task<DogfoodProjectReadinessDto> GetProjectDogfoodStatusAsync(Guid projectId, CancellationToken cancellationToken = default);

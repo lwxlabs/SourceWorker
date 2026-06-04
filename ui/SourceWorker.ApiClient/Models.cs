@@ -126,7 +126,22 @@ public sealed record DashboardActionAvailability(
 
 public sealed record DashboardActionRequirement(string Key, string Description, bool IsMet);
 
-public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater }
+public enum AiProviderKind { OpenAI, Ollama, OpenAiCompatible, AzureOpenAILater, AnthropicLater, LMStudioLater, Gemini }
+public enum AiProviderType { OpenAI, Gemini, OpenAICompatible, Ollama }
+public enum ProviderPreset { OpenAI, Gemini, LMStudio, Ollama, OpenAICompatibleCustom, LocalAI, vLLM, OpenRouterLater }
+public enum MarkdownWorkspaceScope { ProjectContext, BackendDocs, Instructions, ExternalMirror, UserMarkdown, AllSafeMarkdown }
+public enum MarkdownFileKind { AgentHandoff, BackendDoc, AiExplanation, ContextDoc, ImportedInstruction, ExternalMirrorDoc, UserMarkdown, TechnicalMarkdown }
+public enum MarkdownSaveMode { Normal, ForceOverwriteGenerated, ForceOverwriteManualGenerated }
+public sealed record MarkdownFileSummaryDto(Guid ProjectId, string RelativePath, string DisplayName, MarkdownFileKind Kind, MarkdownWorkspaceScope Scope, long SizeBytes, DateTimeOffset LastModifiedUtc, bool IsGenerated, bool IsUserEditable, bool IsSourceControlled, bool IsExternalMirror, bool IsTechnical, bool HasSourceWorkerMarker, bool IsManuallyModifiedGeneratedFile, string? Warning);
+public sealed record MarkdownFileContentDto(MarkdownFileSummaryDto Summary, string Markdown, string? RenderedHtml, string ContentHash, DateTimeOffset LastLoadedUtc);
+public sealed record MarkdownFileSaveRequestDto(string RelativePath, string Markdown, string? ExpectedContentHash, MarkdownSaveMode SaveMode = MarkdownSaveMode.Normal);
+public sealed record MarkdownFileSaveResultDto(bool Saved, string RelativePath, string NewContentHash, DateTimeOffset LastModifiedUtc, string? Warning, bool RequiresConfirmation);
+public sealed record MarkdownValidationResultDto(bool IsValid, IReadOnlyList<string> Warnings);
+public sealed record AiProviderCapabilitiesDto(bool SupportsResponsesApi, bool SupportsChatCompletions, bool SupportsGenerateContent, bool SupportsStreaming, bool SupportsStructuredOutput, bool SupportsToolUse, bool SupportsVision, bool SupportsEmbeddings, bool RecommendedForExplanation);
+public sealed record AiProviderCatalogEntryDto(AiProviderType ProviderType, string DisplayName, string DefaultBaseUrl, IReadOnlyList<string> SuggestedModels, bool RequiresApiKey, bool IsLocal, bool DataLeavesMachine, AiProviderCapabilitiesDto Capabilities);
+public sealed record AiProviderPresetInfoDto(ProviderPreset Preset, string DisplayName, AiProviderType ProviderType, string DefaultBaseUrl, string? DefaultModel, bool ApiKeyRequired, bool IsLocal, bool DataLeavesMachine, string Guidance);
+public sealed record AiProviderCatalogDto(IReadOnlyList<AiProviderCatalogEntryDto> Providers, IReadOnlyList<AiProviderPresetInfoDto> Presets, DateTimeOffset GeneratedUtc);
+public sealed record AiProviderModelListDto(string ProviderId, IReadOnlyList<string> Models, bool IsDiscovered, string? Warning);
 public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
 public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
 public enum ExplanationProfile { DeveloperOnboarding, ArchitectureDeepDive, PublicApiGuide, MaintenanceGuide, TestAndQualityGuide, FullProjectExplanation }
@@ -171,10 +186,12 @@ public sealed record AiExplanationOptionsDto(Guid ProjectId, IReadOnlyList<AiPro
 public sealed record AiExplanationRequestDto(Guid ProjectId, string ProviderId, string Model, string ContextPackId, ExplanationProfile ExplanationProfile, string? UserInstruction, bool IncludeSourceSnippets, bool IncludeTests, bool IncludeGeneratedDocs, bool IncludePublicApi, bool IncludeFlows, bool IncludeArchitecture, int MaxInputTokens, int MaxOutputTokens, bool StorePrompt, bool StoreOutput);
 public sealed record AiExplanationSourceFileDto(string RelativePath, string Kind, int? StartLine, int? EndLine, int TokenEstimate, bool Included, string? Warning);
 public sealed record AiExplanationPreviewDto(Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string ContextPackId, ExplanationProfile ExplanationProfile, IReadOnlyList<AiExplanationSourceFileDto> IncludedFiles, IReadOnlyList<string> MissingFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiCostEstimateDto CostEstimate, string PromptText, string PromptHash, bool IsBlocked);
+public sealed record AiExplanationStreamUpdateDto(string Phase, string Message, string? DeltaMarkdown, int OutputCharacters, TimeSpan Elapsed, AiExplanationResultDto? Result, bool IsCompleted, bool IsFailed);
+public sealed record AiExplanationJobStatusDto(Guid JobId, Guid ProjectId, string Phase, string Message, int OutputCharacters, DateTimeOffset StartedUtc, DateTimeOffset UpdatedUtc, TimeSpan Elapsed, bool IsCompleted, bool IsFailed, bool IsCancelled, string? MarkdownPreview, AiExplanationResultDto? Result);
 public sealed record AiExplanationSectionDto(string Title, string Markdown);
 public sealed record AiExplanationQualityReportDto(AiExplanationQualityStatus Status, IReadOnlyList<string> PassedChecks, IReadOnlyList<string> Warnings);
 public sealed record AiExplanationResultDto(Guid Id, Guid ProjectId, string ProviderId, string Model, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string PromptHash, string? OutputHash, int EstimatedInputTokens, int EstimatedOutputTokens, IReadOnlyList<AiSafetyWarningDto> Warnings, IReadOnlyList<AiExplanationSectionDto> Sections, string? Markdown, string SuggestedFilePath, string? Error, AiExplanationQualityReportDto? Quality);
-public sealed record AiExplanationSaveRequestDto(bool ConfirmOverwrite = false);
+public sealed record AiExplanationSaveRequestDto(bool ConfirmOverwrite = false, string? MarkdownOverride = null);
 public sealed record AiExplanationSaveResultDto(Guid ProjectId, Guid RunId, bool Saved, string SuggestedFilePath, string? SavedFilePath, IReadOnlyList<string> Warnings);
 public sealed record DogfoodChecklistItemDto(string Id, string Label, bool IsComplete, string? Detail);
 public sealed record DogfoodChecklistDto(IReadOnlyList<DogfoodChecklistItemDto> Items, string Status, IReadOnlyList<string> NextActions);

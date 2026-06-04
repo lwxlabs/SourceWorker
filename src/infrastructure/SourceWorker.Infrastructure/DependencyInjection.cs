@@ -35,6 +35,11 @@ public static class DependencyInjection
         services.AddSingleton<IGeneratedArtifactCleanupService, GeneratedArtifactCleanupService>();
         services.AddSingleton<IContextBrowserService, ContextBrowserService>();
         services.AddSingleton<IContextSearchService, ContextBrowserService>();
+        services.AddSingleton<IMermaidMarkdownValidator, MermaidMarkdownValidator>();
+        services.AddSingleton<IMarkdownWorkspaceService, MarkdownWorkspaceService>();
+        services.AddSingleton<IMarkdownFileReader>(sp => (MarkdownWorkspaceService)sp.GetRequiredService<IMarkdownWorkspaceService>());
+        services.AddSingleton<IMarkdownFileWriter>(sp => (MarkdownWorkspaceService)sp.GetRequiredService<IMarkdownWorkspaceService>());
+        services.AddSingleton<IMarkdownSavePolicyService>(sp => (MarkdownWorkspaceService)sp.GetRequiredService<IMarkdownWorkspaceService>());
         services.AddSingleton<IAgentHandoffService, AgentHandoffService>();
         services.AddSingleton<IScanCompletenessService, ScanCompletenessService>();
         services.AddSingleton<IOutputProfileService, OutputProfileService>();

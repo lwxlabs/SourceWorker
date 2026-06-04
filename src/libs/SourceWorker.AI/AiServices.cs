@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using SourceWorker.Application;
 using SourceWorker.Domain;
@@ -13,6 +15,7 @@ public static class DependencyInjection
     {
         services.AddSingleton<IAiModelCatalogService, StaticAiModelCatalogService>();
         services.AddSingleton<IAiModelCatalogProvider, StaticAiModelCatalogService>();
+        services.AddSingleton<IAiProviderCatalogService, AiProviderCatalogService>();
         services.AddSingleton<IAiTokenEstimator, SimpleAiTokenEstimator>();
         services.AddSingleton<IAiSafetyService, AiSafetyService>();
         services.AddSingleton<IAiRedactionService, AiRedactionService>();
@@ -60,6 +63,125 @@ public sealed class StaticAiModelCatalogService : IAiModelCatalogService, IAiMod
             new AiModelPricing(m.InputUsdPerMillionTokens, m.OutputUsdPerMillionTokens, m.InputUsdPerMillionTokens is not null && m.OutputUsdPerMillionTokens is not null),
             new AiModelContextWindow(m.ContextWindowTokens, m.ContextWindowTokens is not null),
             new AiModelFeatureFlags(m.Capabilities.Contains(AiModelCapability.StreamingLater), m.Capabilities.Contains(AiModelCapability.ToolCallingLater), false, m.Capabilities.Contains(AiModelCapability.Local)))).ToArray(), providerKind == AiProviderKind.Ollama, DateTimeOffset.UtcNow));
+}
+
+public sealed class AiProviderCatalogService(IAiProviderConfigurationRepository configurations) : IAiProviderCatalogService
+{
+    public AiProviderCatalog GetCatalog() => new(Providers, Presets, DateTimeOffset.UtcNow);
+    public IReadOnlyList<AiProviderPresetInfo> GetPresets() => Presets;
+
+    public async Task<AiProviderModelList> GetModelsAsync(string providerId, CancellationToken cancellationToken)
+    {
+        var config = await configurations.GetAsync(providerId, cancellationToken);
+        if (config is null) return new AiProviderModelList(providerId, [], false, "Provider is not configured.");
+        return config.Kind switch
+        {
+            AiProviderKind.Ollama => await GetOllamaModelsAsync(config, cancellationToken),
+            AiProviderKind.OpenAiCompatible when (config.BaseUrl ?? "").Contains("localhost:1234", StringComparison.OrdinalIgnoreCase) => await GetOpenAiCompatibleModelsAsync(config, cancellationToken),
+            AiProviderKind.OpenAI => new AiProviderModelList(providerId, ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"], false, "OpenAI model discovery is not enabled in this MVP; manual model input is supported."),
+            AiProviderKind.Gemini => new AiProviderModelList(providerId, ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash"], false, "Gemini model discovery is not enabled in this MVP; manual model input is supported."),
+            _ => new AiProviderModelList(providerId, [config.Model], false, "Manual model input is supported.")
+        };
+    }
+
+    private static async Task<AiProviderModelList> GetOllamaModelsAsync(AiProviderConfiguration config, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5), BaseAddress = new Uri(NormalizeOllamaBase(config.BaseUrl)) };
+            using var response = await client.GetAsync("tags", cancellationToken);
+            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Ollama returned {(int)response.StatusCode}. Start Ollama and pull the model.");
+            using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            var models = doc.RootElement.TryGetProperty("models", out var items)
+                ? items.EnumerateArray().Select(item => item.TryGetProperty("name", out var name) ? name.GetString() : null).Where(m => !string.IsNullOrWhiteSpace(m)).Cast<string>().ToArray()
+                : [];
+            return new AiProviderModelList(config.Kind.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
+        }
+        catch (Exception ex)
+        {
+            return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Could not reach Ollama. Start Ollama at http://localhost:11434/api. {ex.Message}");
+        }
+    }
+
+    private static async Task<AiProviderModelList> GetOpenAiCompatibleModelsAsync(AiProviderConfiguration config, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var baseUrl = (config.BaseUrl ?? "http://localhost:1234/v1").TrimEnd('/');
+            if (baseUrl.Contains("localhost:1234", StringComparison.OrdinalIgnoreCase) || baseUrl.Contains("127.0.0.1:1234", StringComparison.OrdinalIgnoreCase))
+            {
+                var root = baseUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? baseUrl[..^3] : baseUrl;
+                using var nativeClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5), BaseAddress = new Uri(root.TrimEnd('/') + "/") };
+                using var nativeResponse = await nativeClient.GetAsync("api/v0/models", cancellationToken);
+                if (nativeResponse.IsSuccessStatusCode)
+                {
+                    using var nativeDoc = System.Text.Json.JsonDocument.Parse(await nativeResponse.Content.ReadAsStringAsync(cancellationToken));
+                    if (nativeDoc.RootElement.TryGetProperty("data", out var nativeItems))
+                    {
+                        var loaded = new List<string>();
+                        var available = new List<string>();
+                        foreach (var item in nativeItems.EnumerateArray())
+                        {
+                            if (!item.TryGetProperty("id", out var idProperty)) continue;
+                            var id = idProperty.GetString();
+                            if (string.IsNullOrWhiteSpace(id) || id.Contains("embedding", StringComparison.OrdinalIgnoreCase)) continue;
+                            available.Add(id);
+                            if (item.TryGetProperty("state", out var state) && state.GetString()?.Equals("loaded", StringComparison.OrdinalIgnoreCase) == true)
+                            {
+                                loaded.Add(id);
+                            }
+                        }
+
+                        if (loaded.Count > 0)
+                        {
+                            return new AiProviderModelList(config.Kind.ToString(), loaded.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "Loaded LM Studio models.");
+                        }
+
+                        if (available.Count > 0)
+                        {
+                            return new AiProviderModelList(config.Kind.ToString(), available.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "No LM Studio model is loaded. Load a model before generating.");
+                        }
+                    }
+                }
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5), BaseAddress = new Uri(baseUrl + "/") };
+            using var response = await client.GetAsync("models", cancellationToken);
+            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, "Start LM Studio local server and enable Developer / Local Server.");
+            using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            var models = doc.RootElement.TryGetProperty("data", out var items)
+                ? items.EnumerateArray().Select(item => item.TryGetProperty("id", out var id) ? id.GetString() : null).Where(m => !string.IsNullOrWhiteSpace(m)).Cast<string>().ToArray()
+                : [];
+            return new AiProviderModelList(config.Kind.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
+        }
+        catch (Exception ex)
+        {
+            return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Could not reach LM Studio at http://localhost:1234/v1. {ex.Message}");
+        }
+    }
+
+    private static string NormalizeOllamaBase(string? baseUrl)
+    {
+        var value = string.IsNullOrWhiteSpace(baseUrl) ? "http://localhost:11434/api" : baseUrl.TrimEnd('/');
+        return value.EndsWith("/api", StringComparison.OrdinalIgnoreCase) ? value + "/" : value + "/api/";
+    }
+
+    private static readonly AiProviderCatalogEntry[] Providers =
+    [
+        new(AiProviderType.OpenAI, "OpenAI", "https://api.openai.com/v1", ["gpt-4.1", "gpt-4.1-mini", "gpt-4o"], true, false, true, new(true, true, false, false, false, false, false, false, true)),
+        new(AiProviderType.Gemini, "Gemini", "https://generativelanguage.googleapis.com/v1beta", ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash"], true, false, true, new(false, false, true, false, false, false, false, false, true)),
+        new(AiProviderType.Ollama, "Ollama", "http://localhost:11434/api", ["llama3.1", "qwen2.5-coder", "codellama"], false, true, false, new(false, false, false, false, false, false, false, false, true)),
+        new(AiProviderType.OpenAICompatible, "OpenAI-compatible", "http://localhost:1234/v1", ["manual-model"], false, true, false, new(true, true, false, false, false, false, false, false, true))
+    ];
+
+    private static readonly AiProviderPresetInfo[] Presets =
+    [
+        new(ProviderPreset.OpenAI, "OpenAI", AiProviderType.OpenAI, "https://api.openai.com/v1", "gpt-4.1-mini", true, false, true, "Best explanation quality; selected context leaves this machine."),
+        new(ProviderPreset.Gemini, "Gemini", AiProviderType.Gemini, "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash", true, false, true, "Online Google Gemini provider; selected context leaves this machine."),
+        new(ProviderPreset.LMStudio, "LM Studio Local", AiProviderType.OpenAICompatible, "http://localhost:1234/v1", null, false, true, false, "Start LM Studio Developer / Local Server and choose a loaded model."),
+        new(ProviderPreset.Ollama, "Ollama Local", AiProviderType.Ollama, "http://localhost:11434/api", "llama3.1", false, true, false, "Start Ollama and pull a model, for example: ollama pull llama3.1."),
+        new(ProviderPreset.OpenAICompatibleCustom, "OpenAI-compatible Custom", AiProviderType.OpenAICompatible, "http://localhost:1234/v1", null, false, true, false, "Use any compatible /v1 endpoint and choose whether it is local or online.")
+    ];
 }
 
 public sealed class SimpleAiTokenEstimator : IAiTokenEstimator
@@ -273,18 +395,18 @@ public sealed class AiProviderValidationService(IAiSecretStore secrets, IAiProvi
         var issues = new List<AiProviderValidationIssue>();
         if (string.IsNullOrWhiteSpace(model)) issues.Add(new("missing-model", "High", "Model name is required.", "model"));
         if (maxOutputTokens <= 0) issues.Add(new("invalid-max-output-tokens", "High", "Max output tokens must be positive.", "maxOutputTokens"));
-        var requiresKey = kind == AiProviderKind.OpenAI;
+        var requiresKey = kind is AiProviderKind.OpenAI or AiProviderKind.Gemini;
         if (requiresKey && string.IsNullOrWhiteSpace(apiKey))
         {
             var existing = await configurations.GetAsync(kind.ToString(), cancellationToken);
             if (existing?.ApiKeySecretName is null || string.IsNullOrWhiteSpace(await secrets.GetSecretAsync(existing.ApiKeySecretName, cancellationToken)))
                 issues.Add(new("missing-api-key", "High", "API key is required.", "apiKey"));
         }
-        var needsBaseUrl = kind is AiProviderKind.Ollama or AiProviderKind.OpenAiCompatible;
+        var needsBaseUrl = kind is AiProviderKind.Ollama or AiProviderKind.OpenAiCompatible or AiProviderKind.Gemini;
         var validUrl = !needsBaseUrl || Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         if (!validUrl) issues.Add(new("invalid-base-url", "High", "Base URL must be an absolute HTTP/HTTPS URL.", "baseUrl"));
-        if (kind == AiProviderKind.Ollama && string.IsNullOrWhiteSpace(baseUrl)) issues.Add(new("missing-ollama-url", "Medium", "Ollama base URL is recommended. Default is http://localhost:11434.", "baseUrl"));
-        return new AiProviderValidationResult(kind.ToString(), kind, issues.Count == 0, issues, new AiProviderSetupState(issues.Count == 0, !string.IsNullOrWhiteSpace(model), !requiresKey || !string.IsNullOrWhiteSpace(apiKey), validUrl, kind == AiProviderKind.Ollama, secrets.Mask(apiKey)));
+        if (kind == AiProviderKind.Ollama && string.IsNullOrWhiteSpace(baseUrl)) issues.Add(new("missing-ollama-url", "Medium", "Ollama base URL is recommended. Default is http://localhost:11434/api.", "baseUrl"));
+        return new AiProviderValidationResult(kind.ToString(), kind, issues.Count == 0, issues, new AiProviderSetupState(issues.Count == 0, !string.IsNullOrWhiteSpace(model), !requiresKey || !string.IsNullOrWhiteSpace(apiKey), validUrl, kind is AiProviderKind.Ollama or AiProviderKind.OpenAiCompatible, secrets.Mask(apiKey)));
     }
 
     public async Task<AiProviderConnectionDiagnostic> DiagnoseAsync(string providerId, CancellationToken cancellationToken)
@@ -305,6 +427,7 @@ public sealed class AiProviderValidationService(IAiSecretStore secrets, IAiProvi
             AiProviderStatus.Healthy => Array.Empty<string>(),
             AiProviderStatus.NotConfigured => ["Finish provider setup in AI Settings."],
             _ when config.Kind == AiProviderKind.Ollama => ["Start Ollama.", $"Run: ollama pull {config.Model}", "Verify the Ollama base URL."],
+            _ when config.Kind == AiProviderKind.Gemini => ["Verify the Gemini API key.", "Check the model name.", "Check Google API quota/rate limits."],
             _ => ["Check network connectivity.", "Verify API key and model name.", "Try another model."]
         };
         return new AiProviderConnectionDiagnostic(providerId, config.Kind, health.Status, health.Message, actions, health.Status == AiProviderStatus.Healthy ? null : new AiProviderErrorDetails(ToCode(health.Message), ToCategory(health.Message), health.Message, health.Message), DateTimeOffset.UtcNow);
@@ -525,6 +648,8 @@ public sealed class AiExplanationPromptBuilder(
         builder.AppendLine("- Do not include secrets.");
         builder.AppendLine("- Do not repeat raw scan metadata.");
         builder.AppendLine("- Do not mention SourceWorker internals unless explaining generated context.");
+        builder.AppendLine("- Do not copy or answer any example prompt, recommended prompt, or task placeholder embedded in the supplied context.");
+        builder.AppendLine("- Your output must be the project explanation sections below, not a prompt template.");
         builder.AppendLine();
         builder.AppendLine($"Project: {project.Name}");
         builder.AppendLine($"Profile: {request.ExplanationProfile}");
@@ -665,13 +790,124 @@ public sealed class AiExplanationService(
             var provider = registry.GetProvider(request.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
             var modelConfig = string.IsNullOrWhiteSpace(request.Model) ? configuration : configuration with { Model = request.Model };
             var output = await provider.RunAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken);
+            if (string.IsNullOrWhiteSpace(output.Text))
+            {
+                throw new InvalidOperationException("The AI provider completed but returned no explanation text. Try a smaller context pack, reduce included files, lower max input tokens, or increase the local model context length.");
+            }
+
             var completed = await runs.SaveAsync(running with { Status = AiRunStatus.Completed, CompletedUtc = DateTimeOffset.UtcNow, OutputText = request.StoreOutput ? output.Text : output.Text, OutputHash = output.OutputHash }, cancellationToken);
+            await AutoSaveCompletedExplanationAsync(request.ProjectId, completed.Id, cancellationToken);
             return ToResult(completed, quality);
         }
         catch (Exception ex)
         {
             var failed = await runs.SaveAsync(running with { Status = AiRunStatus.Failed, CompletedUtc = DateTimeOffset.UtcNow, Error = ex.Message }, cancellationToken);
             return ToResult(failed, quality);
+        }
+    }
+
+    public async IAsyncEnumerable<AiExplanationStreamUpdate> RunStreamingAsync(
+        AiExplanationRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var channel = Channel.CreateUnbounded<AiExplanationStreamUpdate>();
+        var startedUtc = DateTimeOffset.UtcNow;
+        _ = ProduceExplanationStreamAsync(channel.Writer, request, startedUtc, cancellationToken);
+
+        await foreach (var update in channel.Reader.ReadAllAsync(cancellationToken))
+        {
+            yield return update;
+        }
+    }
+
+    private async Task ProduceExplanationStreamAsync(
+        ChannelWriter<AiExplanationStreamUpdate> writer,
+        AiExplanationRequest request,
+        DateTimeOffset startedUtc,
+        CancellationToken cancellationToken)
+    {
+        AiRun? running = null;
+        AiExplanationPreview? preview = null;
+        var output = new StringBuilder();
+
+        AiExplanationStreamUpdate Update(string phase, string message, string? delta, int outputCharacters, AiExplanationResult? result = null, bool isCompleted = false, bool isFailed = false)
+            => new(phase, $"{message} Elapsed: {FormatElapsed(DateTimeOffset.UtcNow - startedUtc)}.", delta, outputCharacters, DateTimeOffset.UtcNow - startedUtc, result, isCompleted, isFailed);
+
+        try
+        {
+            await writer.WriteAsync(Update("starting", "Preparing explanation request.", null, 0), cancellationToken);
+
+            var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
+            preview = await PreviewAsync(request, cancellationToken);
+            await writer.WriteAsync(Update("preview", $"Prompt ready: {preview.TokenEstimate.PromptTokens} input tokens, max {preview.TokenEstimate.MaxOutputTokens} output tokens.", null, 0), cancellationToken);
+
+            if (preview.IsBlocked)
+            {
+                var blocked = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.SafetyBlocked, null, "High-risk safety warning blocked explanation generation."), cancellationToken);
+                await writer.WriteAsync(Update("blocked", "Safety warnings blocked explanation generation.", null, 0, ToResult(blocked, quality), isCompleted: true, isFailed: true), cancellationToken);
+                return;
+            }
+
+            running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
+            var provider = registry.GetProvider(request.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
+            var modelConfig = string.IsNullOrWhiteSpace(request.Model) ? configuration : configuration with { Model = request.Model };
+            await writer.WriteAsync(Update("prompt-processing", $"Request sent to {configuration.Kind} model {modelConfig.Model}. The provider is processing the prompt before answer tokens are available.", null, output.Length), cancellationToken);
+
+            if (provider is IAiStreamingProvider streamingProvider)
+            {
+                await foreach (var chunk in streamingProvider.StreamAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken))
+                {
+                    if (!string.IsNullOrEmpty(chunk.DeltaText))
+                    {
+                        output.Append(chunk.DeltaText);
+                        await writer.WriteAsync(Update("answer-streaming", chunk.Message, chunk.DeltaText, output.Length), cancellationToken);
+                    }
+                    else if (chunk.IsCompleted)
+                    {
+                        await writer.WriteAsync(Update("provider-completed", $"Provider stream completed with {output.Length} characters.", null, output.Length), cancellationToken);
+                    }
+                    else
+                    {
+                        await writer.WriteAsync(Update("reasoning", chunk.Message, null, output.Length), cancellationToken);
+                    }
+                }
+            }
+            else
+            {
+                var providerOutput = await provider.RunAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken);
+                output.Append(providerOutput.Text);
+                await writer.WriteAsync(Update("received", $"Provider completed with {output.Length} characters.", providerOutput.Text, output.Length), cancellationToken);
+            }
+
+            if (output.Length == 0)
+            {
+                throw new InvalidOperationException("The AI provider completed but returned no explanation text. Try a smaller context pack, reduce included files, lower max input tokens, or increase the local model context length.");
+            }
+
+            var outputText = output.ToString();
+            var completed = await runs.SaveAsync(running with { Status = AiRunStatus.Completed, CompletedUtc = DateTimeOffset.UtcNow, OutputText = request.StoreOutput ? outputText : outputText, OutputHash = AiContextPackPromptBuilder.Hash(outputText) }, cancellationToken);
+            await writer.WriteAsync(Update("saving", "Provider finished. Saving generated explanation file.", null, output.Length, ToResult(completed, quality)), cancellationToken);
+            var saveResult = await AutoSaveCompletedExplanationAsync(request.ProjectId, completed.Id, cancellationToken);
+            var saveMessage = saveResult.Saved
+                ? $"Explanation generated and saved to {saveResult.SuggestedFilePath}."
+                : $"Explanation generated, but the file was not saved: {string.Join(" ", saveResult.Warnings)}";
+            await writer.WriteAsync(Update(saveResult.Saved ? "saved" : "save-warning", saveMessage, null, output.Length, ToResult(completed, quality)), cancellationToken);
+            await writer.WriteAsync(Update("completed", $"Explanation generated in {FormatElapsed(DateTimeOffset.UtcNow - startedUtc)}.", null, output.Length, ToResult(completed, quality), isCompleted: true), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            AiExplanationResult? failedResult = null;
+            if (running is not null)
+            {
+                var failed = await runs.SaveAsync(running with { Status = AiRunStatus.Failed, CompletedUtc = DateTimeOffset.UtcNow, Error = ex.Message, OutputText = output.Length > 0 ? output.ToString() : null, OutputHash = output.Length > 0 ? AiContextPackPromptBuilder.Hash(output.ToString()) : null }, CancellationToken.None);
+                failedResult = ToResult(failed, quality);
+            }
+
+            await writer.WriteAsync(Update("failed", ex.Message, null, output.Length, failedResult, isCompleted: true, isFailed: true), CancellationToken.None);
+        }
+        finally
+        {
+            writer.TryComplete();
         }
     }
 
@@ -712,13 +948,16 @@ public sealed class AiExplanationService(
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
-        var markdown = AiExplanationPromptBuilder.StripSourceWorkerMetadata(run.OutputText);
+        var markdown = AiExplanationPromptBuilder.StripSourceWorkerMetadata(request.MarkdownOverride ?? run.OutputText);
         await File.WriteAllTextAsync(absolute, markdown, cancellationToken);
         var hash = AiContextPackPromptBuilder.Hash(markdown);
         var latestScan = await scanRuns.GetLatestAsync(project.Id, cancellationToken);
         await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), project.Id, latestScan?.Id, "ai-explanation", relative, absolute, GeneratedArtifactType.InternalGeneratedDoc, hash, DateTimeOffset.UtcNow, run.PromptHash, GeneratedArtifactStatus.Generated, "SourceWorker.AI.Explanation", $"Provider={run.ProviderId}; Model={run.Model}; RunId={run.Id}"), cancellationToken);
         return new AiExplanationSaveResult(project.Id, run.Id, true, relative, absolute, []);
     }
+
+    private Task<AiExplanationSaveResult> AutoSaveCompletedExplanationAsync(Guid projectId, Guid runId, CancellationToken cancellationToken)
+        => SaveAsync(new AiExplanationSaveRequest(projectId, runId, ConfirmOverwrite: true), cancellationToken);
 
     public async Task<bool> DeleteRunAsync(Guid projectId, Guid runId, CancellationToken cancellationToken)
     {
@@ -732,6 +971,7 @@ public sealed class AiExplanationService(
         => new(Guid.NewGuid(), request.ProjectId, request.ProviderId, configuration.Kind, string.IsNullOrWhiteSpace(request.Model) ? configuration.Model : request.Model, ExplanationPackId(request), request.UserInstruction, preview.PromptHash, request.StorePrompt, request.StorePrompt ? preview.PromptText : null, preview.IncludedFiles.Where(f => f.Included).Select(f => f.RelativePath).ToArray(), preview.SafetyWarnings, preview.TokenEstimate, status, DateTimeOffset.UtcNow, status is AiRunStatus.Completed or AiRunStatus.Failed or AiRunStatus.SafetyBlocked ? DateTimeOffset.UtcNow : null, error, output, output is null ? null : AiContextPackPromptBuilder.Hash(output));
 
     private static string ExplanationPackId(AiExplanationRequest request) => $"ai-explanation:{request.ContextPackId}:{request.ExplanationProfile}";
+    private static string FormatElapsed(TimeSpan elapsed) => elapsed.TotalMinutes >= 1 ? $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s" : $"{Math.Max(0, (int)elapsed.TotalSeconds)}s";
     private static bool IsExplanationRun(AiRun run) => run.PackId.StartsWith("ai-explanation:", StringComparison.OrdinalIgnoreCase);
     private static AiExplanationResult ToResult(AiRun run, IAiExplanationQualityService quality)
     {
