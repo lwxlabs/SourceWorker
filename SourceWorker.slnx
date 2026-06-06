@@ -1,5 +1,7 @@
 <Solution>
-  <Folder Name="/src/" />
+  <Folder Name="/src/">
+    <Project Path="src/LwXLab.Markdown/LwXLab.Markdown.csproj" />
+  </Folder>
   <Folder Name="/src/core/">
     <Project Path="src/core/SourceWorker.Application/SourceWorker.Application.csproj" />
     <Project Path="src/core/SourceWorker.Contracts/SourceWorker.Contracts.csproj" />

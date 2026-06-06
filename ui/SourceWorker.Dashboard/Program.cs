@@ -1,6 +1,7 @@
 using SourceWorker.Dashboard.Components;
 using SourceWorker.ApiClient;
 using SourceWorker.UI.Services;
+using LwXLab.Markdown.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +34,8 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<DashboardActionService>();
 builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
 builder.Services.AddScoped<IProjectFolderPicker, NoopProjectFolderPicker>();
+
+builder.Services.AddLwXLabMarkdown();
 
 var app = builder.Build();
 

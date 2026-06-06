@@ -4,8 +4,18 @@ public sealed class ToastService
 {
     public event Action? OnChange;
     private readonly List<ToastMessage> _messages = new();
+    private readonly object gate = new();
 
-    public IReadOnlyList<ToastMessage> Messages => _messages;
+    public IReadOnlyList<ToastMessage> Messages
+    {
+        get
+        {
+            lock (gate)
+            {
+                return _messages.ToArray();
+            }
+        }
+    }
 
     public void ShowSuccess(string message, int durationMs = 5000) => Show(message, ToastLevel.Success, durationMs);
     public void ShowError(string message, int durationMs = 5000) => Show(message, ToastLevel.Error, durationMs);
@@ -15,7 +25,11 @@ public sealed class ToastService
     private void Show(string message, ToastLevel level, int durationMs)
     {
         var toast = new ToastMessage(Guid.NewGuid(), message, level, DateTime.UtcNow);
-        _messages.Add(toast);
+        lock (gate)
+        {
+            _messages.Add(toast);
+        }
+
         NotifyStateChanged();
 
         Task.Delay(durationMs).ContinueWith(_ => Remove(toast.Id));
@@ -23,10 +37,19 @@ public sealed class ToastService
 
     public void Remove(Guid id)
     {
-        var toast = _messages.FirstOrDefault(m => m.Id == id);
-        if (toast != null)
+        var removed = false;
+        lock (gate)
         {
-            _messages.Remove(toast);
+            var toast = _messages.FirstOrDefault(m => m.Id == id);
+            if (toast != null)
+            {
+                _messages.Remove(toast);
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
             NotifyStateChanged();
         }
     }

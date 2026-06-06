@@ -223,7 +223,7 @@ app.MapGet("/api/ai/providers/presets", async (IRequestFlow flow, CancellationTo
 app.MapGet("/api/ai/providers/{providerId}/models", async (string providerId, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetAiProviderModelsQuery(providerId), cancellationToken)));
 app.MapPost("/api/ai/providers/configure", async (ConfigureAiProviderRequest request, IRequestFlow flow, CancellationToken cancellationToken)
-    => Results.Ok(await flow.Send(new ConfigureAiProviderCommand(request.Kind, request.Model, request.BaseUrl, request.ApiKey, request.IsEnabled), cancellationToken)));
+    => Results.Ok(await flow.Send(new ConfigureAiProviderCommand(request.Kind, request.Name, request.Model, request.BaseUrl, request.ApiKey, request.IsEnabled), cancellationToken)));
 app.MapPost("/api/ai/providers/validate", async (ValidateAiProviderRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new ValidateAiProviderCommand(request.Kind, request.Model, request.BaseUrl, request.ApiKey, request.MaxOutputTokens), cancellationToken)));
 app.MapPost("/api/ai/providers/{providerId}/test", async (string providerId, IRequestFlow flow, CancellationToken cancellationToken)
@@ -338,7 +338,7 @@ app.Run();
 
 public partial class Program;
 
-public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
+public sealed record ConfigureAiProviderRequest(AiProviderKind Kind, string Name, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
 public sealed record ValidateAiProviderRequest(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, int MaxOutputTokens = 1200);
 public sealed record MarkdownValidateApiRequest(string Markdown);
 public sealed record AiPromptPreviewRequest(string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null);

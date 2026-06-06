@@ -11,7 +11,7 @@
             <select @bind="providerId">
                 @foreach (var provider in providers)
                 {
-                    <option value="@provider.ProviderId">@provider.Kind - @provider.Status</option>
+                    <option value="@provider.ProviderId">@ProviderDisplay(provider)</option>
                 }
             </select>
         </label>
@@ -142,5 +142,12 @@
     {
         run = await Api.StartAiRunAsync(ProjectId, new AiRunRequest(providerId, packId, instruction, preview?.SafetyWarnings.Count > 0, maxOutputTokens));
         usage = await Api.GetProjectAiUsageAsync(ProjectId);
+    }
+
+    private static string ProviderDisplay(AiProviderStatusDto provider)
+    {
+        var name = string.IsNullOrWhiteSpace(provider.Name) ? provider.Kind.ToString() : provider.Name;
+        var baseUrl = string.IsNullOrWhiteSpace(provider.BaseUrl) ? "" : $" ({provider.BaseUrl})";
+        return $"{name} - {provider.Kind}{baseUrl}";
     }
 }

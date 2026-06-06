@@ -209,8 +209,8 @@ public sealed class ApiClientTests
         var client = new SourceWorkerApiClient(http, new SourceWorkerApiClientOptions { BearerToken = "test-token" });
 
         var providers = await client.GetAiProvidersAsync();
-        var config = await client.ConfigureAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "llama3.1", "http://localhost:11434", null));
-        var validation = await client.ValidateAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "llama3.1", "http://localhost:11434", null));
+        var config = await client.ConfigureAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "Test Ollama", "llama3.1", "http://localhost:11434", null));
+        var validation = await client.ValidateAiProviderAsync(new AiProviderConfigurationDto(AiProviderKind.Ollama, "Test Ollama", "llama3.1", "http://localhost:11434", null));
         var health = await client.TestAiProviderAsync("Ollama");
         var diagnostic = await client.DiagnoseAiProviderAsync("Ollama");
         var preview = await client.PreviewAiPromptAsync(projectId, new AiPromptPreviewRequest("Ollama", "backend-docs", "Summarize"));

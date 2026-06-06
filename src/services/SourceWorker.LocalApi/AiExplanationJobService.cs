@@ -49,7 +49,7 @@ public sealed class AiExplanationJobService(IServiceScopeFactory scopeFactory) :
 
             await foreach (var update in service.RunStreamingAsync(request, state.Cancellation.Token))
             {
-                state.Update(update.Phase, update.Message, update.DeltaMarkdown, update.Result, update.IsCompleted, update.IsFailed);
+                state.Update(update.Phase, update.Message, update.DeltaMarkdown, update.Result, update.IsCompleted, update.IsFailed, update.Progress);
             }
         }
         catch (OperationCanceledException)
@@ -76,7 +76,8 @@ public sealed record AiExplanationJobStatus(
     bool IsFailed,
     bool IsCancelled,
     string? MarkdownPreview,
-    AiExplanationResult? Result);
+    AiExplanationResult? Result,
+    double? Progress = null);
 
 internal sealed class AiExplanationJobState(Guid jobId, Guid projectId, DateTimeOffset startedUtc)
 {
@@ -93,9 +94,10 @@ internal sealed class AiExplanationJobState(Guid jobId, Guid projectId, DateTime
     public DateTimeOffset UpdatedUtc { get; set; } = startedUtc;
     public bool IsCompleted { get; set; }
     public bool IsFailed { get; set; }
+    public double? Progress { get; set; }
     public AiExplanationResult? Result { get; set; }
 
-    public void Update(string phase, string message, string? deltaMarkdown, AiExplanationResult? result, bool isCompleted, bool isFailed)
+    public void Update(string phase, string message, string? deltaMarkdown, AiExplanationResult? result, bool isCompleted, bool isFailed, double? progress = null)
     {
         lock (gate)
         {
@@ -110,6 +112,7 @@ internal sealed class AiExplanationJobState(Guid jobId, Guid projectId, DateTime
             UpdatedUtc = DateTimeOffset.UtcNow;
             IsCompleted = isCompleted;
             IsFailed = isFailed;
+            Progress = progress ?? (phase == "prompt-processing" ? Progress : null);
             Result = result ?? Result;
 
             if (Result?.Markdown is { Length: > 0 } resultMarkdown)
@@ -125,6 +128,13 @@ internal sealed class AiExplanationJobState(Guid jobId, Guid projectId, DateTime
     {
         lock (gate)
         {
+            var markdownPreview = markdown.Length == 0 ? null : markdown.ToString();
+            var result = Result;
+            if (result is not null && string.IsNullOrWhiteSpace(result.Markdown) && !string.IsNullOrWhiteSpace(markdownPreview))
+            {
+                result = result with { Markdown = markdownPreview };
+            }
+
             return new AiExplanationJobStatus(
                 JobId,
                 ProjectId,
@@ -137,8 +147,9 @@ internal sealed class AiExplanationJobState(Guid jobId, Guid projectId, DateTime
                 IsCompleted,
                 IsFailed,
                 Cancellation.IsCancellationRequested,
-                markdown.Length == 0 ? null : markdown.ToString(),
-                Result);
+                markdownPreview,
+                result,
+                Progress);
         }
     }
 }

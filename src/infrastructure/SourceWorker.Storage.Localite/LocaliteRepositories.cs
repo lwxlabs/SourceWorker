@@ -413,17 +413,15 @@ public sealed class LocaliteAiProviderConfigurationRepository(LocaliteTableStore
 {
     public async Task<AiProviderConfiguration> SaveAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken)
     {
-        var existing = await GetAsync(configuration.Kind.ToString(), cancellationToken);
-        var value = existing is null ? configuration : configuration with { Id = existing.Id };
-        await store.UpsertAsync(Tables.AiProviderConfigurations, value.Id, null, value.Kind.ToString(), AiProviderConfigurationRecordMapper.ToRecord(value), cancellationToken);
-        return value;
+        await store.UpsertAsync(Tables.AiProviderConfigurations, configuration.Id, null, configuration.Kind.ToString(), AiProviderConfigurationRecordMapper.ToRecord(configuration), cancellationToken);
+        return configuration;
     }
 
     public async Task<AiProviderConfiguration?> GetAsync(string providerId, CancellationToken cancellationToken)
-        => (await ListAsync(cancellationToken)).FirstOrDefault(c => c.Kind.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase) || c.Id.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase));
+        => (await ListAsync(cancellationToken)).FirstOrDefault(c => c.Id.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase) || c.Kind.ToString().Equals(providerId, StringComparison.OrdinalIgnoreCase));
 
     public async Task<IReadOnlyList<AiProviderConfiguration>> ListAsync(CancellationToken cancellationToken)
-        => (await store.ListAsync<AiProviderConfigurationRecord>(Tables.AiProviderConfigurations, null, cancellationToken)).Select(AiProviderConfigurationRecordMapper.ToDomain).OrderBy(c => c.Kind.ToString()).ToArray();
+        => (await store.ListAsync<AiProviderConfigurationRecord>(Tables.AiProviderConfigurations, null, cancellationToken)).Select(AiProviderConfigurationRecordMapper.ToDomain).OrderBy(c => c.Name).ThenBy(c => c.Kind.ToString()).ToArray();
 }
 
 public sealed class LocaliteAiRunRepository(LocaliteTableStore store) : IAiRunRepository

@@ -1,5 +1,4 @@
 @page "/projects/{ProjectId:guid}/explanation"
-@implements IDisposable
 @inject ISourceWorkerApiClient Api
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject ToastService Toast
@@ -14,23 +13,12 @@
             {
                 <p class="callout @operationTone">@operationMessage</p>
             }
-            @if (currentActivity is not null)
-            {
-                <div class="activity-feed">
-                    <strong>Current provider activity</strong>
-                    <div class="activity-line @currentActivity.Tone">
-                        <span>@currentActivity.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
-                        <strong>@currentActivity.Phase</strong>
-                        <span>@currentActivity.Message</span>
-                    </div>
-                </div>
-            }
         </div>
         <div class="project-actions">
-            <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy)">Preview Prompt</button>
-            <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy)">Generate Explanation</button>
+            <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Preview Prompt</button>
+            <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Generate Explanation</button>
             <button class="btn btn-outline-danger" @onclick="CancelRunAsync" disabled="@(activeJobId is null)">Cancel</button>
-            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(editedMarkdown) || busy)">Save edited explanation</button>
+            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(editedMarkdown) || busy || activeJobId is not null)">Save edited explanation</button>
             <a class="btn" href="@($"/projects/{ProjectId}/markdown?file=.ai-context/docs/backend/07-ai-explanation.md")">Open in Markdown Workspace</a>
             <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(editedMarkdown)">Copy Explanation</button>
         </div>
@@ -47,7 +35,7 @@
     else
     {
         <Cards Title="Provider and Profile">
-            @if (busy)
+            @if (activeJobId is not null)
             {
                 <p class="callout info">Working on the explanation request. Local models can take a while; LM Studio Developer Logs will show token/context details while this runs.</p>
             }
@@ -57,7 +45,7 @@
                     <select class="form-select" @bind="providerId" @bind:after="ProviderChangedAsync">
                         @foreach (var provider in options?.Providers ?? [])
                         {
-                            <option value="@provider.ProviderId">@provider.Kind - @provider.Message</option>
+                            <option value="@provider.ProviderId">@ProviderDisplay(provider)</option>
                         }
                     </select>
                 </label>
@@ -158,20 +146,10 @@
             </Cards>
         }
 
-        @if (busy || !string.IsNullOrWhiteSpace(liveMarkdownPreview))
+        @if (activeJobId is not null)
         {
             <Cards Title="Generated Explanation">
-                @if (string.IsNullOrWhiteSpace(liveMarkdownPreview))
-                {
-                    <p class="callout info">Waiting for the provider to start sending answer text. The Local API owns this job, so you can navigate away while it continues.</p>
-                }
-                else
-                {
-                    <p class="callout info">Receiving answer text. This preview updates from the backend job status and will become editable after completion.</p>
-                    <div class="markdown-live-preview">
-                        <pre>@liveMarkdownPreview</pre>
-                    </div>
-                }
+                <AiExplanationJobPanel ProjectId="@ProjectId" JobId="@activeJobId.Value" OnFinished="HandleJobFinishedAsync" />
             </Cards>
         }
         else if (result is not null || !string.IsNullOrWhiteSpace(editedMarkdown))
@@ -200,10 +178,11 @@
                         <div class="list-row"><strong>Quality</strong><span>@warning</span></div>
                     }
                 }
-                <MarkdownEditor @bind-Value="editedMarkdown" ValueHTMLChanged="OnExplanationHtmlChanged" EnableMermaid="true" EnableHighlight="true" />
+                <LwXLab.MarkDown @key="editorInstanceKey" @ref="explanationEditor" Value="@editedMarkdown"
+                                 EnableMermaid="true" EnableHighlight="true" SplitView="false"
+                                 Preview="true" ShowStatusBar="false" />
             </Cards>
         }
-
         @if (saveResult is not null)
         {
             <Cards Title="Save Result">
@@ -229,7 +208,8 @@
     private AiExplanationResultDto? result;
     private AiExplanationSaveResultDto? saveResult;
     private string editedMarkdown = "";
-    private string? editedHtml;
+    private int editorInstanceKey;
+    private LwXLab.MarkDown? explanationEditor;
     private string? providerId;
     private string model = "";
     private string packId = "backend-docs";
@@ -249,18 +229,21 @@
     private bool settingsLoaded;
     private string? operationMessage;
     private string operationTone = "info";
-    private ProviderActivityLine? currentActivity;
     private readonly List<string> modelOptions = [];
     private string? modelListWarning;
     private Guid? activeJobId;
-    private CancellationTokenSource? pollingCancellation;
-    private string? liveMarkdownPreview;
-    private string? lastJobSnapshotKey;
-    private bool completionToastShown;
+    private Guid? lastFinishedJobId;
 
     private bool CanPreview => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(packId);
     private string SettingsKey => $"sourceworker:explanation-settings:{ProjectId}";
     private string JobKey => $"sourceworker:explanation-job:{ProjectId}";
+
+    private static string ProviderDisplay(AiProviderStatusDto provider)
+    {
+        var name = string.IsNullOrWhiteSpace(provider.Name) ? provider.Kind.ToString() : provider.Name;
+        var baseUrl = string.IsNullOrWhiteSpace(provider.BaseUrl) ? "" : $" ({provider.BaseUrl})";
+        return $"{name} - {provider.Kind}{baseUrl}";
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -294,16 +277,14 @@
         busy = true;
         operationTone = "info";
         operationMessage = "Building explanation prompt preview...";
-        AddActivity("Preparing", "Building the prompt and selecting context files.", replaceLastSamePhase: true);
         await InvokeAsync(StateHasChanged);
         try
         {
             await SaveSettingsAsync();
             preview = await Api.PreviewAiExplanationAsync(ProjectId, Request());
             operationMessage = $"Prompt preview ready: {preview.TokenEstimate.PromptTokens} input tokens, {preview.TokenEstimate.MaxOutputTokens} output tokens.";
-            AddActivity("Prompt ready", $"{preview.TokenEstimate.PromptTokens} input tokens, {preview.TokenEstimate.MaxOutputTokens} max output tokens, {preview.IncludedFiles.Count(f => f.Included)} included files.");
             operationTone = preview.IsBlocked ? "bad" : preview.SafetyWarnings.Count > 0 ? "warn" : "info";
-            Toast.ShowSuccess("Explanation prompt previewed.");
+            // Toast.ShowSuccess("Explanation prompt previewed.");
         }
         catch (Exception ex)
         {
@@ -326,14 +307,13 @@
         busy = true;
         operationTone = "info";
         operationMessage = "Starting explanation generation in the Local API...";
-        currentActivity = null;
-        liveMarkdownPreview = null;
         result = null;
+        // Clear only when the user explicitly starts a new generation. The finished job
+        // must repopulate this from either the saved result or the live backend preview.
         editedMarkdown = "";
+        editorInstanceKey++;
         saveResult = null;
-        completionToastShown = false;
-        lastJobSnapshotKey = null;
-        AddActivity("Starting", "Starting backend explanation job.");
+        lastFinishedJobId = null;
         await InvokeAsync(StateHasChanged);
 
         try
@@ -341,77 +321,18 @@
             var status = await Api.StartAiExplanationJobAsync(ProjectId, request);
             activeJobId = status.JobId;
             await JS.InvokeAsync<object>("localStorage.setItem", [JobKey, status.JobId.ToString()]);
-            ApplyJobStatus(status);
-            StartPolling(status.JobId);
-            Toast.ShowSuccess("Explanation generation started.");
-        }
-        catch (Exception ex)
-        {
-            activeJobId = null;
             busy = false;
-            operationTone = "bad";
-            operationMessage = ex.Message;
-            AddActivity("Failed", ex.Message, "bad");
-            Toast.ShowError(ex.Message);
+            operationMessage = "Explanation generation is running in the Local API. You can navigate away while it continues.";
+            // Toast.ShowSuccess("Explanation generation started.");
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    private void StartPolling(Guid jobId)
-    {
-        pollingCancellation?.Cancel();
-        pollingCancellation?.Dispose();
-        pollingCancellation = new CancellationTokenSource();
-        _ = PollJobAsync(jobId, pollingCancellation.Token);
-    }
-
-    private async Task PollJobAsync(Guid jobId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-                var status = await Api.GetAiExplanationJobAsync(ProjectId, jobId, cancellationToken);
-                if (status is null)
-                {
-                    activeJobId = null;
-                    busy = false;
-                    operationTone = "bad";
-                    operationMessage = "The Local API no longer has this explanation job. Check logs or start a new generation.";
-                    AddActivity("Not found", operationMessage, "bad");
-                    await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
-                    await InvokeAsync(StateHasChanged);
-                    break;
-                }
-
-                var changed = ApplyJobStatus(status);
-                if (changed)
-                {
-                    await InvokeAsync(StateHasChanged);
-                }
-
-                if (status.IsCompleted || status.IsFailed || status.IsCancelled)
-                {
-                    activeJobId = null;
-                    busy = false;
-                    await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
-                    await InvokeAsync(StateHasChanged);
-                    break;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // The component stopped polling because the user navigated away. The backend job keeps running.
-        }
         catch (Exception ex)
         {
             activeJobId = null;
             busy = false;
             operationTone = "bad";
             operationMessage = ex.Message;
-            AddActivity("Failed", ex.Message, "bad");
+            Toast.ShowError(ex.Message);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -421,15 +342,14 @@
         if (activeJobId is null) return;
         operationTone = "warn";
         operationMessage = "Cancelling explanation generation...";
-        AddActivity("Cancelling", "Cancellation requested. LM Studio may take a moment to release the running prediction.", "warn");
         try
         {
             var status = await Api.CancelAiExplanationJobAsync(ProjectId, activeJobId.Value);
             if (status is not null)
             {
-                ApplyJobStatus(status);
+                await HandleJobFinishedAsync(status);
             }
-            Toast.ShowSuccess("Explanation generation cancellation requested.");
+            // Toast.ShowSuccess("Explanation generation cancellation requested.");
         }
         catch (Exception ex)
         {
@@ -440,31 +360,27 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private bool ApplyJobStatus(AiExplanationJobStatusDto status)
+    private async Task HandleJobFinishedAsync(AiExplanationJobStatusDto status)
     {
-        var snapshotKey = $"{status.Phase}|{status.OutputCharacters}|{status.IsCompleted}|{status.IsFailed}|{status.IsCancelled}|{status.Message}|{status.Result?.Status}|{status.Result?.OutputHash}";
-        if (snapshotKey == lastJobSnapshotKey)
-        {
-            return false;
-        }
+        if (lastFinishedJobId == status.JobId) return;
 
-        lastJobSnapshotKey = snapshotKey;
-        activeJobId = status.IsCompleted || status.IsFailed || status.IsCancelled ? null : status.JobId;
-        busy = !status.IsCompleted && !status.IsFailed && !status.IsCancelled;
+        lastFinishedJobId = status.JobId;
+        activeJobId = null;
+        busy = false;
         operationTone = status.IsFailed ? "bad" : status.IsCancelled ? "warn" : "info";
         operationMessage = status.Message;
-        liveMarkdownPreview = status.MarkdownPreview;
-
-        var tone = status.IsFailed ? "bad" : status.IsCancelled ? "warn" : status.IsCompleted ? "ok" : "info";
-        AddActivity(PhaseLabel(status.Phase), status.Message, tone);
+        await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
 
         if (status.Result is not null)
         {
             result = status.Result;
-            if (!string.IsNullOrWhiteSpace(status.Result.Markdown))
+            var finishedMarkdown = !string.IsNullOrWhiteSpace(status.Result.Markdown)
+                ? status.Result.Markdown
+                : status.MarkdownPreview;
+            if (!string.IsNullOrWhiteSpace(finishedMarkdown))
             {
-                editedMarkdown = status.Result.Markdown;
-                liveMarkdownPreview = null;
+                editedMarkdown = finishedMarkdown;
+                editorInstanceKey++;
             }
 
             if (!string.IsNullOrWhiteSpace(status.Result.Error))
@@ -474,23 +390,21 @@
             }
         }
 
-        if (status.IsCompleted && !completionToastShown)
+        if (status.IsCompleted)
         {
-            completionToastShown = true;
             var hasMarkdown = !string.IsNullOrWhiteSpace(editedMarkdown);
             operationTone = hasMarkdown ? "info" : "bad";
             operationMessage = hasMarkdown
                 ? $"Explanation generated and saved: {editedMarkdown.Length} markdown characters. You can review or edit it here."
                 : result?.Error ?? "Explanation completed without saved markdown.";
-            Toast.ShowSuccess(hasMarkdown ? "Explanation generated and saved." : "Explanation finished without markdown.");
+            // Toast.ShowSuccess(hasMarkdown ? "Explanation generated and saved." : "Explanation finished without markdown.");
         }
-        else if ((status.IsFailed || status.IsCancelled) && !completionToastShown)
+        else if (status.IsFailed || status.IsCancelled)
         {
-            completionToastShown = true;
             Toast.ShowError(status.IsCancelled ? "Explanation generation cancelled." : operationMessage ?? "Explanation generation failed.");
         }
 
-        return true;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ResumeActiveJobAsync()
@@ -506,43 +420,18 @@
                 await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
                 if (status is not null)
                 {
-                    ApplyJobStatus(status);
+                    await HandleJobFinishedAsync(status);
                 }
                 return;
             }
 
             activeJobId = jobId;
-            busy = true;
-            ApplyJobStatus(status);
-            StartPolling(jobId);
+            busy = false;
         }
         catch
         {
             await JS.InvokeAsync<object>("localStorage.removeItem", [JobKey]);
         }
-    }
-
-    private static string PhaseLabel(string phase)
-        => phase switch
-        {
-            "starting" => "Starting",
-            "preview" => "Prompt ready",
-            "prompt-processing" => "Prompt processing",
-            "reasoning" => "Reasoning",
-            "answer-streaming" => "Writing answer",
-            "provider-completed" => "Provider completed",
-            "saving" => "Saving file",
-            "saved" => "Saved",
-            "save-warning" => "Save warning",
-            "completed" => "Completed",
-            "failed" => "Failed",
-            "cancelled" => "Cancelled",
-            _ => phase
-        };
-
-    private void AddActivity(string phase, string message, string tone = "info", bool replaceLastSamePhase = false)
-    {
-        currentActivity = new ProviderActivityLine(DateTimeOffset.UtcNow, phase, message, tone);
     }
 
     private async Task ProviderChangedAsync()
@@ -615,12 +504,6 @@
         };
     }
 
-    private static string FormatElapsed(TimeSpan elapsed)
-    {
-        if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
-        return $"{Math.Max(0, (int)elapsed.TotalSeconds)}s";
-    }
-
     private async Task LoadSettingsAsync()
     {
         if (settingsLoaded) return;
@@ -666,6 +549,13 @@
         busy = true;
         try
         {
+            editedMarkdown = explanationEditor is null ? editedMarkdown : await explanationEditor.GetValueAsync();
+            if (string.IsNullOrWhiteSpace(editedMarkdown))
+            {
+                Toast.ShowError("There is no explanation markdown to save.");
+                return;
+            }
+
             saveResult = await Api.SaveAiExplanationAsync(ProjectId, result.Id, force, editedMarkdown);
             Toast.ShowSuccess(saveResult.Saved ? "AI explanation saved." : "AI explanation was not saved.");
         }
@@ -683,22 +573,10 @@
 
     private async Task CopyAsync()
     {
+        editedMarkdown = explanationEditor is null ? editedMarkdown : await explanationEditor.GetValueAsync();
         if (string.IsNullOrWhiteSpace(editedMarkdown)) return;
         await JS.InvokeAsync<object>("navigator.clipboard.writeText", [editedMarkdown]);
         Toast.ShowSuccess("Explanation copied.");
-    }
-
-    private Task OnExplanationHtmlChanged(string html)
-    {
-        editedHtml = html;
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        pollingCancellation?.Cancel();
-        pollingCancellation?.Dispose();
-        pollingCancellation = null;
     }
 
     private sealed record ExplanationPageSettings(
@@ -715,6 +593,4 @@
         bool IncludeArchitecture,
         int MaxInputTokens,
         int MaxOutputTokens);
-
-    private sealed record ProviderActivityLine(DateTimeOffset Time, string Phase, string Message, string Tone);
 }

@@ -12,8 +12,8 @@
         </div>
         <div class="project-actions">
             <button class="btn" @onclick="LoadFilesAsync" disabled="@busy">Reload</button>
-            <button class="btn btn-primary" @onclick="@(() => SaveAsync())" disabled="@(!dirty || content is null || busy)">Save</button>
-            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(markdown)">Copy markdown</button>
+            <button class="btn btn-primary" @onclick="@(() => SaveAsync())" disabled="@(content is null || busy)">Save</button>
+            <button class="btn" @onclick="CopyAsync" disabled="@(content is null)">Copy markdown</button>
             <button class="btn" @onclick="InsertMermaid" disabled="@(content is null)">Insert Mermaid flow</button>
         </div>
     </section>
@@ -82,7 +82,7 @@
                             <button class="btn" @onclick="ForceSaveAsync">Confirm save</button>
                         </div>
                     }
-                    <MarkdownEditor @bind-Value="markdown" ValueHTMLChanged="OnHtmlChanged" EnableMermaid="true" EnableHighlight="true" />
+                    <LwXLab.MarkDown @key="editorInstanceKey" @ref="markdownEditor" Value="@markdown" EnableMermaid="true" EnableHighlight="true" Preview="false" AllowPreviewToggle="true" ShowStatusBar="false" />
                 }
             </main>
         </div>
@@ -99,6 +99,8 @@
     private MarkdownFileSaveResultDto? lastSave;
     private string markdown = "";
     private string? renderedHtml;
+    private int editorInstanceKey;
+    private LwXLab.MarkDown? markdownEditor;
     private bool loading = true;
     private bool busy;
     private bool dirty;
@@ -106,6 +108,7 @@
     private bool includeExternal;
     private bool onlyEditable = true;
     private string? error;
+
 
     private IEnumerable<MarkdownFileSummaryDto> VisibleFiles => files.Where(f => !onlyEditable || f.IsUserEditable);
 
@@ -139,6 +142,7 @@
         content = await Api.GetMarkdownFileAsync(ProjectId, relativePath);
         markdown = content.Markdown;
         renderedHtml = content.RenderedHtml;
+        editorInstanceKey++;
         dirty = false;
         validation = null;
         lastSave = null;
@@ -150,6 +154,7 @@
         busy = true;
         try
         {
+            markdown = markdownEditor is null ? markdown : await markdownEditor.GetValueAsync();
             validation = await Api.ValidateMarkdownAsync(ProjectId, markdown);
             lastSave = await Api.SaveMarkdownFileAsync(ProjectId, content.Summary.RelativePath, new MarkdownFileSaveRequestDto(content.Summary.RelativePath, markdown, content.ContentHash, mode));
             if (lastSave.Saved)
@@ -174,22 +179,16 @@
 
     private Task ForceSaveAsync() => SaveAsync(MarkdownSaveMode.ForceOverwriteManualGenerated);
 
-    private Task OnHtmlChanged(string html)
-    {
-        renderedHtml = html;
-        dirty = true;
-        return Task.CompletedTask;
-    }
-
     private async Task CopyAsync()
     {
-        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [markdown]);
+        var current = markdownEditor is null ? markdown : await markdownEditor.GetValueAsync();
+        await JS.InvokeAsync<object>("navigator.clipboard.writeText", [current]);
         Toast.ShowSuccess("Markdown copied.");
     }
 
-    private void InsertMermaid()
+    private async Task InsertMermaid()
     {
-        markdown += """
+        var snippet = """
 
 ```mermaid
 flowchart LR
@@ -198,6 +197,16 @@ flowchart LR
     B -- no --> D[Keep editing]
 ```
 """;
+        if (markdownEditor is not null)
+        {
+            await markdownEditor.InsertTextAsync(snippet);
+        }
+        else
+        {
+            markdown += snippet;
+            editorInstanceKey++;
+        }
+
         dirty = true;
     }
 

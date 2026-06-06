@@ -126,14 +126,14 @@
 
     private async Task ConfigureAsync()
     {
-        var result = await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey));
+        var result = await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, kind.ToString(), model, baseUrl, apiKey));
         message = $"Saved {result.Kind} with model {result.Model}.";
         await RefreshAsync();
     }
 
     private async Task ValidateAsync()
     {
-        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey));
+        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, kind.ToString(), model, baseUrl, apiKey));
     }
 
     private async Task TestAsync(string providerId)

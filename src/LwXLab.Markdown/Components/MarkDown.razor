@@ -1,0 +1,614 @@
+@namespace LwXLab
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.JSInterop
+@using LwXLab.Markdown.Enums
+@using LwXLab.Markdown.Options
+@using LwXLab.Markdown.Services
+@implements IAsyncDisposable
+@inject IServiceProvider Services
+@inject IJSRuntime JS
+
+<div id="@_rootId"
+     class="lwx-md-root @ThemeClass @CssClass @(FullScreen ? "lwx-md-fullscreen" : null) @(EnableEdit ? "lwx-md-editable" : "lwx-md-readonly")"
+     style="height:@Height;width:@Width;min-height:@MinHeight;max-height:@MaxHeight;">
+    @if (ShowToolbar && EnableEdit)
+    {
+        <div class="lwx-md-toolbar">
+            @if (Toolbar is not null)
+            {
+                @Toolbar
+            }
+            else
+            {
+                @foreach (var button in EffectiveToolbarButtons.Where(x => x.Visible && !HideIcons.Contains(x.Name, StringComparer.OrdinalIgnoreCase)))
+                {
+                    <button type="button" class="lwx-md-btn" title="@button.Title" @onclick="() => ToolbarClickAsync(button)">
+                        @if (!string.IsNullOrWhiteSpace(button.IconCssClass))
+                        {
+                            <span class="@button.IconCssClass"></span>
+                        }
+                        else
+                        {
+                            @button.Text
+                        }
+                    </button>
+                }
+            }
+
+            <span class="lwx-md-spacer"></span>
+
+            @if (AllowPreviewToggle)
+            {
+                <button type="button" class="lwx-md-btn" @onclick="TogglePreviewAsync">@(Preview ? EditText : PreviewText)</button>
+            }
+            @if (AllowFullScreen)
+            {
+                <button type="button" class="lwx-md-btn" @onclick="ToggleFullScreen">@(FullScreen ? ExitFullScreenText : FullScreenText)</button>
+            }
+
+            @if (ShowSplitDirectionButton && EnableEdit && Preview)
+            {
+                <select class="lwx-md-toolbar-select"
+                        value="@SplitDirection"
+                        @onchange="OnSplitDirectionChangedAsync">
+                    <option value="@MarkDownSplitDirection.Vertical">Vertical split</option>
+                    <option value="@MarkDownSplitDirection.Horizontal">Horizontal split</option>
+                </select>
+
+                <button type="button"
+                        class="lwx-md-toolbar-button"
+                        @onclick="ResetSplitAsync">
+                    50/50
+                </button>
+            }
+        </div>
+    }
+
+    <div class="lwx-md-body @SplitDirectionClass"
+         style="--lwx-md-split-ratio: @SplitRatioValue;">
+
+        @if (EnableEdit)
+        {
+            <div class="lwx-md-editor-pane">
+                <textarea id="@_editorId"
+                          class="lwx-md-textarea"
+                          placeholder="@Placeholder"
+                          spellcheck="@NativeSpellChecker"
+                          readonly="@ReadOnly"
+                          value="@_currentValue"
+                          @oninput="OnTextAreaInputAsync"></textarea>
+            </div>
+        }
+
+        @if (EnableEdit && Preview && EnableSplitResize)
+        {
+            <div class="lwx-md-splitter"
+                 @onpointerdown="StartSplitDragAsync"></div>
+        }
+
+        @if (Preview || !EnableEdit)
+        {
+            <div id="@_previewId" class="lwx-md-preview-pane @PreviewCssClass">
+                @((MarkupString)_html)
+            </div>
+        }
+    </div>
+
+    @if (ShowStatusBar)
+    {
+        <div class="lwx-md-status">
+            @if (ShowCharacters)
+            {
+                <span>@CharactersStatusText: @_stats.Characters</span>
+            }
+            @if (ShowWords)
+            {
+                <span>@WordsStatusText: @_stats.Words</span>
+            }
+            @if (ShowLines)
+            {
+                <span>@LinesStatusText: @_stats.Lines</span>
+            }
+            @if (AutoSaveEnabled && !string.IsNullOrWhiteSpace(_lastAutoSaveText))
+            {
+                <span>@_lastAutoSaveText</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string InstanceId { get; set; } = $"lwx-md-{Guid.NewGuid():N}";
+    private string _rootId => InstanceId;
+    private string _editorId => $"{InstanceId}-editor";
+    private string _previewId => $"{InstanceId}-preview";
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MarkDown>? _dotNetRef;
+    private LwMarkdownRenderer? _renderer;
+    private string _html = string.Empty;
+    private string _lastRenderedValue = string.Empty;
+    private string _currentValue = string.Empty;
+    private string? _lastParameterValue;
+    private bool _monacoReady;
+    private LwMarkdownStats _stats;
+    private string? _lastAutoSaveText;
+    private bool _disposed;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public bool EnableSplitResize { get; set; } = true;
+    [Parameter] public bool ShowSplitDirectionButton { get; set; } = true;
+    [Parameter] public MarkDownSplitDirection SplitDirection { get; set; } = MarkDownSplitDirection.Vertical;
+    [Parameter] public EventCallback<MarkDownSplitDirection> SplitDirectionChanged { get; set; }
+    [Parameter] public double SplitRatio { get; set; } = 50;
+    [Parameter] public EventCallback<double> SplitRatioChanged { get; set; }
+    [Parameter] public double MinEditorPercent { get; set; } = 20;
+    [Parameter] public double MinPreviewPercent { get; set; } = 20;
+
+    private string SplitDirectionClass => SplitDirection switch
+    {
+        MarkDownSplitDirection.Horizontal => "lwx-md-split-horizontal",
+        _ => "lwx-md-split-vertical"
+    };
+
+    private string SplitStyle =>
+        $"--lwx-md-split-ratio:{Math.Clamp(SplitRatio, MinEditorPercent, 100 - MinPreviewPercent).ToString(System.Globalization.CultureInfo.InvariantCulture)}%;";
+
+    private string SplitRatioValue => $"{Math.Clamp(SplitRatio, MinEditorPercent, 100 - MinPreviewPercent).ToString(System.Globalization.CultureInfo.InvariantCulture)}%";
+
+    [Parameter] public MarkDownTheme Theme { get; set; } = MarkDownTheme.Dark;
+    [Parameter] public EventCallback<MarkDownTheme> ThemeChanged { get; set; }
+    [Parameter] public bool ShowThemeSelector { get; set; } = true;
+    [Parameter] public string ThemeDefaultText { get; set; } = "Default";
+    [Parameter] public string ThemeDarkText { get; set; } = "Dark";
+    [Parameter] public string ThemeGrayText { get; set; } = "Gray";
+    [Parameter] public string ThemeWhiteText { get; set; } = "White";
+
+    private string ThemeClass => Theme switch
+    {
+        MarkDownTheme.Dark => "lwx-md-theme-dark",
+        MarkDownTheme.Gray => "lwx-md-theme-gray",
+        MarkDownTheme.White => "lwx-md-theme-white",
+        _ => "lwx-md-theme-default"
+    };
+
+    private string MonacoThemeName => Theme switch
+    {
+        MarkDownTheme.Dark => "vs-dark",
+        MarkDownTheme.Gray => "lwxlab-gray",
+        _ => "vs"
+    };
+
+    private string MermaidThemeName => Theme switch
+    {
+        MarkDownTheme.Dark => "dark",
+        _ => "default"
+    };
+    [Parameter] public string? ValueHTML { get; set; }
+    [Parameter] public EventCallback<string> ValueHTMLChanged { get; set; }
+    [Parameter] public EventCallback<LwMarkdownStats> StatsChanged { get; set; }
+
+    [Parameter] public bool EnableEdit { get; set; } = true;
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool Preview { get; set; }
+    [Parameter] public bool SplitView { get; set; } = true;
+    [Parameter] public bool ShowToolbar { get; set; } = true;
+    [Parameter] public bool ShowStatusBar { get; set; } = true;
+    [Parameter] public bool ShowPreviewWhenEditing { get; set; } = true;
+    [Parameter] public bool AllowPreviewToggle { get; set; } = true;
+    [Parameter] public bool AllowFullScreen { get; set; } = true;
+    [Parameter] public bool FullScreen { get; set; }
+
+    [Parameter] public bool EnableMonaco { get; set; } = true;
+    [Parameter] public bool EnableMermaid { get; set; } = true;
+    [Parameter] public bool EnableHighlight { get; set; } = true;
+    [Parameter] public bool EnableHtml { get; set; } = true;
+    [Parameter] public bool EnableTables { get; set; } = true;
+    [Parameter] public bool EnableTaskLists { get; set; } = true;
+    [Parameter] public bool EnableEmoji { get; set; } = true;
+    [Parameter] public bool EnableAutoLinks { get; set; } = true;
+    [Parameter] public bool EnableAdvancedExtensions { get; set; } = true;
+    [Parameter] public bool EnableBootstrap { get; set; }
+
+    [Parameter] public LwMarkdownEditorOptions EditorOptions { get; set; } = new();
+    [Parameter] public LwMarkdownOptions? Options { get; set; }
+
+    [Parameter] public string Height { get; set; } = "500px";
+    [Parameter] public string Width { get; set; } = "100%";
+    [Parameter] public string MinHeight { get; set; } = "220px";
+    [Parameter] public string MaxHeight { get; set; } = "none";
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? PreviewCssClass { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Write markdown...";
+    [Parameter] public bool NativeSpellChecker { get; set; }
+    [Parameter] public string Direction { get; set; } = "ltr";
+
+    [Parameter] public string[] HideIcons { get; set; } = [];
+    [Parameter] public IReadOnlyList<LwMarkdownButton>? ToolbarButtons { get; set; }
+    [Parameter] public RenderFragment? Toolbar { get; set; }
+    [Parameter] public EventCallback<LwMarkdownButton> CustomButtonClicked { get; set; }
+
+    [Parameter] public bool ShowCharacters { get; set; } = true;
+    [Parameter] public bool ShowWords { get; set; } = true;
+    [Parameter] public bool ShowLines { get; set; } = true;
+    [Parameter] public string CharactersStatusText { get; set; } = "Characters";
+    [Parameter] public string WordsStatusText { get; set; } = "Words";
+    [Parameter] public string LinesStatusText { get; set; } = "Lines";
+
+    [Parameter] public bool AutoSaveEnabled { get; set; }
+    [Parameter] public string? AutoSaveId { get; set; }
+    [Parameter] public int AutoSaveDelay { get; set; } = 700;
+    [Parameter] public string AutoSaveText { get; set; } = "Saved";
+
+    [Parameter] public string PreviewText { get; set; } = "Preview";
+    [Parameter] public string EditText { get; set; } = "Edit";
+    [Parameter] public string FullScreenText { get; set; } = "Fullscreen";
+    [Parameter] public string ExitFullScreenText { get; set; } = "Exit";
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool ShowPreviewPane => !EnableEdit || Preview || ShowPreviewWhenEditing;
+
+    private IReadOnlyList<LwMarkdownButton> EffectiveToolbarButtons => ToolbarButtons ?? DefaultButtons;
+
+    private static readonly IReadOnlyList<LwMarkdownButton> DefaultButtons =
+    [
+        new() { Name = "bold", Text = "B", Title = "Bold", Before = "**", After = "**", Placeholder = "bold text" },
+        new() { Name = "italic", Text = "I", Title = "Italic", Before = "*", After = "*", Placeholder = "italic text" },
+        new() { Name = "heading", Text = "H", Title = "Heading", Before = "## ", Placeholder = "Heading" },
+        new() { Name = "quote", Text = "❝", Title = "Quote", Before = "> ", Placeholder = "quote" },
+        new() { Name = "code", Text = "</>", Title = "Code block", Before = "```csharp\n", After = "\n```", Placeholder = "// code" },
+        new() { Name = "link", Text = "🔗", Title = "Link", Before = "[", After = "](https://)", Placeholder = "link text" },
+        new() { Name = "table", Text = "▦", Title = "Table", Before = "| Column | Value |\n|---|---|\n| A | B |" },
+        new() { Name = "mermaid", Text = "◇", Title = "Mermaid flow", Before = "```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```" },
+        new() { Name = "hr", Text = "—", Title = "Horizontal rule", Before = "\n---\n" }
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentValue = Value ?? string.Empty;
+        _lastParameterValue = _currentValue;
+        Value = _currentValue;
+
+        if (AutoSaveEnabled && !string.IsNullOrWhiteSpace(AutoSaveId))
+        {
+            // actual restore is JS-side after first render; this keeps server prerender safe
+        }
+
+        RenderMarkdown(notify: false);
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var incomingValue = Value ?? string.Empty;
+        if (_lastParameterValue is null || !string.Equals(incomingValue, _lastParameterValue, StringComparison.Ordinal))
+        {
+            _currentValue = incomingValue;
+            _lastParameterValue = incomingValue;
+        }
+
+        Value = _currentValue;
+        RenderMarkdown(notify: false);
+        await base.OnParametersSetAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/LwXLab.Markdown/lwxlab-markdown.js");
+            await JS.InvokeVoidAsync("lwxlabMarkdown.init", InstanceId, _editorId, _previewId, _dotNetRef, BuildClientOptions());
+
+            if (AutoSaveEnabled && !string.IsNullOrWhiteSpace(AutoSaveId))
+            {
+                var restored = await JS.InvokeAsync<string?>("lwxlabMarkdown.restoreAutoSave", AutoSaveId);
+                if (!string.IsNullOrEmpty(restored) && string.IsNullOrEmpty(Value))
+                    await SetValueAsync(restored, notify: true);
+            }
+
+            _monacoReady = EnableEdit && EnableMonaco;
+        }
+
+        if (_module is not null && !_disposed)
+            await JS.InvokeVoidAsync("lwxlabMarkdown.enhancePreview", InstanceId, _previewId, BuildClientOptions());
+    }
+
+    private object BuildClientOptions()
+    {
+        var options = CreateOptions();
+        return new
+        {
+            enableMonaco = EnableEdit && EnableMonaco,
+            enableMermaid = EnableMermaid,
+            enableHighlight = EnableHighlight,
+            monacoLoaderUrl = options.MonacoLoaderUrl,
+            monacoBaseUrl = options.MonacoBaseUrl,
+            mermaidUrl = options.MermaidUrl,
+            highlightUrl = options.HighlightUrl,
+            highlightThemeUrl = options.HighlightThemeUrl,
+            autoSaveEnabled = AutoSaveEnabled,
+            autoSaveId = AutoSaveId,
+            autoSaveDelay = AutoSaveDelay,
+            editor = new
+            {
+                theme = EditorOptions.Theme,
+                language = EditorOptions.Language,
+                automaticLayout = EditorOptions.AutomaticLayout,
+                lineNumbers = EditorOptions.LineNumbers ? "on" : "off",
+                wordWrap = EditorOptions.LineWrapping ? "on" : "off",
+                minimap = new { enabled = EditorOptions.Minimap },
+                tabSize = EditorOptions.TabSize,
+                wordBasedSuggestions = EditorOptions.WordBasedSuggestions ? "allDocuments" : "off",
+                formatOnPaste = EditorOptions.FormatOnPaste,
+                formatOnType = EditorOptions.FormatOnType,
+                renderWhitespace = EditorOptions.RenderWhitespace ? "all" : "none",
+                scrollBeyondLastLine = EditorOptions.ScrollBeyondLastLine,
+                stickyScroll = new { enabled = EditorOptions.StickyScroll },
+                fontFamily = EditorOptions.FontFamily,
+                fontSize = EditorOptions.FontSize,
+                readOnly = ReadOnly
+            }
+        };
+    }
+
+    private LwMarkdownOptions CreateOptions()
+    {
+        var global = Services.GetService<LwMarkdownOptions>() ?? new LwMarkdownOptions();
+        var options = Options ?? global;
+
+        return new LwMarkdownOptions
+        {
+            EnableMermaid = EnableMermaid,
+            EnableHighlight = EnableHighlight,
+            EnableMonaco = EnableMonaco,
+            EnableTables = EnableTables,
+            EnableTaskLists = EnableTaskLists,
+            EnableEmoji = EnableEmoji,
+            EnableAutoLinks = EnableAutoLinks,
+            EnableAdvancedExtensions = EnableAdvancedExtensions,
+            EnableBootstrap = EnableBootstrap,
+            EnableHtml = EnableHtml,
+            MonacoLoaderUrl = options.MonacoLoaderUrl,
+            MonacoBaseUrl = options.MonacoBaseUrl,
+            MermaidUrl = options.MermaidUrl,
+            HighlightUrl = options.HighlightUrl,
+            HighlightThemeUrl = options.HighlightThemeUrl
+        };
+    }
+
+    private void RenderMarkdown(bool notify)
+    {
+        if (_renderer is null || _lastRenderedValue != _currentValue)
+        {
+            _renderer = new LwMarkdownRenderer(CreateOptions());
+            _html = _renderer.Render(_currentValue);
+            ValueHTML = _html;
+            _stats = CalculateStats(_currentValue);
+            _lastRenderedValue = _currentValue;
+        }
+    }
+
+    private async Task OnTextAreaInputAsync(ChangeEventArgs args)
+    {
+        await SetValueAsync(args.Value?.ToString() ?? string.Empty, notify: true);
+    }
+
+    private async Task OnSplitDirectionChangedAsync(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<MarkDownSplitDirection>(e.Value?.ToString(), out var value))
+        {
+            SplitDirection = value;
+            await SplitDirectionChanged.InvokeAsync(value);
+
+            await JS.InvokeVoidAsync("lwxlabMarkdown.layout", InstanceId);
+        }
+    }
+
+    private async Task ResetSplitAsync()
+    {
+        SplitRatio = 50;
+        await SplitRatioChanged.InvokeAsync(SplitRatio);
+
+        await JS.InvokeVoidAsync("lwxlabMarkdown.layout", InstanceId);
+    }
+
+    private async Task StartSplitDragAsync(PointerEventArgs e)
+    {
+        if (!EnableSplitResize)
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "lwxlabMarkdown.startSplitDrag",
+            InstanceId,
+            SplitDirection.ToString(),
+            SplitRatio,
+            MinEditorPercent,
+            MinPreviewPercent);
+    }
+
+    [JSInvokable]
+    public async Task NotifyValueChanged(string value)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Value = value ?? string.Empty;
+        _currentValue = Value;
+
+        var needsRenderedHtml = Preview || !EnableEdit || ValueHTMLChanged.HasDelegate;
+        if (needsRenderedHtml)
+        {
+            RenderMarkdown(notify: true);
+        }
+
+        if (ShowStatusBar || StatsChanged.HasDelegate)
+        {
+            _stats = CalculateStats(_currentValue);
+        }
+
+        await ValueChanged.InvokeAsync(Value);
+        if (ValueHTMLChanged.HasDelegate)
+        {
+            await ValueHTMLChanged.InvokeAsync(_html);
+        }
+        if (StatsChanged.HasDelegate)
+        {
+            await StatsChanged.InvokeAsync(_stats);
+        }
+
+        if (AutoSaveEnabled && _module is not null && !string.IsNullOrWhiteSpace(AutoSaveId))
+        {
+            await JS.InvokeVoidAsync("lwxlabMarkdown.saveAutoSave", AutoSaveId, Value);
+            _lastAutoSaveText = AutoSaveText;
+        }
+
+        if (Preview || !EnableEdit || ShowStatusBar || AutoSaveEnabled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public async Task NotifySplitRatioChanged(double ratio)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        SplitRatio = Math.Clamp(ratio, MinEditorPercent, 100 - MinPreviewPercent);
+        await SplitRatioChanged.InvokeAsync(SplitRatio);
+    }
+
+    public Task<string> GetValueAsync() => Task.FromResult(_currentValue);
+
+    public async Task SetValueAsync(string? value) => await SetValueAsync(value, notify: true);
+
+    private async Task SetValueAsync(string? value, bool notify)
+    {
+        Value = value ?? string.Empty;
+        _currentValue = Value;
+        _lastParameterValue = Value;
+        var needsRenderedHtml = Preview || !EnableEdit || ValueHTMLChanged.HasDelegate;
+        if (needsRenderedHtml)
+        {
+            _lastRenderedValue = string.Empty;
+            RenderMarkdown(notify);
+        }
+        else if (ShowStatusBar || StatsChanged.HasDelegate)
+        {
+            _stats = CalculateStats(_currentValue);
+        }
+
+        if (_module is not null)
+        {
+            await JS.InvokeVoidAsync("lwxlabMarkdown.setEditorValue", InstanceId, _editorId, Value);
+            if (needsRenderedHtml)
+            {
+                await JS.InvokeVoidAsync("lwxlabMarkdown.enhancePreview", InstanceId, _previewId, BuildClientOptions());
+            }
+        }
+
+        if (notify)
+        {
+            await ValueChanged.InvokeAsync(Value);
+            if (ValueHTMLChanged.HasDelegate)
+            {
+                await ValueHTMLChanged.InvokeAsync(_html);
+            }
+            if (StatsChanged.HasDelegate)
+            {
+                await StatsChanged.InvokeAsync(_stats);
+            }
+            if (AutoSaveEnabled && _module is not null && !string.IsNullOrWhiteSpace(AutoSaveId))
+            {
+                await JS.InvokeVoidAsync("lwxlabMarkdown.saveAutoSave", AutoSaveId, Value);
+                _lastAutoSaveText = AutoSaveText;
+            }
+        }
+
+        if (Preview || !EnableEdit || ShowStatusBar || AutoSaveEnabled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    public async Task InsertTextAsync(string text)
+    {
+        if (_module is not null && _monacoReady)
+            await JS.InvokeVoidAsync("lwxlabMarkdown.insertText", InstanceId, _editorId, text);
+        else
+            await SetValueAsync((Value ?? string.Empty) + text, notify: true);
+    }
+
+    public async Task CleanAutoSave()
+    {
+        if (_module is not null && !string.IsNullOrWhiteSpace(AutoSaveId))
+            await JS.InvokeVoidAsync("lwxlabMarkdown.clearAutoSave", AutoSaveId);
+    }
+
+    public async Task TogglePreviewAsync()
+    {
+        Preview = !Preview;
+        await Task.CompletedTask;
+    }
+
+    private void ToggleFullScreen() => FullScreen = !FullScreen;
+
+    private async Task ToolbarClickAsync(LwMarkdownButton button)
+    {
+        if (CustomButtonClicked.HasDelegate)
+            await CustomButtonClicked.InvokeAsync(button);
+
+        var text = BuildInsertion(button);
+        if (!string.IsNullOrEmpty(text))
+            await InsertTextAsync(text);
+    }
+
+    private static string BuildInsertion(LwMarkdownButton button)
+    {
+        if (!string.IsNullOrEmpty(button.After))
+            return $"{button.Before}{button.Placeholder}{button.After}";
+
+        return button.Before ?? string.Empty;
+    }
+
+    private static LwMarkdownStats CalculateStats(string value)
+    {
+        var characters = value.Length;
+        var words = string.IsNullOrWhiteSpace(value)
+            ? 0
+            : value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        var lines = string.IsNullOrEmpty(value) ? 0 : value.Count(c => c == '\n') + 1;
+        return new LwMarkdownStats(characters, words, lines);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (_module is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("lwxlabMarkdown.dispose", InstanceId);
+                await _module.DisposeAsync();
+            }
+            catch
+            {
+                // JS runtime may already be gone during circuit disposal.
+            }
+        }
+
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+    }
+}

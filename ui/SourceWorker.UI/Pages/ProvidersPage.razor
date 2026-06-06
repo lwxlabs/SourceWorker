@@ -44,6 +44,10 @@ else
                 </select>
             </label>
             <label>
+                Connection name
+                <input class="form-control" @bind="name" placeholder="Example: LM Studio laptop" />
+            </label>
+            <label>
                 Model
                 <input class="form-control" @bind="model" placeholder="model id" />
             </label>
@@ -83,8 +87,8 @@ else
                 <article class="provider-card">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div>
-                            <h3>@provider.Kind</h3>
-                            <p class="muted">@provider.ProviderId</p>
+                            <h3>@DisplayName(provider)</h3>
+                            <p class="muted">@provider.Kind @(!string.IsNullOrWhiteSpace(provider.BaseUrl) ? $" - {provider.BaseUrl}" : "")</p>
                         </div>
                         <span class="pill @(provider.Status == AiProviderStatus.Healthy ? "ok" : provider.Status == AiProviderStatus.NotConfigured ? "" : "warn")">@provider.Status</span>
                     </div>
@@ -155,6 +159,7 @@ else
     private AiProviderModelListDto? modelList;
     private string selectedPresetName = ProviderPreset.OpenAI.ToString();
     private AiProviderKind kind = AiProviderKind.OpenAI;
+    private string name = "OpenAI";
     private string model = "gpt-4.1-mini";
     private string? baseUrl = "https://api.openai.com/v1";
     private string? apiKey;
@@ -198,11 +203,12 @@ else
         };
         baseUrl = preset.DefaultBaseUrl;
         model = preset.DefaultModel ?? "";
+        name = preset.DisplayName;
     }
 
     private async Task ValidateAsync()
     {
-        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey, enabled));
+        validation = await Api.ValidateAiProviderAsync(new AiProviderConfigurationDto(kind, name, model, baseUrl, apiKey, enabled));
     }
 
     private async Task SaveAsync()
@@ -210,7 +216,7 @@ else
         busy = true;
         try
         {
-            await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, model, baseUrl, apiKey, enabled));
+            await Api.ConfigureAiProviderAsync(new AiProviderConfigurationDto(kind, name, model, baseUrl, apiKey, enabled));
             apiKey = null;
             statuses = await Api.GetAiProviderStatusesAsync();
             Toast.ShowSuccess("Provider saved.");
@@ -241,4 +247,7 @@ else
     {
         modelList = await Api.GetAiProviderModelsAsync(providerId);
     }
+
+    private static string DisplayName(AiProviderStatusDto provider)
+        => string.IsNullOrWhiteSpace(provider.Name) ? provider.Kind.ToString() : provider.Name;
 }

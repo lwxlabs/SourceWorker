@@ -1,0 +1,173 @@
+@implements IDisposable
+@inject ISourceWorkerApiClient Api
+
+@if (status is null)
+{
+    <p class="callout info">Starting explanation job...</p>
+}
+else
+{
+    <div class="activity-feed">
+        <strong>Current provider activity</strong>
+        <div class="activity-line @Tone">
+            <span>@status.UpdatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+            <strong>@PhaseLabel(status.Phase)</strong>
+            <span>@ActivityMessage</span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(status.MarkdownPreview))
+    {
+        <p class="callout info">Receiving answer text. This preview updates from the backend job status and will become editable after completion.</p>
+        <div class="markdown-live-preview">
+            <pre>@status.MarkdownPreview</pre>
+        </div>
+    }
+    else if (!status.IsCompleted && !status.IsFailed && !status.IsCancelled)
+    {
+        <p class="callout info">Waiting for the provider to start sending answer text. The Local API owns this job, so you can navigate away while it continues.</p>
+    }
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public Guid JobId { get; set; }
+    [Parameter] public EventCallback<AiExplanationJobStatusDto> OnFinished { get; set; }
+
+    private AiExplanationJobStatusDto? status;
+    private CancellationTokenSource? pollingCancellation;
+    private Guid currentJobId;
+    private string? lastSnapshotKey;
+    private bool finishedRaised;
+
+    private string Tone => status is null
+        ? "info"
+        : status.IsFailed ? "bad"
+        : status.IsCancelled ? "warn"
+        : status.IsCompleted ? "ok"
+        : "info";
+
+    private string ActivityMessage
+    {
+        get
+        {
+            if (status?.Progress is not { } progress || !string.Equals(status.Phase, "prompt-processing", StringComparison.OrdinalIgnoreCase))
+            {
+                return status?.Message ?? "";
+            }
+
+            return status.Message.Contains('%', StringComparison.Ordinal)
+                ? status.Message
+                : $"Prompt processing... {progress:P1}. {status.Message}";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (JobId == currentJobId)
+        {
+            return;
+        }
+
+        currentJobId = JobId;
+        status = null;
+        lastSnapshotKey = null;
+        finishedRaised = false;
+        pollingCancellation?.Cancel();
+        pollingCancellation?.Dispose();
+        pollingCancellation = new CancellationTokenSource();
+        _ = PollAsync(JobId, pollingCancellation.Token);
+    }
+
+    private async Task PollAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Yield();
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var next = await Api.GetAiExplanationJobAsync(ProjectId, jobId, cancellationToken);
+                if (next is null)
+                {
+                    next = new AiExplanationJobStatusDto(
+                        jobId,
+                        ProjectId,
+                        "failed",
+                        "The Local API no longer has this explanation job. Check logs or start a new generation.",
+                        0,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow,
+                        TimeSpan.Zero,
+                        false,
+                        true,
+                        false,
+                        null,
+                        null);
+                }
+
+                var changed = Apply(next);
+                if (changed)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+
+                if (next.IsCompleted || next.IsFailed || next.IsCancelled)
+                {
+                    if (!finishedRaised)
+                    {
+                        finishedRaised = true;
+                        await OnFinished.InvokeAsync(next);
+                    }
+
+                    break;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Polling stops when the component is disposed or a new job replaces this one.
+        }
+    }
+
+    private bool Apply(AiExplanationJobStatusDto next)
+    {
+        var snapshotKey = $"{next.Phase}|{next.OutputCharacters}|{next.IsCompleted}|{next.IsFailed}|{next.IsCancelled}|{next.Progress}|{next.Message}|{next.Result?.Status}|{next.Result?.OutputHash}";
+        if (snapshotKey == lastSnapshotKey)
+        {
+            return false;
+        }
+
+        lastSnapshotKey = snapshotKey;
+        status = next;
+        return true;
+    }
+
+    private static string PhaseLabel(string phase)
+        => phase switch
+        {
+            "starting" => "Starting",
+            "preview" => "Prompt ready",
+            "prompt-processing" => "Prompt processing",
+            "reasoning" => "Reasoning",
+            "answer-streaming" => "Writing answer",
+            "provider-completed" => "Provider completed",
+            "saving" => "Saving file",
+            "saved" => "Saved",
+            "save-warning" => "Save warning",
+            "completed" => "Completed",
+            "failed" => "Failed",
+            "cancelled" => "Cancelled",
+            _ => phase
+        };
+
+    public void Dispose()
+    {
+        pollingCancellation?.Cancel();
+        pollingCancellation?.Dispose();
+        pollingCancellation = null;
+    }
+}

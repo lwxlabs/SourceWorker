@@ -301,6 +301,21 @@ MVP 2.9 Local API endpoints:
 - `GET /api/ai/providers/presets`
 - `GET /api/ai/providers/{providerId}/models`
 
+
+## Tracking Prevention Fix
+
+If you experience "Tracking Prevention blocked access to storage" errors when loading Monaco, Mermaid, or Highlight.js, you must self-host these assets:
+
+1. Download the required files and place them into `wwwroot/lib` in your host application (e.g., `ui/SourceWorker.Dashboard/wwwroot/lib`).
+2. Configure the library to use these local assets in `Program.cs` or `MauiProgram.cs` by calling `UseLocalAssets()`:
+
+```csharp
+builder.Services.AddLwXLabMarkdown(options =>
+{
+    options.UseLocalAssets("_content/YourApp/lib");
+});
+```
+
 ## Current Architecture
 
 - `SourceWorker.Domain` is dependency-free and owns project, scan, instruction, recipe, job, artifact, freshness, cleanup, storage diagnostic, output routing, export, context pack, code intelligence, Local API, and AI preview domain models.

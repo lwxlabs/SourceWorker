@@ -47,7 +47,7 @@ public sealed record GetAiProviderStatusesQuery : IRequest<IReadOnlyList<AiProvi
 public sealed record GetAiProviderCatalogQuery : IRequest<AiProviderCatalog>;
 public sealed record GetAiProviderPresetsQuery : IRequest<IReadOnlyList<AiProviderPresetInfo>>;
 public sealed record GetAiProviderModelsQuery(string ProviderId) : IRequest<AiProviderModelList>;
-public sealed record ConfigureAiProviderCommand(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true) : IRequest<AiProviderConfiguration>;
+public sealed record ConfigureAiProviderCommand(AiProviderKind Kind, string Name, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true) : IRequest<AiProviderConfiguration>;
 public sealed record TestAiProviderCommand(string ProviderId) : IRequest<AiProviderHealthResult>;
 public sealed record GetProjectAiPacksQuery(Guid ProjectId) : IRequest<IReadOnlyList<ContextPackManifest>>;
 public sealed record PreviewAiPromptCommand(Guid ProjectId, string ProviderId, string PackId, string? UserInstruction, int MaxOutputTokens = 1200, string? TemplateId = null) : IRequest<AiPromptPreview>;
@@ -421,13 +421,17 @@ public sealed class GetAiProvidersQueryHandler(IAiProviderRegistry registry, IAi
     public async Task<IReadOnlyList<AiProviderHealthResult>> Handle(GetAiProvidersQuery request, CancellationToken cancellationToken)
     {
         var configured = await configurations.ListAsync(cancellationToken);
-        return registry.ListProviders()
-            .Select(provider =>
-            {
-                var config = configured.FirstOrDefault(c => c.Kind == provider.Kind);
-                return new AiProviderHealthResult(provider.Id, provider.Kind, config is null ? AiProviderStatus.NotConfigured : (config.IsEnabled ? AiProviderStatus.NotConfigured : AiProviderStatus.Disabled), config is null ? "Provider is not configured." : "Provider is configured.", DateTimeOffset.UtcNow, config?.MaskedApiKey);
-            })
-            .ToArray();
+        var configuredResults = configured
+            .Select(config => new AiProviderHealthResult(config.Id.ToString(), config.Kind, config.IsEnabled ? AiProviderStatus.NotConfigured : AiProviderStatus.Disabled, "Provider is configured.", DateTimeOffset.UtcNow, config.MaskedApiKey, config.Name, config.BaseUrl))
+            .ToList();
+
+        foreach (var provider in registry.ListProviders())
+        {
+            if (configured.Any(c => c.Kind == provider.Kind)) continue;
+            configuredResults.Add(new AiProviderHealthResult(provider.Id, provider.Kind, AiProviderStatus.NotConfigured, "Provider is not configured.", DateTimeOffset.UtcNow, null, provider.Kind.ToString(), null));
+        }
+
+        return configuredResults.OrderBy(r => r.Name ?? r.Kind.ToString()).ToArray();
     }
 }
 
@@ -440,11 +444,14 @@ public sealed class GetAiProviderStatusesQueryHandler(IAiProviderRegistry regist
         {
             var provider = registry.GetProvider(configuration.Kind.ToString());
             results.Add(provider is null
-                ? new AiProviderHealthResult(configuration.Kind.ToString(), configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey)
-                : await provider.CheckHealthAsync(configuration, cancellationToken));
+                ? new AiProviderHealthResult(configuration.Id.ToString(), configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey, configuration.Name, configuration.BaseUrl)
+                : WithConfigurationIdentity(await provider.CheckHealthAsync(configuration, cancellationToken), configuration));
         }
-        return results;
+        return results.OrderBy(r => r.Name ?? r.Kind.ToString()).ToArray();
     }
+
+    private static AiProviderHealthResult WithConfigurationIdentity(AiProviderHealthResult result, AiProviderConfiguration configuration)
+        => result with { ProviderId = configuration.Id.ToString(), Name = configuration.Name, BaseUrl = configuration.BaseUrl };
 }
 public sealed class GetAiProviderCatalogQueryHandler(IAiProviderCatalogService catalog) : IRequestHandler<GetAiProviderCatalogQuery, AiProviderCatalog>
 {
@@ -463,7 +470,9 @@ public sealed class ConfigureAiProviderCommandHandler(IAiProviderConfigurationRe
 {
     public async Task<AiProviderConfiguration> Handle(ConfigureAiProviderCommand request, CancellationToken cancellationToken)
     {
-        var secretName = request.Kind is AiProviderKind.Ollama ? null : $"ai:{request.Kind}:api-key";
+        var id = Guid.NewGuid();
+        var name = string.IsNullOrWhiteSpace(request.Name) ? DefaultProviderName(request.Kind, request.BaseUrl) : request.Name.Trim();
+        var secretName = request.Kind is AiProviderKind.Ollama ? null : $"ai:{id:N}:api-key";
         string? masked = null;
         if (!string.IsNullOrWhiteSpace(secretName) && !string.IsNullOrWhiteSpace(request.ApiKey))
         {
@@ -476,7 +485,17 @@ public sealed class ConfigureAiProviderCommandHandler(IAiProviderConfigurationRe
             masked = secrets.Mask(existing);
         }
 
-        return await configurations.SaveAsync(new AiProviderConfiguration(Guid.NewGuid(), request.Kind, request.Kind.ToString(), request.Model, request.BaseUrl, request.IsEnabled, secretName, masked, DateTimeOffset.UtcNow), cancellationToken);
+        return await configurations.SaveAsync(new AiProviderConfiguration(id, request.Kind, name, request.Model, request.BaseUrl, request.IsEnabled, secretName, masked, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    private static string DefaultProviderName(AiProviderKind kind, string? baseUrl)
+    {
+        if (kind == AiProviderKind.OpenAiCompatible && !string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return $"OpenAI-compatible ({baseUrl.TrimEnd('/')})";
+        }
+
+        return kind.ToString();
     }
 }
 
@@ -486,10 +505,10 @@ public sealed class TestAiProviderCommandHandler(IAiProviderRegistry registry, I
     {
         var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken);
         if (configuration is null) return new AiProviderHealthResult(request.ProviderId, AiProviderKind.OpenAiCompatible, AiProviderStatus.NotConfigured, "Provider is not configured.", DateTimeOffset.UtcNow);
-        var provider = registry.GetProvider(request.ProviderId);
+        var provider = registry.GetProvider(configuration.Kind.ToString());
         return provider is null
-            ? new AiProviderHealthResult(request.ProviderId, configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey)
-            : await provider.CheckHealthAsync(configuration, cancellationToken);
+            ? new AiProviderHealthResult(request.ProviderId, configuration.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", DateTimeOffset.UtcNow, configuration.MaskedApiKey, configuration.Name, configuration.BaseUrl)
+            : (await provider.CheckHealthAsync(configuration, cancellationToken)) with { ProviderId = configuration.Id.ToString(), Name = configuration.Name, BaseUrl = configuration.BaseUrl };
     }
 }
 

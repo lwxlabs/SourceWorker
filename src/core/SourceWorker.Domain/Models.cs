@@ -348,7 +348,7 @@ public sealed record AiCostEstimate(decimal? PromptCostUsd, decimal? OutputCostU
 public sealed record AiSafetyWarning(string Code, string Severity, string Message, string? RelativePath = null);
 public sealed record AiRunSafetyCheck(bool HasWarnings, IReadOnlyList<AiSafetyWarning> Warnings, bool RequiresConfirmation);
 public sealed record AiRedactionResult(string Text, IReadOnlyList<AiSafetyWarning> Warnings, int RedactionCount);
-public sealed record AiProviderHealthResult(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey = null);
+public sealed record AiProviderHealthResult(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey = null, string? Name = null, string? BaseUrl = null);
 
 public sealed record AiPromptPreview(
     Guid ProjectId,
@@ -383,7 +383,14 @@ public sealed record AiRunInput(
     int MaxOutputTokens = 1200);
 
 public sealed record AiRunOutput(string Text, string OutputHash, AiTokenEstimate? TokenEstimate = null, AiCostEstimate? CostEstimate = null);
-public sealed record AiProviderStreamUpdate(string? DeltaText, string Message, int OutputCharacters, DateTimeOffset TimestampUtc, bool IsCompleted = false);
+public sealed record AiProviderStreamUpdate(
+    string? DeltaText,
+    string Message,
+    int OutputCharacters,
+    DateTimeOffset TimestampUtc,
+    bool IsCompleted = false,
+    string? Phase = null,
+    double? Progress = null);
 
 public sealed record AiRun(
     Guid Id,
@@ -451,7 +458,8 @@ public sealed record AiExplanationStreamUpdate(
     TimeSpan Elapsed,
     AiExplanationResult? Result = null,
     bool IsCompleted = false,
-    bool IsFailed = false);
+    bool IsFailed = false,
+    double? Progress = null);
 
 public sealed record AiExplanationResult(
     Guid Id,

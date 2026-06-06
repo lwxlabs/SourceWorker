@@ -13,11 +13,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.8" />
-    <PackageReference Include="PSC.Blazor.Components.MarkdownEditor" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
+    <ProjectReference Include="..\..\src\LwXLab.Markdown\LwXLab.Markdown.csproj" />
   </ItemGroup>
 
 </Project>

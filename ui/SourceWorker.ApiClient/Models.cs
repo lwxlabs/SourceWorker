@@ -146,9 +146,9 @@ public enum AiProviderStatus { NotConfigured, Healthy, Unhealthy, Disabled }
 public enum AiRunStatus { Queued, Running, Completed, Failed, Cancelled, SafetyBlocked }
 public enum ExplanationProfile { DeveloperOnboarding, ArchitectureDeepDive, PublicApiGuide, MaintenanceGuide, TestAndQualityGuide, FullProjectExplanation }
 public enum AiExplanationQualityStatus { Good, NeedsReview, Failed }
-public sealed record AiProviderConfigurationDto(AiProviderKind Kind, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
+public sealed record AiProviderConfigurationDto(AiProviderKind Kind, string Name, string Model, string? BaseUrl, string? ApiKey, bool IsEnabled = true);
 public sealed record AiProviderConfigurationResultDto(Guid Id, AiProviderKind Kind, string Name, string Model, string? BaseUrl, bool IsEnabled, string? ApiKeySecretName, string? MaskedApiKey, DateTimeOffset UpdatedUtc);
-public sealed record AiProviderStatusDto(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey);
+public sealed record AiProviderStatusDto(string ProviderId, AiProviderKind Kind, AiProviderStatus Status, string Message, DateTimeOffset CheckedUtc, string? MaskedApiKey, string? Name = null, string? BaseUrl = null);
 public sealed record AiSafetyWarningDto(string Code, string Severity, string Message, string? RelativePath);
 public sealed record AiTokenEstimateDto(int PromptTokens, int MaxOutputTokens, int TotalTokens);
 public sealed record AiCostEstimateDto(decimal? PromptCostUsd, decimal? OutputCostUsd, decimal? TotalCostUsd, string Currency);
@@ -186,8 +186,8 @@ public sealed record AiExplanationOptionsDto(Guid ProjectId, IReadOnlyList<AiPro
 public sealed record AiExplanationRequestDto(Guid ProjectId, string ProviderId, string Model, string ContextPackId, ExplanationProfile ExplanationProfile, string? UserInstruction, bool IncludeSourceSnippets, bool IncludeTests, bool IncludeGeneratedDocs, bool IncludePublicApi, bool IncludeFlows, bool IncludeArchitecture, int MaxInputTokens, int MaxOutputTokens, bool StorePrompt, bool StoreOutput);
 public sealed record AiExplanationSourceFileDto(string RelativePath, string Kind, int? StartLine, int? EndLine, int TokenEstimate, bool Included, string? Warning);
 public sealed record AiExplanationPreviewDto(Guid ProjectId, string ProviderId, AiProviderKind ProviderKind, string Model, string ContextPackId, ExplanationProfile ExplanationProfile, IReadOnlyList<AiExplanationSourceFileDto> IncludedFiles, IReadOnlyList<string> MissingFiles, IReadOnlyList<AiSafetyWarningDto> SafetyWarnings, AiTokenEstimateDto TokenEstimate, AiCostEstimateDto CostEstimate, string PromptText, string PromptHash, bool IsBlocked);
-public sealed record AiExplanationStreamUpdateDto(string Phase, string Message, string? DeltaMarkdown, int OutputCharacters, TimeSpan Elapsed, AiExplanationResultDto? Result, bool IsCompleted, bool IsFailed);
-public sealed record AiExplanationJobStatusDto(Guid JobId, Guid ProjectId, string Phase, string Message, int OutputCharacters, DateTimeOffset StartedUtc, DateTimeOffset UpdatedUtc, TimeSpan Elapsed, bool IsCompleted, bool IsFailed, bool IsCancelled, string? MarkdownPreview, AiExplanationResultDto? Result);
+public sealed record AiExplanationStreamUpdateDto(string Phase, string Message, string? DeltaMarkdown, int OutputCharacters, TimeSpan Elapsed, AiExplanationResultDto? Result, bool IsCompleted, bool IsFailed, double? Progress = null);
+public sealed record AiExplanationJobStatusDto(Guid JobId, Guid ProjectId, string Phase, string Message, int OutputCharacters, DateTimeOffset StartedUtc, DateTimeOffset UpdatedUtc, TimeSpan Elapsed, bool IsCompleted, bool IsFailed, bool IsCancelled, string? MarkdownPreview, AiExplanationResultDto? Result, double? Progress = null);
 public sealed record AiExplanationSectionDto(string Title, string Markdown);
 public sealed record AiExplanationQualityReportDto(AiExplanationQualityStatus Status, IReadOnlyList<string> PassedChecks, IReadOnlyList<string> Warnings);
 public sealed record AiExplanationResultDto(Guid Id, Guid ProjectId, string ProviderId, string Model, AiRunStatus Status, DateTimeOffset CreatedUtc, DateTimeOffset? CompletedUtc, string PromptHash, string? OutputHash, int EstimatedInputTokens, int EstimatedOutputTokens, IReadOnlyList<AiSafetyWarningDto> Warnings, IReadOnlyList<AiExplanationSectionDto> Sections, string? Markdown, string SuggestedFilePath, string? Error, AiExplanationQualityReportDto? Quality);

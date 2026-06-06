@@ -209,6 +209,16 @@ public abstract class OpenAiStyleProvider(IAiSecretStore secrets) : IAiStreaming
             yield break;
         }
 
+        if (IsLikelyLmStudio(configuration))
+        {
+            await foreach (var update in StreamLmStudioNativeAsync(configuration, prompt, maxOutputTokens, cancellationToken))
+            {
+                yield return update;
+            }
+
+            yield break;
+        }
+
         using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(15), BaseAddress = new Uri((configuration.BaseUrl ?? DefaultBaseUrl).TrimEnd('/') + "/") };
         if (!string.IsNullOrWhiteSpace(configuration.ApiKeySecretName))
         {
@@ -259,7 +269,7 @@ public abstract class OpenAiStyleProvider(IAiSecretStore secrets) : IAiStreaming
                     throw new InvalidOperationException(BuildReasoningOnlyError(reasoningCharacters, finishReason));
                 }
 
-                yield return new AiProviderStreamUpdate(null, "Provider completed.", output.Length, DateTimeOffset.UtcNow, true);
+                yield return new AiProviderStreamUpdate(null, "Provider completed.", output.Length, DateTimeOffset.UtcNow, true, "provider-completed");
                 yield break;
             }
 
@@ -268,14 +278,14 @@ public abstract class OpenAiStyleProvider(IAiSecretStore secrets) : IAiStreaming
             if (!string.IsNullOrEmpty(delta))
             {
                 output.Append(delta);
-                yield return new AiProviderStreamUpdate(delta, $"Writing answer... {output.Length} characters received.", output.Length, DateTimeOffset.UtcNow);
+                yield return new AiProviderStreamUpdate(delta, $"Writing answer... {output.Length} characters received.", output.Length, DateTimeOffset.UtcNow, Phase: "answer-streaming");
                 continue;
             }
 
             if (!string.IsNullOrEmpty(reasoning))
             {
                 reasoningCharacters += reasoning.Length;
-                yield return new AiProviderStreamUpdate(null, $"Reasoning stream active... {reasoningCharacters} reasoning characters received before final answer text.", output.Length, DateTimeOffset.UtcNow);
+                yield return new AiProviderStreamUpdate(null, $"Reasoning stream active... {reasoningCharacters} reasoning characters received before final answer text.", output.Length, DateTimeOffset.UtcNow, Phase: "reasoning");
             }
         }
 
@@ -284,7 +294,217 @@ public abstract class OpenAiStyleProvider(IAiSecretStore secrets) : IAiStreaming
             throw new InvalidOperationException(BuildReasoningOnlyError(reasoningCharacters, finishReason));
         }
 
-        yield return new AiProviderStreamUpdate(null, "Provider stream ended.", output.Length, DateTimeOffset.UtcNow, true);
+        yield return new AiProviderStreamUpdate(null, "Provider stream ended.", output.Length, DateTimeOffset.UtcNow, true, "provider-completed");
+    }
+
+    private async IAsyncEnumerable<AiProviderStreamUpdate> StreamLmStudioNativeAsync(
+        AiProviderConfiguration configuration,
+        string prompt,
+        int maxOutputTokens,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30), BaseAddress = new Uri(NormalizeLmStudioBase(configuration.BaseUrl ?? DefaultBaseUrl)) };
+        if (!string.IsNullOrWhiteSpace(configuration.ApiKeySecretName))
+        {
+            var key = await secrets.GetSecretAsync(configuration.ApiKeySecretName, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(key)) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        }
+
+        var nativeRequest = new
+        {
+            model = configuration.Model,
+            input = new[]
+            {
+                new
+                {
+                    type = "text",
+                    content = "System: SourceWorker context request. Do not edit files, run commands, or apply patches. Return final answer text only; do not return only reasoning.\n\nUser:\n" + prompt
+                }
+            },
+            max_output_tokens = maxOutputTokens,
+            temperature = 0.2,
+            stream = true
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/chat")
+        {
+            Content = JsonContent.Create(nativeRequest)
+        };
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            await ThrowProviderErrorAsync("LM Studio native streaming chat", response, cancellationToken);
+        }
+
+        var output = new StringBuilder();
+        var reasoningCharacters = 0;
+        string? eventName = null;
+        string? finishReason = null;
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream);
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(cancellationToken);
+            if (line is null) break;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            if (line.StartsWith("event:", StringComparison.OrdinalIgnoreCase))
+            {
+                eventName = line["event:".Length..].Trim();
+                continue;
+            }
+
+            if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) continue;
+            var payload = line["data:".Length..].Trim();
+            if (payload.Equals("[DONE]", StringComparison.OrdinalIgnoreCase)) break;
+
+            if (!TryParseLmStudioEvent(payload, eventName, out var update, out var delta, out var reasoning, out var completed, out var eventFinishReason))
+            {
+                continue;
+            }
+
+            finishReason = eventFinishReason ?? finishReason;
+            if (!string.IsNullOrEmpty(delta))
+            {
+                output.Append(delta);
+                yield return new AiProviderStreamUpdate(delta, $"Writing answer... {output.Length} characters received.", output.Length, DateTimeOffset.UtcNow, Phase: "answer-streaming");
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(reasoning))
+            {
+                reasoningCharacters += reasoning.Length;
+                yield return new AiProviderStreamUpdate(null, $"Reasoning stream active... {reasoningCharacters} reasoning characters received before final answer text.", output.Length, DateTimeOffset.UtcNow, Phase: "reasoning");
+                continue;
+            }
+
+            if (update is not null)
+            {
+                yield return update with { OutputCharacters = output.Length };
+            }
+
+            if (completed)
+            {
+                break;
+            }
+        }
+
+        if (output.Length == 0 && reasoningCharacters > 0)
+        {
+            throw new InvalidOperationException(BuildReasoningOnlyError(reasoningCharacters, finishReason));
+        }
+
+        yield return new AiProviderStreamUpdate(null, "Provider completed.", output.Length, DateTimeOffset.UtcNow, true, "provider-completed");
+    }
+
+    private static bool TryParseLmStudioEvent(
+        string json,
+        string? eventName,
+        out AiProviderStreamUpdate? update,
+        out string? delta,
+        out string? reasoning,
+        out bool completed,
+        out string? finishReason)
+    {
+        update = null;
+        delta = null;
+        reasoning = null;
+        completed = false;
+        finishReason = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : eventName;
+            finishReason = root.TryGetProperty("finish_reason", out var finishReasonElement) ? ExtractText(finishReasonElement) : null;
+
+            if (string.Equals(type, "prompt_processing.start", StringComparison.OrdinalIgnoreCase))
+            {
+                update = new AiProviderStreamUpdate(null, "Prompt processing started.", 0, DateTimeOffset.UtcNow, Phase: "prompt-processing", Progress: 0);
+                return true;
+            }
+
+            if (string.Equals(type, "prompt_processing.progress", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("progress", out var progressElement))
+            {
+                var progress = progressElement.GetDouble();
+                var normalized = progress > 1 ? progress / 100d : progress;
+                update = new AiProviderStreamUpdate(null, $"Prompt processing... {normalized:P1}.", 0, DateTimeOffset.UtcNow, Phase: "prompt-processing", Progress: normalized);
+                return true;
+            }
+
+            if (string.Equals(type, "prompt_processing.end", StringComparison.OrdinalIgnoreCase))
+            {
+                update = new AiProviderStreamUpdate(null, "Prompt processing complete. Waiting for model output.", 0, DateTimeOffset.UtcNow, Phase: "prompt-processing", Progress: 1);
+                return true;
+            }
+
+            if (string.Equals(type, "reasoning.delta", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("content", out var reasoningContent))
+            {
+                reasoning = ExtractText(reasoningContent);
+                return true;
+            }
+
+            if ((string.Equals(type, "response.output_text.delta", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type, "output_text.delta", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type, "text.delta", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type, "chat.delta", StringComparison.OrdinalIgnoreCase))
+                && root.TryGetProperty("content", out var content))
+            {
+                delta = ExtractText(content);
+                return true;
+            }
+
+            if (root.TryGetProperty("delta", out var deltaElement))
+            {
+                delta = ExtractText(deltaElement);
+                return !string.IsNullOrEmpty(delta);
+            }
+
+            if (root.TryGetProperty("content", out var rootContent)
+                && !string.Equals(type, "reasoning.end", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(type, "reasoning.start", StringComparison.OrdinalIgnoreCase))
+            {
+                delta = ExtractText(rootContent);
+                return !string.IsNullOrEmpty(delta);
+            }
+
+            if (string.Equals(type, "chat.end", StringComparison.OrdinalIgnoreCase))
+            {
+                completed = true;
+                update = new AiProviderStreamUpdate(null, "Provider completed.", 0, DateTimeOffset.UtcNow, true, "provider-completed");
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsLikelyLmStudio(AiProviderConfiguration configuration)
+    {
+        if (!string.Equals(configuration.Name, "LM Studio", StringComparison.OrdinalIgnoreCase)
+            && !configuration.Name.Contains("LM Studio", StringComparison.OrdinalIgnoreCase))
+        {
+            var baseUrl = configuration.BaseUrl ?? "";
+            return baseUrl.Contains(":1234", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
+    }
+
+    private static string NormalizeLmStudioBase(string baseUrl)
+    {
+        var value = baseUrl.TrimEnd('/');
+        if (value.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[..^3];
+        }
+
+        return value.TrimEnd('/') + "/";
     }
 
     private static async Task<AiRunOutput> RunChatCompletionsAsync(HttpClient client, string model, string prompt, int maxOutputTokens, CancellationToken cancellationToken)

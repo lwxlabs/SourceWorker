@@ -109,6 +109,7 @@ public sealed class ExplanationTests
             updates.Add(update);
         }
 
+        Assert.Contains(updates, update => update.Phase == "prompt-processing" && update.Progress is > 0);
         Assert.Contains(updates, update => update.Phase == "saved");
         Assert.Contains(updates, update => update.IsCompleted && update.Result?.Status == AiRunStatus.Completed);
         Assert.True(File.Exists(Path.Combine(temp.Root, ".ai-context", "docs", "backend", "07-ai-explanation.md")));
@@ -258,6 +259,7 @@ public sealed class ExplanationTests
         public async IAsyncEnumerable<AiProviderStreamUpdate> StreamAsync(AiProviderConfiguration configuration, string prompt, int maxOutputTokens, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             await Task.Yield();
+            yield return new AiProviderStreamUpdate(null, "Prompt processing... 50.0%.", 0, DateTimeOffset.UtcNow, Phase: "prompt-processing", Progress: 0.5);
             yield return new AiProviderStreamUpdate(CompleteMarkdown[..80], "Writing answer...", 80, DateTimeOffset.UtcNow);
             yield return new AiProviderStreamUpdate(CompleteMarkdown[80..], "Writing answer...", CompleteMarkdown.Length, DateTimeOffset.UtcNow);
             yield return new AiProviderStreamUpdate(null, "Provider completed.", CompleteMarkdown.Length, DateTimeOffset.UtcNow, true);

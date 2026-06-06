@@ -77,7 +77,7 @@ public sealed class AiProviderCatalogService(IAiProviderConfigurationRepository 
         return config.Kind switch
         {
             AiProviderKind.Ollama => await GetOllamaModelsAsync(config, cancellationToken),
-            AiProviderKind.OpenAiCompatible when (config.BaseUrl ?? "").Contains("localhost:1234", StringComparison.OrdinalIgnoreCase) => await GetOpenAiCompatibleModelsAsync(config, cancellationToken),
+            AiProviderKind.OpenAiCompatible => await GetOpenAiCompatibleModelsAsync(config, cancellationToken),
             AiProviderKind.OpenAI => new AiProviderModelList(providerId, ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"], false, "OpenAI model discovery is not enabled in this MVP; manual model input is supported."),
             AiProviderKind.Gemini => new AiProviderModelList(providerId, ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash"], false, "Gemini model discovery is not enabled in this MVP; manual model input is supported."),
             _ => new AiProviderModelList(providerId, [config.Model], false, "Manual model input is supported.")
@@ -90,16 +90,16 @@ public sealed class AiProviderCatalogService(IAiProviderConfigurationRepository 
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5), BaseAddress = new Uri(NormalizeOllamaBase(config.BaseUrl)) };
             using var response = await client.GetAsync("tags", cancellationToken);
-            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Ollama returned {(int)response.StatusCode}. Start Ollama and pull the model.");
+            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Id.ToString(), [config.Model], false, $"Ollama returned {(int)response.StatusCode}. Start Ollama and pull the model.");
             using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             var models = doc.RootElement.TryGetProperty("models", out var items)
                 ? items.EnumerateArray().Select(item => item.TryGetProperty("name", out var name) ? name.GetString() : null).Where(m => !string.IsNullOrWhiteSpace(m)).Cast<string>().ToArray()
                 : [];
-            return new AiProviderModelList(config.Kind.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
+            return new AiProviderModelList(config.Id.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
         }
         catch (Exception ex)
         {
-            return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Could not reach Ollama. Start Ollama at http://localhost:11434/api. {ex.Message}");
+            return new AiProviderModelList(config.Id.ToString(), [config.Model], false, $"Could not reach Ollama. Start Ollama at http://localhost:11434/api. {ex.Message}");
         }
     }
 
@@ -134,12 +134,12 @@ public sealed class AiProviderCatalogService(IAiProviderConfigurationRepository 
 
                         if (loaded.Count > 0)
                         {
-                            return new AiProviderModelList(config.Kind.ToString(), loaded.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "Loaded LM Studio models.");
+                            return new AiProviderModelList(config.Id.ToString(), loaded.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "Loaded LM Studio models.");
                         }
 
                         if (available.Count > 0)
                         {
-                            return new AiProviderModelList(config.Kind.ToString(), available.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "No LM Studio model is loaded. Load a model before generating.");
+                            return new AiProviderModelList(config.Id.ToString(), available.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), true, "No LM Studio model is loaded. Load a model before generating.");
                         }
                     }
                 }
@@ -147,16 +147,16 @@ public sealed class AiProviderCatalogService(IAiProviderConfigurationRepository 
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5), BaseAddress = new Uri(baseUrl + "/") };
             using var response = await client.GetAsync("models", cancellationToken);
-            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, "Start LM Studio local server and enable Developer / Local Server.");
+            if (!response.IsSuccessStatusCode) return new AiProviderModelList(config.Id.ToString(), [config.Model], false, "Start LM Studio local server and enable Developer / Local Server.");
             using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             var models = doc.RootElement.TryGetProperty("data", out var items)
                 ? items.EnumerateArray().Select(item => item.TryGetProperty("id", out var id) ? id.GetString() : null).Where(m => !string.IsNullOrWhiteSpace(m)).Cast<string>().ToArray()
                 : [];
-            return new AiProviderModelList(config.Kind.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
+            return new AiProviderModelList(config.Id.ToString(), models.Length == 0 ? [config.Model] : models, true, null);
         }
         catch (Exception ex)
         {
-            return new AiProviderModelList(config.Kind.ToString(), [config.Model], false, $"Could not reach LM Studio at http://localhost:1234/v1. {ex.Message}");
+            return new AiProviderModelList(config.Id.ToString(), [config.Model], false, $"Could not reach LM Studio at {config.BaseUrl ?? "http://localhost:1234/v1"}. {ex.Message}");
         }
     }
 
@@ -371,7 +371,7 @@ public sealed class AiRunService(IAiPromptPreviewService preview, IAiProviderCon
         var running = await runs.SaveAsync(NewRun(input, configuration, prompt, AiRunStatus.Running, null, null), cancellationToken);
         try
         {
-            var provider = registry.GetProvider(input.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
+            var provider = registry.GetProvider(configuration.Kind.ToString()) ?? throw new InvalidOperationException("AI provider implementation was not found.");
             var output = await provider.RunAsync(configuration, prompt.PromptText, input.MaxOutputTokens, cancellationToken);
             return await runs.SaveAsync(running with { Status = AiRunStatus.Completed, CompletedUtc = DateTimeOffset.UtcNow, OutputText = output.Text, OutputHash = output.OutputHash }, cancellationToken);
         }
@@ -416,12 +416,12 @@ public sealed class AiProviderValidationService(IAiSecretStore secrets, IAiProvi
         {
             return new AiProviderConnectionDiagnostic(providerId, AiProviderKind.OpenAiCompatible, AiProviderStatus.NotConfigured, "Provider is not configured.", ["Open AI Settings and save provider configuration."], new AiProviderErrorDetails(AiProviderErrorCode.Unknown, AiProviderErrorCategory.Configuration, "Provider is not configured.", null), DateTimeOffset.UtcNow);
         }
-        var provider = registry.GetProvider(providerId);
+        var provider = registry.GetProvider(config.Kind.ToString());
         if (provider is null)
         {
             return new AiProviderConnectionDiagnostic(providerId, config.Kind, AiProviderStatus.Unhealthy, "Provider implementation was not found.", ["Restart SourceWorker.", "Check provider kind."], new AiProviderErrorDetails(AiProviderErrorCode.Unknown, AiProviderErrorCategory.Configuration, "Provider implementation missing.", null), DateTimeOffset.UtcNow);
         }
-        var health = await provider.CheckHealthAsync(config, cancellationToken);
+        var health = (await provider.CheckHealthAsync(config, cancellationToken)) with { ProviderId = config.Id.ToString(), Name = config.Name, BaseUrl = config.BaseUrl };
         var actions = health.Status switch
         {
             AiProviderStatus.Healthy => Array.Empty<string>(),
@@ -763,11 +763,15 @@ public sealed class AiExplanationService(
     {
         var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
         var configs = await configurations.ListAsync(cancellationToken);
-        var providers = registry.ListProviders().Select(provider =>
-        {
-            var config = configs.FirstOrDefault(c => c.Kind == provider.Kind);
-            return new AiProviderHealthResult(provider.Id, provider.Kind, config is null ? AiProviderStatus.NotConfigured : AiProviderStatus.NotConfigured, config is null ? "Provider is not configured." : "Provider is configured.", DateTimeOffset.UtcNow, config?.MaskedApiKey);
-        }).ToArray();
+        var providers = configs.Select(config => new AiProviderHealthResult(
+            config.Id.ToString(),
+            config.Kind,
+            config.IsEnabled ? AiProviderStatus.NotConfigured : AiProviderStatus.Disabled,
+            config.IsEnabled ? "Provider is configured." : "Provider is disabled.",
+            DateTimeOffset.UtcNow,
+            config.MaskedApiKey,
+            config.Name,
+            config.BaseUrl)).ToArray();
         return new AiExplanationOptions(project.Id, providers, await packs.ListAsync(project, cancellationToken), AiExplanationPromptBuilder.SuggestedFilePath, Enum.GetValues<ExplanationProfile>());
     }
 
@@ -787,7 +791,7 @@ public sealed class AiExplanationService(
         var running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
         try
         {
-            var provider = registry.GetProvider(request.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
+            var provider = registry.GetProvider(configuration.Kind.ToString()) ?? throw new InvalidOperationException("AI provider implementation was not found.");
             var modelConfig = string.IsNullOrWhiteSpace(request.Model) ? configuration : configuration with { Model = request.Model };
             var output = await provider.RunAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken);
             if (string.IsNullOrWhiteSpace(output.Text))
@@ -830,8 +834,8 @@ public sealed class AiExplanationService(
         AiExplanationPreview? preview = null;
         var output = new StringBuilder();
 
-        AiExplanationStreamUpdate Update(string phase, string message, string? delta, int outputCharacters, AiExplanationResult? result = null, bool isCompleted = false, bool isFailed = false)
-            => new(phase, $"{message} Elapsed: {FormatElapsed(DateTimeOffset.UtcNow - startedUtc)}.", delta, outputCharacters, DateTimeOffset.UtcNow - startedUtc, result, isCompleted, isFailed);
+        AiExplanationStreamUpdate Update(string phase, string message, string? delta, int outputCharacters, AiExplanationResult? result = null, bool isCompleted = false, bool isFailed = false, double? progress = null)
+            => new(phase, $"{message} Elapsed: {FormatElapsed(DateTimeOffset.UtcNow - startedUtc)}.", delta, outputCharacters, DateTimeOffset.UtcNow - startedUtc, result, isCompleted, isFailed, progress);
 
         try
         {
@@ -849,7 +853,7 @@ public sealed class AiExplanationService(
             }
 
             running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
-            var provider = registry.GetProvider(request.ProviderId) ?? throw new InvalidOperationException("AI provider implementation was not found.");
+            var provider = registry.GetProvider(configuration.Kind.ToString()) ?? throw new InvalidOperationException("AI provider implementation was not found.");
             var modelConfig = string.IsNullOrWhiteSpace(request.Model) ? configuration : configuration with { Model = request.Model };
             await writer.WriteAsync(Update("prompt-processing", $"Request sent to {configuration.Kind} model {modelConfig.Model}. The provider is processing the prompt before answer tokens are available.", null, output.Length), cancellationToken);
 
@@ -857,18 +861,22 @@ public sealed class AiExplanationService(
             {
                 await foreach (var chunk in streamingProvider.StreamAsync(modelConfig, preview.PromptText, request.MaxOutputTokens, cancellationToken))
                 {
+                    var phase = chunk.Phase ?? (!string.IsNullOrEmpty(chunk.DeltaText)
+                        ? "answer-streaming"
+                        : chunk.IsCompleted ? "provider-completed" : "reasoning");
+
                     if (!string.IsNullOrEmpty(chunk.DeltaText))
                     {
                         output.Append(chunk.DeltaText);
-                        await writer.WriteAsync(Update("answer-streaming", chunk.Message, chunk.DeltaText, output.Length), cancellationToken);
+                        await writer.WriteAsync(Update(phase, chunk.Message, chunk.DeltaText, output.Length, progress: chunk.Progress), cancellationToken);
                     }
                     else if (chunk.IsCompleted)
                     {
-                        await writer.WriteAsync(Update("provider-completed", $"Provider stream completed with {output.Length} characters.", null, output.Length), cancellationToken);
+                        await writer.WriteAsync(Update(phase, $"Provider stream completed with {output.Length} characters.", null, output.Length, progress: chunk.Progress), cancellationToken);
                     }
                     else
                     {
-                        await writer.WriteAsync(Update("reasoning", chunk.Message, null, output.Length), cancellationToken);
+                        await writer.WriteAsync(Update(phase, chunk.Message, null, output.Length, progress: chunk.Progress), cancellationToken);
                     }
                 }
             }
@@ -1060,7 +1068,9 @@ public sealed class DiagnosticsService(IAppVersionService version, IStorageInfoS
         foreach (var config in await providers.ListAsync(cancellationToken))
         {
             var provider = registry.GetProvider(config.Kind.ToString());
-            statuses.Add(provider is null ? new AiProviderHealthResult(config.Kind.ToString(), config.Kind, AiProviderStatus.Unhealthy, "Provider implementation missing.", DateTimeOffset.UtcNow, config.MaskedApiKey) : await provider.CheckHealthAsync(config, cancellationToken));
+            statuses.Add(provider is null
+                ? new AiProviderHealthResult(config.Id.ToString(), config.Kind, AiProviderStatus.Unhealthy, "Provider implementation missing.", DateTimeOffset.UtcNow, config.MaskedApiKey, config.Name, config.BaseUrl)
+                : (await provider.CheckHealthAsync(config, cancellationToken)) with { ProviderId = config.Id.ToString(), Name = config.Name, BaseUrl = config.BaseUrl });
         }
         return new DiagnosticsSummary(v.AppVersion, v.ApiVersion, storageInfo, runtime.GetState(), statuses, (await projects.ListAsync(cancellationToken)).Count, (await jobs.ListAsync(cancellationToken)).Count, storageInfo.AiRunCount, [], DateTimeOffset.UtcNow);
     }
@@ -1243,7 +1253,7 @@ public sealed class QuickAskService(IProjectAiSettingsRepository settings, IAiPr
     public async Task<QuickAskResult> PreviewAsync(QuickAskRequest request, CancellationToken cancellationToken)
     {
         var defaults = await settings.GetAsync(request.ProjectId, cancellationToken);
-        var provider = request.ProviderId ?? defaults.DefaultProviderId ?? (await providers.ListAsync(cancellationToken)).FirstOrDefault()?.Kind.ToString() ?? throw new InvalidOperationException("AI provider is not configured.");
+        var provider = request.ProviderId ?? defaults.DefaultProviderId ?? (await providers.ListAsync(cancellationToken)).FirstOrDefault()?.Id.ToString() ?? throw new InvalidOperationException("AI provider is not configured.");
         var pack = request.PackId ?? defaults.DefaultContextPack;
         var template = request.TemplateId ?? defaults.DefaultPromptTemplate;
         var max = request.MaxOutputTokens ?? defaults.MaxOutputTokens;

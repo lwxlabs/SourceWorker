@@ -3,6 +3,7 @@ using SourceWorker.ApiClient;
 using SourceWorker.Desktop.Services;
 using SourceWorker.Hosting;
 using SourceWorker.UI.Services;
+using LwXLab.Markdown.Extensions;
 
 namespace SourceWorker.Desktop;
 
@@ -15,6 +16,7 @@ public static class MauiProgram
             .UseMauiApp<App>();
 
         builder.Services.AddMauiBlazorWebView();
+        builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Services.AddLogging(logging => logging.AddDebug());
         builder.Services.AddSourceWorkerHosting();
         builder.Services.AddSourceWorkerApiClient(options =>
@@ -26,6 +28,7 @@ public static class MauiProgram
         builder.Services.AddScoped<ToastService>();
         builder.Services.AddScoped<DashboardActionService>();
         builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
+        builder.Services.AddLwXLabMarkdown();
         builder.Services.AddSingleton<IDesktopLocalApiLifecycleService, DesktopLocalApiLifecycleService>();
         builder.Services.AddSingleton<IDesktopRuntimeStateService>(provider => (DesktopLocalApiLifecycleService)provider.GetRequiredService<IDesktopLocalApiLifecycleService>());
         builder.Services.AddSingleton<IDesktopStartupService, DesktopStartupService>();
