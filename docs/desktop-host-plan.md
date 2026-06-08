@@ -6,7 +6,7 @@ Product focus: Desktop should feel like a local project understanding and agent 
 
 ## Phase 1: AppHost (MVP 2.0) - DONE
 - CLI-based bootstrap using `dotnet run --project src/services/SourceWorker.AppHost`.
-- Orchestrates `LocalApi` and `Dashboard` processes.
+- Orchestrates the `LocalApi` process for development/service debugging.
 - Passes security tokens and base URLs via environment variables.
 - Provides a "one-start" experience for developers.
 
@@ -38,7 +38,7 @@ MVP 2.4 implemented:
 - **Auto-start**: Option to start with the OS.
 
 ## Phase 4: Installer & Updates
-- Bundle `LocalApi` and `Dashboard` assets (or just the MAUI app with the API).
+- Bundle `LocalApi` and the MAUI desktop app.
 - Use MSIX (Windows), DMG (macOS), or similar for distribution.
 - Implement an auto-update mechanism for both the desktop shell and the Local API engine.
 

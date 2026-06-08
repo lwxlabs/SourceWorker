@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/context"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="context">
 <h1>Context Browser</h1>
 <p>Default view shows user-facing context. Technical files and external mirrored exports are available when needed.</p>
 
@@ -12,9 +10,11 @@
 
 <div class="split">
     <ContextFileTree Files="@files" BaseUrl="@($"/projects/{ProjectId}/context")" />
-    <MarkdownViewer Content="@content" />
+    @* <MarkdownViewer Content="@content" /> *@
+    <MarkDown Preview="true" SplitView="false" Value="@content" EnableMenu="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
+
+
 </div>
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

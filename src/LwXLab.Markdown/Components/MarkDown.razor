@@ -9,9 +9,9 @@
 @inject IJSRuntime JS
 
 <div id="@_rootId"
-     class="lwx-md-root @ThemeClass @CssClass @(FullScreen ? "lwx-md-fullscreen" : null) @(EnableEdit ? "lwx-md-editable" : "lwx-md-readonly")"
+     class="lwx-md-root @ThemeClass @CssClass @(FullScreen ? "lwx-md-fullscreen" : null) @(EnableMenu ? "lwx-md-editable" : "lwx-md-readonly")"
      style="height:@Height;width:@Width;min-height:@MinHeight;max-height:@MaxHeight;">
-    @if (ShowToolbar && EnableEdit)
+    @if (ShowToolbar && EnableMenu)
     {
         <div class="lwx-md-toolbar">
             @if (Toolbar is not null)
@@ -20,56 +20,90 @@
             }
             else
             {
-                @foreach (var button in EffectiveToolbarButtons.Where(x => x.Visible && !HideIcons.Contains(x.Name, StringComparer.OrdinalIgnoreCase)))
+                if (ShowToolBarButtons)
                 {
-                    <button type="button" class="lwx-md-btn" title="@button.Title" @onclick="() => ToolbarClickAsync(button)">
-                        @if (!string.IsNullOrWhiteSpace(button.IconCssClass))
-                        {
-                            <span class="@button.IconCssClass"></span>
-                        }
-                        else
-                        {
-                            @button.Text
-                        }
-                    </button>
+                    @foreach (var button in EffectiveToolbarButtons.Where(x => x.Visible && !HideIcons.Contains(x.Name, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        <button type="button" class="lwx-md-btn" title="@button.Title" @onclick="() => ToolbarClickAsync(button)">
+                            @if (!string.IsNullOrWhiteSpace(button.IconCssClass))
+                            {
+                                <span class="@button.IconCssClass"></span>
+                            }
+                            else
+                            {
+                                @button.Text
+                            }
+                        </button>
+                    }
                 }
+
             }
 
             <span class="lwx-md-spacer"></span>
 
-            @if (AllowPreviewToggle)
+            @if (ShowActionButton)
             {
-                <button type="button" class="lwx-md-btn" @onclick="TogglePreviewAsync">@(Preview ? EditText : PreviewText)</button>
-            }
-            @if (AllowFullScreen)
-            {
-                <button type="button" class="lwx-md-btn" @onclick="ToggleFullScreen">@(FullScreen ? ExitFullScreenText : FullScreenText)</button>
+                <button type="button" class="lwx-md-btn" @onclick="OnActionButtonClicked">@ActionButtonText</button>
             }
 
-            @if (ShowSplitDirectionButton && EnableEdit && Preview)
+            @if (AllowPreviewToggle)
+            {
+                <label class="lwx-md-view-label">
+                    @* <span>View</span> *@
+                    <select class="lwx-md-toolbar-select"
+                            value="@CurrentViewMode"
+                            @onchange="OnViewModeChangedAsync">
+                        <option value="edit">@EditText</option>
+                        <option value="preview">@PreviewText</option>
+                        <option value="split">@SplitViewHorizontalText</option>
+                    </select>
+                </label>
+            }
+
+            @if (ShowThemeSelector)
+            {
+                <label class="lwx-md-view-label">
+                    <span>Theme</span>
+                    <select class="lwx-md-toolbar-select"
+                            value="@Theme"
+                            @onchange="OnThemeChangedAsync">
+                        <option value="@MarkDownTheme.Default">@ThemeDefaultText</option>
+                        <option value="@MarkDownTheme.Dark">@ThemeDarkText</option>
+                        <option value="@MarkDownTheme.Gray">@ThemeGrayText</option>
+                        <option value="@MarkDownTheme.White">@ThemeWhiteText</option>
+                    </select>
+                </label>
+            }
+
+            @if (ShowSplitDirectionButton && EnableMenu && Preview && SplitView)
             {
                 <select class="lwx-md-toolbar-select"
                         value="@SplitDirection"
                         @onchange="OnSplitDirectionChangedAsync">
-                    <option value="@MarkDownSplitDirection.Vertical">Vertical split</option>
-                    <option value="@MarkDownSplitDirection.Horizontal">Horizontal split</option>
+                    <option value="@MarkDownSplitDirection.Vertical">@SplitViewHorizontalText</option>
+                    <option value="@MarkDownSplitDirection.Horizontal">@SplitViewVerticalText</option>
                 </select>
 
-                <button type="button"
-                        class="lwx-md-toolbar-button"
+                @* <button type="button"
+                        class="lwx-md-btn"
                         @onclick="ResetSplitAsync">
                     50/50
-                </button>
+                </button> *@
+            }
+
+            @if (AllowFullScreen)
+            {
+                <button type="button" class="lwx-md-btn" @onclick="ToggleFullScreen">@(FullScreen ? ExitFullScreenText : FullScreenText)</button>
             }
         </div>
     }
 
-    <div class="lwx-md-body @SplitDirectionClass"
+    <div class="@BodyClass"
          style="--lwx-md-split-ratio: @SplitRatioValue;">
 
-        @if (EnableEdit)
+        @if (EnableMenu)
         {
-            <div class="lwx-md-editor-pane">
+            <div class="lwx-md-editor-pane @(ShowEditorPane ? null : "lwx-md-pane-hidden")">
                 <textarea id="@_editorId"
                           class="lwx-md-textarea"
                           placeholder="@Placeholder"
@@ -80,13 +114,15 @@
             </div>
         }
 
-        @if (EnableEdit && Preview && EnableSplitResize)
+        @if (EnableMenu && Preview && SplitView && EnableSplitResize)
         {
             <div class="lwx-md-splitter"
+                 @onpointerdown:preventDefault="true"
+                 @onpointerdown:stopPropagation="true"
                  @onpointerdown="StartSplitDragAsync"></div>
         }
 
-        @if (Preview || !EnableEdit)
+        @if (ShowPreviewPane)
         {
             <div id="@_previewId" class="lwx-md-preview-pane @PreviewCssClass">
                 @((MarkupString)_html)
@@ -138,13 +174,22 @@
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
 
     [Parameter] public bool EnableSplitResize { get; set; } = true;
-    [Parameter] public bool ShowSplitDirectionButton { get; set; } = true;
+    [Parameter] public bool ShowSplitDirectionButton { get; set; } = false;
     [Parameter] public MarkDownSplitDirection SplitDirection { get; set; } = MarkDownSplitDirection.Vertical;
     [Parameter] public EventCallback<MarkDownSplitDirection> SplitDirectionChanged { get; set; }
     [Parameter] public double SplitRatio { get; set; } = 50;
     [Parameter] public EventCallback<double> SplitRatioChanged { get; set; }
     [Parameter] public double MinEditorPercent { get; set; } = 20;
     [Parameter] public double MinPreviewPercent { get; set; } = 20;
+    [Parameter] public bool ShowToolBarButtons { get; set; } = true;
+
+    [Parameter] public bool ShowActionButton { get; set; } = false;
+    [Parameter] public string ActionButtonText { get; set; } = "✎";
+    [Parameter] public EventCallback OnActionButtonClicked { get; set; }
+
+
+
+    private bool IsSplitMode => EnableMenu && Preview && SplitView;
 
     private string SplitDirectionClass => SplitDirection switch
     {
@@ -152,14 +197,28 @@
         _ => "lwx-md-split-vertical"
     };
 
-    private string SplitStyle =>
-        $"--lwx-md-split-ratio:{Math.Clamp(SplitRatio, MinEditorPercent, 100 - MinPreviewPercent).ToString(System.Globalization.CultureInfo.InvariantCulture)}%;";
+    private string BodyClass
+    {
+        get
+        {
+            var modeClass = CurrentViewMode switch
+            {
+                "preview" => "lwx-md-mode-preview",
+                "split" => "lwx-md-mode-split",
+                _ => "lwx-md-mode-edit"
+            };
+
+            return IsSplitMode
+                ? $"lwx-md-body {modeClass} {SplitDirectionClass}"
+                : $"lwx-md-body {modeClass}";
+        }
+    }
 
     private string SplitRatioValue => $"{Math.Clamp(SplitRatio, MinEditorPercent, 100 - MinPreviewPercent).ToString(System.Globalization.CultureInfo.InvariantCulture)}%";
 
     [Parameter] public MarkDownTheme Theme { get; set; } = MarkDownTheme.Dark;
     [Parameter] public EventCallback<MarkDownTheme> ThemeChanged { get; set; }
-    [Parameter] public bool ShowThemeSelector { get; set; } = true;
+    [Parameter] public bool ShowThemeSelector { get; set; } = false;
     [Parameter] public string ThemeDefaultText { get; set; } = "Default";
     [Parameter] public string ThemeDarkText { get; set; } = "Dark";
     [Parameter] public string ThemeGrayText { get; set; } = "Gray";
@@ -189,7 +248,7 @@
     [Parameter] public EventCallback<string> ValueHTMLChanged { get; set; }
     [Parameter] public EventCallback<LwMarkdownStats> StatsChanged { get; set; }
 
-    [Parameter] public bool EnableEdit { get; set; } = true;
+    [Parameter] public bool EnableMenu { get; set; } = true;
     [Parameter] public bool ReadOnly { get; set; }
     [Parameter] public bool Preview { get; set; }
     [Parameter] public bool SplitView { get; set; } = true;
@@ -241,14 +300,22 @@
     [Parameter] public int AutoSaveDelay { get; set; } = 700;
     [Parameter] public string AutoSaveText { get; set; } = "Saved";
 
-    [Parameter] public string PreviewText { get; set; } = "Preview";
-    [Parameter] public string EditText { get; set; } = "Edit";
-    [Parameter] public string FullScreenText { get; set; } = "Fullscreen";
-    [Parameter] public string ExitFullScreenText { get; set; } = "Exit";
+    [Parameter] public string PreviewText { get; set; } = "👁";
+    [Parameter] public string EditText { get; set; } = "✎";
+    [Parameter] public string SplitViewHorizontalText { get; set; } = "◫";
+    [Parameter] public string SplitViewVerticalText { get; set; } = "▤";
+    [Parameter] public string FullScreenText { get; set; } = "⛶";
+    [Parameter] public string ExitFullScreenText { get; set; } = "✕";
 
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
-    private bool ShowPreviewPane => !EnableEdit || Preview || ShowPreviewWhenEditing;
+    private bool ShowEditorPane => EnableMenu && (!Preview || SplitView);
+    private bool ShowPreviewPane => !EnableMenu || Preview;
+    private string CurrentViewMode => !EnableMenu || (Preview && !SplitView)
+        ? "preview"
+        : Preview && SplitView
+            ? "split"
+            : "edit";
 
     private IReadOnlyList<LwMarkdownButton> EffectiveToolbarButtons => ToolbarButtons ?? DefaultButtons;
 
@@ -309,11 +376,14 @@
                     await SetValueAsync(restored, notify: true);
             }
 
-            _monacoReady = EnableEdit && EnableMonaco;
+            _monacoReady = EnableMenu && EnableMonaco;
         }
 
         if (_module is not null && !_disposed)
+        {
+            await JS.InvokeVoidAsync("lwxlabMarkdown.setTheme", InstanceId, MonacoThemeName, MermaidThemeName);
             await JS.InvokeVoidAsync("lwxlabMarkdown.enhancePreview", InstanceId, _previewId, BuildClientOptions());
+        }
     }
 
     private object BuildClientOptions()
@@ -321,7 +391,7 @@
         var options = CreateOptions();
         return new
         {
-            enableMonaco = EnableEdit && EnableMonaco,
+            enableMonaco = EnableMenu && EnableMonaco,
             enableMermaid = EnableMermaid,
             enableHighlight = EnableHighlight,
             monacoLoaderUrl = options.MonacoLoaderUrl,
@@ -334,7 +404,7 @@
             autoSaveDelay = AutoSaveDelay,
             editor = new
             {
-                theme = EditorOptions.Theme,
+                theme = MonacoThemeName,
                 language = EditorOptions.Language,
                 automaticLayout = EditorOptions.AutomaticLayout,
                 lineNumbers = EditorOptions.LineNumbers ? "on" : "off",
@@ -407,6 +477,45 @@
         }
     }
 
+    private async Task OnViewModeChangedAsync(ChangeEventArgs e)
+    {
+        var mode = e.Value?.ToString();
+        switch (mode)
+        {
+            case "preview":
+                Preview = true;
+                SplitView = false;
+                break;
+            case "split":
+                Preview = true;
+                SplitView = true;
+                break;
+            default:
+                Preview = false;
+                SplitView = false;
+                break;
+        }
+
+        _lastRenderedValue = string.Empty;
+        RenderMarkdown(notify: false);
+        await JS.InvokeVoidAsync("lwxlabMarkdown.layout", InstanceId);
+    }
+
+    private async Task OnThemeChangedAsync(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<MarkDownTheme>(e.Value?.ToString(), out var value))
+        {
+            Theme = value;
+            await ThemeChanged.InvokeAsync(value);
+
+            if (_module is not null)
+            {
+                await JS.InvokeVoidAsync("lwxlabMarkdown.setTheme", InstanceId, MonacoThemeName, MermaidThemeName);
+                await JS.InvokeVoidAsync("lwxlabMarkdown.enhancePreview", InstanceId, _previewId, BuildClientOptions());
+            }
+        }
+    }
+
     private async Task ResetSplitAsync()
     {
         SplitRatio = 50;
@@ -442,7 +551,7 @@
         Value = value ?? string.Empty;
         _currentValue = Value;
 
-        var needsRenderedHtml = Preview || !EnableEdit || ValueHTMLChanged.HasDelegate;
+        var needsRenderedHtml = Preview || !EnableMenu || ValueHTMLChanged.HasDelegate;
         if (needsRenderedHtml)
         {
             RenderMarkdown(notify: true);
@@ -469,7 +578,7 @@
             _lastAutoSaveText = AutoSaveText;
         }
 
-        if (Preview || !EnableEdit || ShowStatusBar || AutoSaveEnabled)
+        if (Preview || !EnableMenu || ShowStatusBar || AutoSaveEnabled)
         {
             StateHasChanged();
         }
@@ -496,7 +605,7 @@
         Value = value ?? string.Empty;
         _currentValue = Value;
         _lastParameterValue = Value;
-        var needsRenderedHtml = Preview || !EnableEdit || ValueHTMLChanged.HasDelegate;
+        var needsRenderedHtml = Preview || !EnableMenu || ValueHTMLChanged.HasDelegate;
         if (needsRenderedHtml)
         {
             _lastRenderedValue = string.Empty;
@@ -534,7 +643,7 @@
             }
         }
 
-        if (Preview || !EnableEdit || ShowStatusBar || AutoSaveEnabled)
+        if (Preview || !EnableMenu || ShowStatusBar || AutoSaveEnabled)
         {
             StateHasChanged();
         }
@@ -556,7 +665,23 @@
 
     public async Task TogglePreviewAsync()
     {
-        Preview = !Preview;
+        if (!Preview)
+        {
+            Preview = true;
+            SplitView = true;
+        }
+        else if (SplitView)
+        {
+            SplitView = false;
+        }
+        else
+        {
+            Preview = false;
+        }
+
+        _lastRenderedValue = string.Empty;
+        RenderMarkdown(notify: false);
+        await JS.InvokeVoidAsync("lwxlabMarkdown.layout", InstanceId);
         await Task.CompletedTask;
     }
 

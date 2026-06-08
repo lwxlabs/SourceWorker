@@ -2,7 +2,7 @@
 
 Date: 2026-06-02
 
-SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, MVP 2.7 corrected project workspace navigation, MVP 2.8 AI Explanation Writer, and MVP 2.9 Markdown Workspace + Provider Management.
+SourceWorker is a local-first project understanding and AI context handoff app with a protected Local API, Windows-first MAUI Blazor Hybrid desktop app, one-start AppHost fallback, interactive Blazor dashboard, context packs, output routing, generated docs, artifact lifecycle, project scanning, code intelligence, dashboard write actions, MVP 2.1 safe AI provider preview, MVP 2.2 AI/dogfood hardening, MVP 2.3 real dogfood feedback loops, MVP 2.4 desktop publishing, MVP 2.5 Agent Handoff Mode, MVP 2.6 product UX consolidation, MVP 2.7 corrected project workspace navigation, MVP 2.8 AI Explanation Writer, MVP 2.9 Markdown Workspace + Provider Management, and MVP 3.0 SourceWorker Context Branches + Snapshot Diff.
 
 Product statement:
 
@@ -23,6 +23,48 @@ Still intentionally not included:
 - automatic markdown autosave
 - full installer/updater
 - production code signing
+
+## MVP 3.0 SourceWorker Context Branches + Snapshot Diff
+
+MVP 3.0 adds project-specific SourceWorker context branches and snapshots. A context branch is a named SourceWorker timeline of project understanding. It is not a Git branch and does not require Git.
+
+Default behavior:
+
+- registering a project creates `main-context`
+- scans write snapshots into the active SourceWorker context branch
+- each snapshot captures scan metrics, file/index hashes, generated context hashes, handoff/docs hashes, AI explanation hash when present, and code-intelligence counts
+- generated/context markdown content may be retained for readable diffs
+- normal source file content is not stored; source files are tracked by path, kind, size, hash, timestamp, and importance metadata only
+
+Optional Git metadata:
+
+- current Git branch name
+- current commit SHA
+- dirty state
+
+Git metadata is read-only and best-effort. SourceWorker never creates, switches, checks out, deletes, merges, resets, cleans, or applies Git changes. If Git is missing or the project is not a Git repo, context branches and snapshot diffs still work.
+
+New project workspace tab:
+
+- `Branches`
+
+Branches supports:
+
+- list SourceWorker context branches
+- create branch
+- activate branch
+- remove branch from SourceWorker metadata
+- view snapshot timeline
+- compare latest snapshot with previous snapshot
+- compare selected snapshots through Local API
+- create a Branch Diff Handoff under `.ai-context/branches/diffs/`
+
+Snapshot diff behavior:
+
+- generated markdown changes can show line diffs
+- source file content diffs are not shown in MVP 3.0 because SourceWorker does not store historical source contents
+- metric changes show file, symbol, flow, route, test, TODO, and generated artifact count differences
+- branch diff handoff is designed to be copied into Codex, Junie, ChatGPT, Cursor, Claude Code, or another agent
 
 ## MVP 2.5 Agent Handoff Refocus
 
@@ -306,7 +348,7 @@ MVP 2.9 Local API endpoints:
 
 If you experience "Tracking Prevention blocked access to storage" errors when loading Monaco, Mermaid, or Highlight.js, you must self-host these assets:
 
-1. Download the required files and place them into `wwwroot/lib` in your host application (e.g., `ui/SourceWorker.Dashboard/wwwroot/lib`).
+1. Download the required files and place them into `wwwroot/lib` in your host application (e.g., `ui/SourceWorker.Desktop/wwwroot/lib`).
 2. Configure the library to use these local assets in `Program.cs` or `MauiProgram.cs` by calling `UseLocalAssets()`:
 
 ```csharp
@@ -328,12 +370,11 @@ builder.Services.AddLwXLabMarkdown(options =>
 - `SourceWorker.AI.Providers` is the provider infrastructure library for OpenAI, Gemini, Ollama, OpenAI-compatible endpoints, provider presets, and local AppData AI secret storage.
 - `SourceWorker.Infrastructure` composes storage, scanner, context, recipes, AI core, AI providers, Git, and Local API runtime services.
 - `SourceWorker.LocalApi` is the protected HTTP boundary.
-- `SourceWorker.ApiClient` is the dashboard/client boundary. It has no Blazor dependency.
+- `SourceWorker.ApiClient` is the UI/client boundary. It has no Blazor dependency.
 - `SourceWorker.UI` contains reusable Razor components/pages.
-- `SourceWorker.Dashboard` is the current Blazor Web App host.
 - `SourceWorker.Desktop` is the Windows-first MAUI Blazor Hybrid app. It hosts `SourceWorker.UI`, starts/manages Local API internally, configures `SourceWorker.ApiClient`, and can be published as an `.exe`.
 - `SourceWorker.Hosting` is the shared local orchestration library used by Desktop and AppHost.
-- `SourceWorker.AppHost` starts Local API and Dashboard together with token/base URL discovery for development/browser fallback.
+- `SourceWorker.AppHost` starts Local API for development/service debugging. The removed web dashboard host is no longer part of the solution.
 
 ## MVP 2.4 Desktop App
 
@@ -826,7 +867,7 @@ Do not run `CliCommandTests` for:
 Targeted examples:
 - AI provider domain/application changes: run AI provider tests and affected Application tests.
 - AI provider Local API endpoints: run LocalApi AI endpoint tests and ApiClient AI tests.
-- AI dashboard UI: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`; run ApiClient AI tests if client changed.
+- AI/desktop UI: build `ui/SourceWorker.UI` and `ui/SourceWorker.Desktop`; run ApiClient AI tests if client changed.
 - Docs-only: no tests required.
 - Shared contract changes: run affected ApiClient and LocalApi tests; full tests only if broad contracts break many projects.
 - Final milestone: build solution, run targeted AI/ApiClient/LocalApi tests, and only run full `dotnet test SourceWorker.slnx --no-build` if shared architecture, storage, security middleware, or application base abstractions changed.
@@ -849,7 +890,6 @@ dotnet test tests/SourceWorker.Tests.AppHost/SourceWorker.Tests.AppHost.csproj
 dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter ApiClient
 dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj
 dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
-dotnet build ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj
 .\tools\publish\Publish-Desktop-Windows.ps1
 .\tools\publish\Create-DesktopShortcut.ps1
 ```
@@ -897,7 +937,6 @@ dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj
 dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Provider --no-build
 dotnet build ui/SourceWorker.UI/SourceWorker.UI.csproj
 dotnet build ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj
-dotnet build ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj
 ```
 
 MVP 2.9 verification notes:

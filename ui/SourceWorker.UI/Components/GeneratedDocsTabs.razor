@@ -1,4 +1,5 @@
 @inject ISourceWorkerApiClient Api
+@inject NavigationManager Navigation
 
 <div class="split">
     <nav class="doc-tabs">
@@ -21,10 +22,13 @@
     }
     else
     {
+
         <div class="project-actions">
-            <a class="btn" href="@($"/projects/{ProjectId}/markdown?file={Uri.EscapeDataString(SelectedFileOrDefault)}")">Edit in Markdown Workspace</a>
+            <MarkDown Preview="true" SplitView="false" Value="@content" 
+                EnableMenu="true" ShowToolBarButtons="false" MinHeight="600px"
+                ShowThemeSelector="false" AllowFullScreen="true" ShowActionButton="true"
+                ActionButtonText="✎" OnActionButtonClicked="OnActionButtonClicked" />
         </div>
-        <MarkdownViewer Content="@content" />
     }
 </div>
 
@@ -35,13 +39,16 @@
     private readonly string[] Files =
     [
         ".ai-context/docs/backend/README.md",
+        ".ai-context/docs/backend/00-project-index.md",
         ".ai-context/docs/backend/01-project-structure.md",
         ".ai-context/docs/backend/02-architecture.md",
         ".ai-context/docs/backend/03-important-files-and-flows.md",
         ".ai-context/docs/backend/04-configuration-and-secrets.md",
         ".ai-context/docs/backend/05-tasks-and-risks.md",
         ".ai-context/docs/backend/06-verification-checklist.md",
-        ".ai-context/docs/backend/07-ai-explanation.md"
+        ".ai-context/docs/backend/07-ai-explanation.md",
+        ".ai-context/docs/backend/08-code-snippets.md",
+        ".ai-context/docs/backend/09-reading-guide.md"
     ];
     private string? content;
     private string? error;
@@ -60,4 +67,16 @@
             error = ex.Message;
         }
     }
+
+    // action
+    private void OnActionButtonClicked()
+    {
+        //edit markdown button
+        if (!string.IsNullOrWhiteSpace(SelectedFileOrDefault))
+        {
+            Navigation.NavigateTo($"/projects/{ProjectId}/markdown?file={Uri.EscapeDataString(SelectedFileOrDefault)}");
+        }
+        
+    }
+
 }

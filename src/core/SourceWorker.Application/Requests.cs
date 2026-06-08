@@ -25,6 +25,17 @@ public sealed record CleanupGeneratedCommand(Guid ProjectId, bool DryRun, bool F
 public sealed record GetSymbolsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeSymbol>>;
 public sealed record GetFlowsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeFlow>>;
 public sealed record GetRoutesQuery(Guid ProjectId) : IRequest<IReadOnlyList<RouteInfo>>;
+public sealed record GetCodeLanguagesQuery(Guid ProjectId) : IRequest<ProjectLanguageProfile?>;
+public sealed record GetCodeAnalyzersQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeAnalyzerDescriptor>>;
+public sealed record GetCodeAnalyzerRunsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeAnalyzerRun>>;
+public sealed record GetCodeComponentsQuery(Guid ProjectId) : IRequest<IReadOnlyList<CodeComponent>>;
+public sealed record GetFrontendRoutesQuery(Guid ProjectId) : IRequest<IReadOnlyList<FrontendRoute>>;
+public sealed record GetScriptImportsQuery(Guid ProjectId) : IRequest<IReadOnlyList<ScriptImport>>;
+public sealed record GetStyleUsagesQuery(Guid ProjectId) : IRequest<IReadOnlyList<StyleUsage>>;
+public sealed record GetPackageReferencesQuery(Guid ProjectId) : IRequest<IReadOnlyList<PackageReferenceInfo>>;
+public sealed record GetBuildScriptsQuery(Guid ProjectId) : IRequest<IReadOnlyList<BuildScriptInfo>>;
+public sealed record GetCodeAnalysisSettingsQuery(Guid ProjectId) : IRequest<CodeAnalysisSettings>;
+public sealed record UpdateCodeAnalysisSettingsCommand(CodeAnalysisSettings Settings) : IRequest<CodeAnalysisSettings>;
 public sealed record GetContextBrowserQuery(Guid ProjectId) : IRequest<ContextBrowserSummary>;
 public sealed record GetContextFilesQuery(Guid ProjectId, bool ShowTechnical = false, bool ShowExports = false) : IRequest<IReadOnlyList<ContextBrowserFile>>;
 public sealed record ReadContextFileQuery(Guid ProjectId, string RelativePath) : IRequest<string>;
@@ -33,6 +44,21 @@ public sealed record GetMarkdownFilesQuery(Guid ProjectId, MarkdownWorkspaceScop
 public sealed record GetMarkdownFileQuery(Guid ProjectId, string RelativePath) : IRequest<MarkdownFileContent>;
 public sealed record SaveMarkdownFileCommand(Guid ProjectId, MarkdownFileSaveRequest Request) : IRequest<MarkdownFileSaveResult>;
 public sealed record ValidateMarkdownCommand(Guid ProjectId, string Markdown) : IRequest<MarkdownValidationResult>;
+public sealed record GetContextBranchesQuery(Guid ProjectId) : IRequest<IReadOnlyList<SourceContextBranch>>;
+public sealed record GetContextBranchQuery(Guid ProjectId, Guid BranchId) : IRequest<SourceContextBranch?>;
+public sealed record CreateContextBranchCommand(Guid ProjectId, string Name, string? Description) : IRequest<SourceContextBranch>;
+public sealed record UpdateContextBranchCommand(Guid ProjectId, Guid BranchId, string? Name, string? Description) : IRequest<SourceContextBranch>;
+public sealed record RemoveContextBranchCommand(Guid ProjectId, Guid BranchId) : IRequest<bool>;
+public sealed record ActivateContextBranchCommand(Guid ProjectId, Guid BranchId) : IRequest<SourceContextBranch>;
+public sealed record GetSnapshotsQuery(Guid ProjectId, Guid? BranchId = null) : IRequest<IReadOnlyList<SourceSnapshot>>;
+public sealed record GetSnapshotQuery(Guid ProjectId, Guid SnapshotId) : IRequest<SourceSnapshot?>;
+public sealed record DeleteSnapshotCommand(Guid ProjectId, Guid SnapshotId) : IRequest<bool>;
+public sealed record GetLatestSnapshotDiffQuery(Guid ProjectId, Guid? BranchId = null) : IRequest<SourceDiffReport>;
+public sealed record CompareBranchSnapshotsQuery(Guid ProjectId, Guid LeftBranchId, Guid RightBranchId) : IRequest<SourceDiffReport>;
+public sealed record CompareSnapshotsQuery(Guid ProjectId, Guid LeftSnapshotId, Guid RightSnapshotId) : IRequest<SourceDiffReport>;
+public sealed record CompareSnapshotFileQuery(Guid ProjectId, Guid LeftSnapshotId, Guid RightSnapshotId, string RelativePath) : IRequest<SourceTextDiff>;
+public sealed record CreateBranchDiffPackCommand(Guid ProjectId, Guid LeftSnapshotId, Guid RightSnapshotId) : IRequest<BranchDiffPack>;
+public sealed record GetLatestBranchDiffPackQuery(Guid ProjectId, Guid BranchId) : IRequest<BranchDiffPack>;
 public sealed record GetAgentHandoffQuery(Guid ProjectId) : IRequest<AgentHandoff>;
 public sealed record GetScanCompletenessQuery(Guid ProjectId) : IRequest<ScanCompletenessReport>;
 public sealed record GetOutputsQuery(Guid ProjectId) : IRequest<GeneratedOutputSet>;
@@ -93,7 +119,7 @@ public sealed record PreviewQuickAskCommand(QuickAskRequest Request) : IRequest<
 public sealed record RunQuickAskCommand(QuickAskRequest Request) : IRequest<QuickAskResult>;
 public sealed record GetLogsQuery : IRequest<IReadOnlyList<LogEntry>>;
 
-public sealed class AddProjectCommandHandler(IProjectRepository projects) : IRequestHandler<AddProjectCommand, ProjectDto>
+public sealed class AddProjectCommandHandler(IProjectRepository projects, ISourceContextBranchService? branches = null) : IRequestHandler<AddProjectCommand, ProjectDto>
 {
     public async Task<ProjectDto> Handle(AddProjectCommand request, CancellationToken cancellationToken)
     {
@@ -102,7 +128,12 @@ public sealed class AddProjectCommandHandler(IProjectRepository projects) : IReq
         var existing = await projects.GetByPathAsync(root, cancellationToken);
         if (existing is not null) return existing.ToDto();
         var name = string.IsNullOrWhiteSpace(request.Name) ? new DirectoryInfo(root).Name : request.Name.Trim();
-        return (await projects.AddAsync(new Project(Guid.NewGuid(), name, root, DateTimeOffset.UtcNow), cancellationToken)).ToDto();
+        var project = await projects.AddAsync(new Project(Guid.NewGuid(), name, root, DateTimeOffset.UtcNow), cancellationToken);
+        if (branches is not null)
+        {
+            await branches.EnsureDefaultBranchAsync(project.Id, cancellationToken);
+        }
+        return project.ToDto();
     }
 }
 
@@ -211,7 +242,7 @@ public sealed class GetJobStatusQueryHandler(IJobRepository jobs) : IRequestHand
         => (await jobs.GetAsync(request.JobId, cancellationToken))?.ToDto();
 }
 
-public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository, ICSharpCodeIntelligenceScanner codeScanner, ICodeSymbolRepository symbols, ICodeFlowRepository flows, IRouteInfoRepository routes, IServiceRegistrationRepository services, IConfigurationUsageRepository configs, IBackgroundWorkerInfoRepository workers, ITestInfoRepository tests)
+public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository, ICodeIntelligencePipeline codePipeline, ICodeAnalysisSettingsService codeSettings, ICodeSymbolRepository symbols, ICodeFlowRepository flows, IRouteInfoRepository routes, IServiceRegistrationRepository services, IConfigurationUsageRepository configs, IBackgroundWorkerInfoRepository workers, ITestInfoRepository tests, ICodeAnalyzerRunRepository analyzerRuns, ICodeComponentRepository components, IFrontendRouteRepository frontendRoutes, IScriptImportRepository imports, IStyleUsageRepository styles, IPackageReferenceRepository packages, IBuildScriptRepository buildScripts, IProjectLanguageProfileRepository languageProfiles, ISourceSnapshotService? snapshots = null)
     : IRequestHandler<GenerateBasicContextCommand, ContextGenerationResponse>
 {
     public async Task<ContextGenerationResponse> Handle(GenerateBasicContextCommand request, CancellationToken cancellationToken)
@@ -221,7 +252,7 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         await scanRuns.AddAsync(scan.ScanRun, cancellationToken);
         await fileIndex.ReplaceForScanAsync(scan.ScanRun.Id, scan.Files, scan.Todos, scan.Technologies, cancellationToken);
         await indexedFiles.SaveForScanAsync(project.Id, scan.ScanRun.Id, scan.Files, cancellationToken);
-        var code = await codeScanner.ScanAsync(scan, cancellationToken);
+        var code = await codePipeline.AnalyzeAsync(scan, await codeSettings.GetAsync(project.Id, cancellationToken), cancellationToken);
         await symbols.SaveAsync(project.Id, scan.ScanRun.Id, code.Symbols, cancellationToken);
         await flows.SaveAsync(project.Id, scan.ScanRun.Id, code.Flows, cancellationToken);
         await routes.SaveAsync(project.Id, scan.ScanRun.Id, code.Routes, cancellationToken);
@@ -229,6 +260,17 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         await configs.SaveAsync(project.Id, scan.ScanRun.Id, code.ConfigurationUsages, cancellationToken);
         await workers.SaveAsync(project.Id, scan.ScanRun.Id, code.BackgroundWorkers, cancellationToken);
         await tests.SaveAsync(project.Id, scan.ScanRun.Id, code.Tests, cancellationToken);
+        await analyzerRuns.ReplaceForScanAsync(project.Id, scan.ScanRun.Id, code.AnalyzerRuns, cancellationToken);
+        await components.SaveAsync(project.Id, scan.ScanRun.Id, code.Components, cancellationToken);
+        await frontendRoutes.SaveAsync(project.Id, scan.ScanRun.Id, code.FrontendRoutes, cancellationToken);
+        await imports.SaveAsync(project.Id, scan.ScanRun.Id, code.Imports, cancellationToken);
+        await styles.SaveAsync(project.Id, scan.ScanRun.Id, code.Styles, cancellationToken);
+        await packages.SaveAsync(project.Id, scan.ScanRun.Id, code.PackageReferences, cancellationToken);
+        await buildScripts.SaveAsync(project.Id, scan.ScanRun.Id, code.BuildScripts, cancellationToken);
+        if (code.LanguageProfile is not null)
+        {
+            await languageProfiles.SaveAsync(code.LanguageProfile, cancellationToken);
+        }
         foreach (var recipe in recipeFactory.CreateDefaultRecipes(project))
         {
             await recipeRepository.SaveAsync(project, recipe, cancellationToken);
@@ -237,6 +279,10 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         var written = await contextWriter.WriteBasicContextAsync(scan, cancellationToken);
         await recipeRunner.RunBackendDocsCompactAsync(scan, cancellationToken);
         await projects.UpdateAsync(project with { LastScannedAt = scan.ScanRun.CompletedAt }, cancellationToken);
+        if (snapshots is not null)
+        {
+            await snapshots.CreateSnapshotFromScanAsync(project.Id, scan.ScanRun.Id, cancellationToken);
+        }
         return new ContextGenerationResponse(written.OutputPath, written.Files);
     }
 }
@@ -363,6 +409,17 @@ public sealed class CleanupGeneratedCommandHandler(IProjectRepository projects, 
 public sealed class GetSymbolsQueryHandler(ICodeSymbolRepository repo) : IRequestHandler<GetSymbolsQuery, IReadOnlyList<CodeSymbol>> { public Task<IReadOnlyList<CodeSymbol>> Handle(GetSymbolsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
 public sealed class GetFlowsQueryHandler(ICodeFlowRepository repo) : IRequestHandler<GetFlowsQuery, IReadOnlyList<CodeFlow>> { public Task<IReadOnlyList<CodeFlow>> Handle(GetFlowsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
 public sealed class GetRoutesQueryHandler(IRouteInfoRepository repo) : IRequestHandler<GetRoutesQuery, IReadOnlyList<RouteInfo>> { public Task<IReadOnlyList<RouteInfo>> Handle(GetRoutesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetCodeLanguagesQueryHandler(IProjectLanguageProfileRepository repo) : IRequestHandler<GetCodeLanguagesQuery, ProjectLanguageProfile?> { public Task<ProjectLanguageProfile?> Handle(GetCodeLanguagesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetCodeAnalyzersQueryHandler(ICodeAnalyzerRegistry registry) : IRequestHandler<GetCodeAnalyzersQuery, IReadOnlyList<CodeAnalyzerDescriptor>> { public Task<IReadOnlyList<CodeAnalyzerDescriptor>> Handle(GetCodeAnalyzersQuery request, CancellationToken cancellationToken) => Task.FromResult(registry.ListDescriptors()); }
+public sealed class GetCodeAnalyzerRunsQueryHandler(ICodeAnalyzerRunRepository repo) : IRequestHandler<GetCodeAnalyzerRunsQuery, IReadOnlyList<CodeAnalyzerRun>> { public Task<IReadOnlyList<CodeAnalyzerRun>> Handle(GetCodeAnalyzerRunsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetCodeComponentsQueryHandler(ICodeComponentRepository repo) : IRequestHandler<GetCodeComponentsQuery, IReadOnlyList<CodeComponent>> { public Task<IReadOnlyList<CodeComponent>> Handle(GetCodeComponentsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetFrontendRoutesQueryHandler(IFrontendRouteRepository repo) : IRequestHandler<GetFrontendRoutesQuery, IReadOnlyList<FrontendRoute>> { public Task<IReadOnlyList<FrontendRoute>> Handle(GetFrontendRoutesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetScriptImportsQueryHandler(IScriptImportRepository repo) : IRequestHandler<GetScriptImportsQuery, IReadOnlyList<ScriptImport>> { public Task<IReadOnlyList<ScriptImport>> Handle(GetScriptImportsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetStyleUsagesQueryHandler(IStyleUsageRepository repo) : IRequestHandler<GetStyleUsagesQuery, IReadOnlyList<StyleUsage>> { public Task<IReadOnlyList<StyleUsage>> Handle(GetStyleUsagesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetPackageReferencesQueryHandler(IPackageReferenceRepository repo) : IRequestHandler<GetPackageReferencesQuery, IReadOnlyList<PackageReferenceInfo>> { public Task<IReadOnlyList<PackageReferenceInfo>> Handle(GetPackageReferencesQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetBuildScriptsQueryHandler(IBuildScriptRepository repo) : IRequestHandler<GetBuildScriptsQuery, IReadOnlyList<BuildScriptInfo>> { public Task<IReadOnlyList<BuildScriptInfo>> Handle(GetBuildScriptsQuery request, CancellationToken cancellationToken) => repo.GetByProjectAsync(request.ProjectId, cancellationToken); }
+public sealed class GetCodeAnalysisSettingsQueryHandler(ICodeAnalysisSettingsService settings) : IRequestHandler<GetCodeAnalysisSettingsQuery, CodeAnalysisSettings> { public Task<CodeAnalysisSettings> Handle(GetCodeAnalysisSettingsQuery request, CancellationToken cancellationToken) => settings.GetAsync(request.ProjectId, cancellationToken); }
+public sealed class UpdateCodeAnalysisSettingsCommandHandler(ICodeAnalysisSettingsService settings) : IRequestHandler<UpdateCodeAnalysisSettingsCommand, CodeAnalysisSettings> { public Task<CodeAnalysisSettings> Handle(UpdateCodeAnalysisSettingsCommand request, CancellationToken cancellationToken) => settings.SaveAsync(request.Settings, cancellationToken); }
 public sealed class GetContextBrowserQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextBrowserQuery, ContextBrowserSummary> { public async Task<ContextBrowserSummary> Handle(GetContextBrowserQuery request, CancellationToken cancellationToken) => await browser.GetSummaryAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetContextFilesQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<GetContextFilesQuery, IReadOnlyList<ContextBrowserFile>> { public async Task<IReadOnlyList<ContextBrowserFile>> Handle(GetContextFilesQuery request, CancellationToken cancellationToken) => await browser.ListFilesAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.ShowTechnical, request.ShowExports, cancellationToken); }
 public sealed class ReadContextFileQueryHandler(IProjectRepository projects, IContextBrowserService browser) : IRequestHandler<ReadContextFileQuery, string> { public async Task<string> Handle(ReadContextFileQuery request, CancellationToken cancellationToken) => await browser.ReadFileAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
@@ -371,6 +428,37 @@ public sealed class GetMarkdownFilesQueryHandler(IProjectRepository projects, IM
 public sealed class GetMarkdownFileQueryHandler(IProjectRepository projects, IMarkdownWorkspaceService markdown) : IRequestHandler<GetMarkdownFileQuery, MarkdownFileContent> { public async Task<MarkdownFileContent> Handle(GetMarkdownFileQuery request, CancellationToken cancellationToken) => await markdown.ReadAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.RelativePath, cancellationToken); }
 public sealed class SaveMarkdownFileCommandHandler(IProjectRepository projects, IMarkdownWorkspaceService markdown) : IRequestHandler<SaveMarkdownFileCommand, MarkdownFileSaveResult> { public async Task<MarkdownFileSaveResult> Handle(SaveMarkdownFileCommand request, CancellationToken cancellationToken) => await markdown.SaveAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), request.Request, cancellationToken); }
 public sealed class ValidateMarkdownCommandHandler(IMarkdownWorkspaceService markdown) : IRequestHandler<ValidateMarkdownCommand, MarkdownValidationResult> { public Task<MarkdownValidationResult> Handle(ValidateMarkdownCommand request, CancellationToken cancellationToken) => Task.FromResult(markdown.Validate(request.Markdown)); }
+public sealed class GetContextBranchesQueryHandler(ISourceContextBranchService branches) : IRequestHandler<GetContextBranchesQuery, IReadOnlyList<SourceContextBranch>> { public Task<IReadOnlyList<SourceContextBranch>> Handle(GetContextBranchesQuery request, CancellationToken cancellationToken) => branches.GetBranchesAsync(request.ProjectId, cancellationToken); }
+public sealed class GetContextBranchQueryHandler(ISourceContextBranchService branches) : IRequestHandler<GetContextBranchQuery, SourceContextBranch?> { public Task<SourceContextBranch?> Handle(GetContextBranchQuery request, CancellationToken cancellationToken) => branches.GetBranchAsync(request.ProjectId, request.BranchId, cancellationToken); }
+public sealed class CreateContextBranchCommandHandler(ISourceContextBranchService branches) : IRequestHandler<CreateContextBranchCommand, SourceContextBranch> { public Task<SourceContextBranch> Handle(CreateContextBranchCommand request, CancellationToken cancellationToken) => branches.CreateBranchAsync(request.ProjectId, request.Name, request.Description, cancellationToken); }
+public sealed class UpdateContextBranchCommandHandler(ISourceContextBranchService branches) : IRequestHandler<UpdateContextBranchCommand, SourceContextBranch>
+{
+    public async Task<SourceContextBranch> Handle(UpdateContextBranchCommand request, CancellationToken cancellationToken)
+    {
+        var branch = string.IsNullOrWhiteSpace(request.Name)
+            ? await branches.GetBranchAsync(request.ProjectId, request.BranchId, cancellationToken) ?? throw new InvalidOperationException("SourceWorker context branch was not found.")
+            : await branches.RenameBranchAsync(request.ProjectId, request.BranchId, request.Name, cancellationToken);
+        return request.Description is null ? branch : await branches.UpdateBranchDescriptionAsync(request.ProjectId, branch.Id, request.Description, cancellationToken);
+    }
+}
+public sealed class RemoveContextBranchCommandHandler(ISourceContextBranchService branches) : IRequestHandler<RemoveContextBranchCommand, bool> { public Task<bool> Handle(RemoveContextBranchCommand request, CancellationToken cancellationToken) => branches.RemoveBranchAsync(request.ProjectId, request.BranchId, cancellationToken); }
+public sealed class ActivateContextBranchCommandHandler(ISourceContextBranchService branches) : IRequestHandler<ActivateContextBranchCommand, SourceContextBranch> { public Task<SourceContextBranch> Handle(ActivateContextBranchCommand request, CancellationToken cancellationToken) => branches.ActivateBranchAsync(request.ProjectId, request.BranchId, cancellationToken); }
+public sealed class GetSnapshotsQueryHandler(ISourceSnapshotService snapshots) : IRequestHandler<GetSnapshotsQuery, IReadOnlyList<SourceSnapshot>> { public Task<IReadOnlyList<SourceSnapshot>> Handle(GetSnapshotsQuery request, CancellationToken cancellationToken) => snapshots.GetSnapshotsAsync(request.ProjectId, request.BranchId, cancellationToken); }
+public sealed class GetSnapshotQueryHandler(ISourceSnapshotService snapshots) : IRequestHandler<GetSnapshotQuery, SourceSnapshot?> { public Task<SourceSnapshot?> Handle(GetSnapshotQuery request, CancellationToken cancellationToken) => snapshots.GetSnapshotAsync(request.ProjectId, request.SnapshotId, cancellationToken); }
+public sealed class DeleteSnapshotCommandHandler(ISourceSnapshotService snapshots) : IRequestHandler<DeleteSnapshotCommand, bool> { public async Task<bool> Handle(DeleteSnapshotCommand request, CancellationToken cancellationToken) { await snapshots.DeleteSnapshotAsync(request.ProjectId, request.SnapshotId, cancellationToken); return true; } }
+public sealed class GetLatestSnapshotDiffQueryHandler(ISourceContextBranchService branches, ISourceDiffService diffs) : IRequestHandler<GetLatestSnapshotDiffQuery, SourceDiffReport>
+{
+    public async Task<SourceDiffReport> Handle(GetLatestSnapshotDiffQuery request, CancellationToken cancellationToken)
+    {
+        var branchId = request.BranchId ?? (await branches.GetActiveBranchAsync(request.ProjectId, cancellationToken)).Id;
+        return await diffs.CompareLatestWithPreviousAsync(request.ProjectId, branchId, cancellationToken);
+    }
+}
+public sealed class CompareBranchSnapshotsQueryHandler(ISourceDiffService diffs) : IRequestHandler<CompareBranchSnapshotsQuery, SourceDiffReport> { public Task<SourceDiffReport> Handle(CompareBranchSnapshotsQuery request, CancellationToken cancellationToken) => diffs.CompareBranchLatestSnapshotsAsync(request.ProjectId, request.LeftBranchId, request.RightBranchId, cancellationToken); }
+public sealed class CompareSnapshotsQueryHandler(ISourceDiffService diffs) : IRequestHandler<CompareSnapshotsQuery, SourceDiffReport> { public Task<SourceDiffReport> Handle(CompareSnapshotsQuery request, CancellationToken cancellationToken) => diffs.CompareSnapshotsAsync(request.ProjectId, request.LeftSnapshotId, request.RightSnapshotId, cancellationToken); }
+public sealed class CompareSnapshotFileQueryHandler(ISourceDiffService diffs) : IRequestHandler<CompareSnapshotFileQuery, SourceTextDiff> { public Task<SourceTextDiff> Handle(CompareSnapshotFileQuery request, CancellationToken cancellationToken) => diffs.CompareFilesAsync(request.ProjectId, request.LeftSnapshotId, request.RightSnapshotId, request.RelativePath, cancellationToken); }
+public sealed class CreateBranchDiffPackCommandHandler(IBranchDiffPackService packs) : IRequestHandler<CreateBranchDiffPackCommand, BranchDiffPack> { public Task<BranchDiffPack> Handle(CreateBranchDiffPackCommand request, CancellationToken cancellationToken) => packs.SaveBranchDiffPackAsync(request.ProjectId, request.LeftSnapshotId, request.RightSnapshotId, cancellationToken); }
+public sealed class GetLatestBranchDiffPackQueryHandler(IBranchDiffPackService packs) : IRequestHandler<GetLatestBranchDiffPackQuery, BranchDiffPack> { public Task<BranchDiffPack> Handle(GetLatestBranchDiffPackQuery request, CancellationToken cancellationToken) => packs.BuildLatestBranchDiffPackAsync(request.ProjectId, request.BranchId, cancellationToken); }
 public sealed class GetAgentHandoffQueryHandler(IProjectRepository projects, IAgentHandoffService handoff) : IRequestHandler<GetAgentHandoffQuery, AgentHandoff> { public async Task<AgentHandoff> Handle(GetAgentHandoffQuery request, CancellationToken cancellationToken) => await handoff.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetScanCompletenessQueryHandler(IProjectRepository projects, IScanCompletenessService completeness) : IRequestHandler<GetScanCompletenessQuery, ScanCompletenessReport> { public async Task<ScanCompletenessReport> Handle(GetScanCompletenessQuery request, CancellationToken cancellationToken) => await completeness.GetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), cancellationToken); }
 public sealed class GetOutputsQueryHandler(IProjectRepository projects, IGeneratedOutputService outputs) : IRequestHandler<GetOutputsQuery, GeneratedOutputSet> { public async Task<GeneratedOutputSet> Handle(GetOutputsQuery request, CancellationToken cancellationToken) => await outputs.GetOutputSetAsync(await projects.GetAsync(request.ProjectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found."), "backend-docs-compact", cancellationToken); }

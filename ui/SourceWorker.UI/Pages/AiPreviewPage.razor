@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/ai"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="ai">
 <h1>Ask With Context</h1>
 <p>SourceWorker does not code by itself. It prepares context, lets you ask questions, and shows a preview-only answer that you copy into your agent or notes manually.</p>
 
@@ -106,7 +104,6 @@
         <pre style="white-space: pre-wrap;">@run.OutputText</pre>
     </Cards>
 }
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

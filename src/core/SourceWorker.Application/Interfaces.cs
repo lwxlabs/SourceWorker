@@ -173,6 +173,36 @@ public interface ICSharpCodeIntelligenceScanner
     Task<CodeIntelligenceResult> ScanAsync(ProjectScanResult scanResult, CancellationToken cancellationToken);
 }
 
+public interface ICodeIntelligencePipeline
+{
+    Task<CodeIntelligenceResult> AnalyzeAsync(ProjectScanResult scanResult, CodeAnalysisSettings settings, CancellationToken cancellationToken);
+}
+
+public interface ICodeAnalyzer
+{
+    CodeAnalyzerDescriptor Descriptor { get; }
+    bool CanAnalyze(ProjectScanResult scanResult);
+    Task<CodeAnalyzerResult> AnalyzeAsync(ProjectScanResult scanResult, CodeAnalysisSettings settings, CancellationToken cancellationToken);
+}
+
+public interface ICodeAnalyzerRegistry
+{
+    IReadOnlyList<CodeAnalyzerDescriptor> ListDescriptors();
+    IReadOnlyList<ICodeAnalyzer> ListAnalyzers();
+    ICodeAnalyzer? GetAnalyzer(string analyzerId);
+}
+
+public interface ICodeAnalysisSettingsService
+{
+    Task<CodeAnalysisSettings> GetAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<CodeAnalysisSettings> SaveAsync(CodeAnalysisSettings settings, CancellationToken cancellationToken);
+}
+
+public interface ILanguageDetectionService
+{
+    ProjectLanguageProfile Detect(ProjectScanResult scanResult, IReadOnlyList<CodeAnalyzerResult> analyzerResults);
+}
+
 public interface ICodeSymbolRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeSymbol> symbols, CancellationToken cancellationToken); Task<IReadOnlyList<CodeSymbol>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
 public interface ICodeFlowRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeFlow> flows, CancellationToken cancellationToken); Task<IReadOnlyList<CodeFlow>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
 public interface IRouteInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<RouteInfo> routes, CancellationToken cancellationToken); Task<IReadOnlyList<RouteInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
@@ -180,6 +210,15 @@ public interface IServiceRegistrationRepository { Task SaveAsync(Guid projectId,
 public interface IConfigurationUsageRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ConfigurationUsage> usages, CancellationToken cancellationToken); Task<IReadOnlyList<ConfigurationUsage>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
 public interface IBackgroundWorkerInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<BackgroundWorkerInfo> workers, CancellationToken cancellationToken); Task<IReadOnlyList<BackgroundWorkerInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
 public interface ITestInfoRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken); Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface ICodeAnalyzerRunRepository { Task ReplaceForScanAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeAnalyzerRun> runs, CancellationToken cancellationToken); Task<IReadOnlyList<CodeAnalyzerRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface ICodeComponentRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeComponent> components, CancellationToken cancellationToken); Task<IReadOnlyList<CodeComponent>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IFrontendRouteRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<FrontendRoute> routes, CancellationToken cancellationToken); Task<IReadOnlyList<FrontendRoute>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IScriptImportRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ScriptImport> imports, CancellationToken cancellationToken); Task<IReadOnlyList<ScriptImport>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IStyleUsageRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<StyleUsage> styles, CancellationToken cancellationToken); Task<IReadOnlyList<StyleUsage>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IPackageReferenceRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<PackageReferenceInfo> packages, CancellationToken cancellationToken); Task<IReadOnlyList<PackageReferenceInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IBuildScriptRepository { Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<BuildScriptInfo> scripts, CancellationToken cancellationToken); Task<IReadOnlyList<BuildScriptInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface IProjectLanguageProfileRepository { Task SaveAsync(ProjectLanguageProfile profile, CancellationToken cancellationToken); Task<ProjectLanguageProfile?> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken); }
+public interface ICodeAnalysisSettingsRepository { Task<CodeAnalysisSettings?> GetAsync(Guid projectId, CancellationToken cancellationToken); Task<CodeAnalysisSettings> SaveAsync(CodeAnalysisSettings settings, CancellationToken cancellationToken); }
 
 public interface IRouteScanner;
 public interface IServiceRegistrationScanner;
@@ -210,6 +249,87 @@ public interface IMarkdownFileWriter { Task<MarkdownFileSaveResult> SaveAsync(Pr
 public interface IMarkdownSavePolicyService { MarkdownValidationResult ValidatePath(Project project, string relativePath, bool allowTechnical); }
 public interface IMermaidMarkdownValidator { MarkdownValidationResult Validate(string markdown); }
 
+public interface ISourceContextBranchRepository
+{
+    Task<SourceContextBranch> SaveAsync(SourceContextBranch branch, CancellationToken cancellationToken);
+    Task<SourceContextBranch?> GetAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<SourceContextBranch?> GetByNameAsync(Guid projectId, string name, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceContextBranch>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public interface ISourceSnapshotRepository
+{
+    Task<SourceSnapshot> SaveAsync(SourceSnapshot snapshot, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetByScanRunAsync(Guid projectId, Guid scanRunId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceSnapshot>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceSnapshot>> GetByBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+}
+
+public interface ISourceSnapshotFileRepository
+{
+    Task ReplaceForSnapshotAsync(Guid projectId, Guid snapshotId, IReadOnlyList<SourceSnapshotFile> files, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceSnapshotFile>> GetBySnapshotAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+}
+
+public interface ISourceSnapshotMetricRepository
+{
+    Task ReplaceForSnapshotAsync(Guid snapshotId, IReadOnlyList<SourceSnapshotMetric> metrics, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceSnapshotMetric>> GetBySnapshotAsync(Guid snapshotId, CancellationToken cancellationToken);
+}
+
+public interface ISourceContextBranchService
+{
+    Task<IReadOnlyList<SourceContextBranch>> GetBranchesAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<SourceContextBranch?> GetBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<SourceContextBranch> CreateBranchAsync(Guid projectId, string name, string? description, CancellationToken cancellationToken);
+    Task<SourceContextBranch> RenameBranchAsync(Guid projectId, Guid branchId, string name, CancellationToken cancellationToken);
+    Task<SourceContextBranch> UpdateBranchDescriptionAsync(Guid projectId, Guid branchId, string? description, CancellationToken cancellationToken);
+    Task<SourceContextBranch> ActivateBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<bool> RemoveBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<SourceContextBranch> GetActiveBranchAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<SourceContextBranch> EnsureDefaultBranchAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public interface ISourceSnapshotService
+{
+    Task<SourceSnapshot> CreateSnapshotFromScanAsync(Guid projectId, Guid scanRunId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceSnapshot>> GetSnapshotsAsync(Guid projectId, Guid? branchId, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetSnapshotAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetLatestSnapshotAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetLatestSnapshotForBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<SourceSnapshot?> GetPreviousSnapshotAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+    Task DeleteSnapshotAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken);
+}
+
+public interface ISourceDiffService
+{
+    Task<SourceDiffReport> CompareSnapshotsAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken);
+    Task<SourceDiffReport> CompareLatestWithPreviousAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<SourceDiffReport> CompareBranchLatestSnapshotsAsync(Guid projectId, Guid leftBranchId, Guid rightBranchId, CancellationToken cancellationToken);
+    Task<SourceTextDiff> CompareFilesAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, string relativePath, CancellationToken cancellationToken);
+}
+
+public interface ITextDiffService
+{
+    string CreateUnifiedDiff(string? leftText, string? rightText, string path);
+    SourceTextDiff CreateSideBySideDiff(string? leftText, string? rightText, string path);
+    string CreateMarkdownDiff(string? leftText, string? rightText, string path);
+}
+
+public interface IBranchDiffPackService
+{
+    Task<BranchDiffPack> BuildBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken);
+    Task<BranchDiffPack> BuildLatestBranchDiffPackAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
+    Task<BranchDiffPack> SaveBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken);
+}
+
+public interface IOptionalGitMetadataService
+{
+    Task<OptionalGitMetadata?> TryGetGitMetadataAsync(string projectRoot, CancellationToken cancellationToken);
+}
+
 public interface IOutputProfileService { Task<IReadOnlyList<OutputProfile>> GetProfilesAsync(Project project, CancellationToken cancellationToken); }
 public interface IOutputRoutingService { Task<IReadOnlyList<OutputRoute>> GetRoutesAsync(Project project, string recipeId, CancellationToken cancellationToken); }
 public interface IGeneratedOutputService { Task<GeneratedOutputSet> GetOutputSetAsync(Project project, string recipeId, CancellationToken cancellationToken); }
@@ -229,7 +349,36 @@ public interface IContextPackWriter { Task<IReadOnlyList<ContextPackManifest>> W
 public interface IContextPackReader { Task<string> ReadPackContentAsync(Project project, string packId, CancellationToken cancellationToken); }
 public interface IContextPackValidator { Task<ContextPackManifest> ValidateAsync(Project project, ContextPack pack, string relativePath, CancellationToken cancellationToken); }
 
-public sealed record CodeIntelligenceResult(IReadOnlyList<CodeSymbol> Symbols, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<ServiceRegistration> ServiceRegistrations, IReadOnlyList<ConfigurationUsage> ConfigurationUsages, IReadOnlyList<BackgroundWorkerInfo> BackgroundWorkers, IReadOnlyList<TestInfo> Tests, IReadOnlyList<CodeFlow> Flows);
+public sealed record CodeIntelligenceResult
+{
+    public CodeIntelligenceResult(IReadOnlyList<CodeSymbol> symbols, IReadOnlyList<RouteInfo> routes, IReadOnlyList<ServiceRegistration> serviceRegistrations, IReadOnlyList<ConfigurationUsage> configurationUsages, IReadOnlyList<BackgroundWorkerInfo> backgroundWorkers, IReadOnlyList<TestInfo> tests, IReadOnlyList<CodeFlow> flows)
+    {
+        Symbols = symbols;
+        Routes = routes;
+        ServiceRegistrations = serviceRegistrations;
+        ConfigurationUsages = configurationUsages;
+        BackgroundWorkers = backgroundWorkers;
+        Tests = tests;
+        Flows = flows;
+    }
+
+    public IReadOnlyList<CodeSymbol> Symbols { get; init; }
+    public IReadOnlyList<RouteInfo> Routes { get; init; }
+    public IReadOnlyList<ServiceRegistration> ServiceRegistrations { get; init; }
+    public IReadOnlyList<ConfigurationUsage> ConfigurationUsages { get; init; }
+    public IReadOnlyList<BackgroundWorkerInfo> BackgroundWorkers { get; init; }
+    public IReadOnlyList<TestInfo> Tests { get; init; }
+    public IReadOnlyList<CodeFlow> Flows { get; init; }
+    public IReadOnlyList<CodeComponent> Components { get; init; } = [];
+    public IReadOnlyList<FrontendRoute> FrontendRoutes { get; init; } = [];
+    public IReadOnlyList<StyleUsage> Styles { get; init; } = [];
+    public IReadOnlyList<ScriptImport> Imports { get; init; } = [];
+    public IReadOnlyList<PackageReferenceInfo> PackageReferences { get; init; } = [];
+    public IReadOnlyList<BuildScriptInfo> BuildScripts { get; init; } = [];
+    public IReadOnlyList<CodeAnalyzerRun> AnalyzerRuns { get; init; } = [];
+    public ProjectLanguageProfile? LanguageProfile { get; init; }
+    public IReadOnlyList<DetectedTechnology> Technologies { get; init; } = [];
+}
 
 public interface ILocalJobQueue
 {

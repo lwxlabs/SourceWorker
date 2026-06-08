@@ -4,7 +4,6 @@ namespace SourceWorker.Hosting;
 
 public sealed record AppHostOptions(
     bool ApiOnly = false,
-    bool DashboardOnly = false,
     bool OpenBrowser = false,
     int? ApiPort = null,
     string? Environment = null

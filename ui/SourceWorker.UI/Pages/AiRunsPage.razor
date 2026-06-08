@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/ai/runs"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="ai">
 <h1>AI Runs</h1>
 
 <Cards Title="Filters">
@@ -43,7 +41,6 @@ else
         }
     </Cards>
 }
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/packs"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="packs">
 <h1>Context Packs</h1>
 <p class="text-muted">Packs are clean bundles you can copy, export, or use when asking another AI agent. Raw `.pack.yaml` manifests are hidden in the preview unless you need advanced details.</p>
 
@@ -17,7 +15,6 @@
     </Cards>
     <PackViewer ProjectId="@ProjectId" Pack="@selected" Content="@content" />
 </div>
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

@@ -1,0 +1,354 @@
+@using Microsoft.AspNetCore.Components
+
+<div class="bcv-shell @ThemeClass" style="@ShellStyle">
+    <header class="bcv-topbar">
+        <div class="bcv-brand">
+            <div class="bcv-logo">D</div>
+            <div>
+                <div class="bcv-title">@Title</div>
+                <div class="bcv-subtitle">@LeftLabel <span>-&gt;</span> @RightLabel</div>
+            </div>
+        </div>
+
+        <div class="bcv-toolbar">
+            <div class="bcv-segment">
+                <button type="button" class="@ModeClass(CompareViewMode.Unified)" @onclick="() => _viewMode = CompareViewMode.Unified">Unified</button>
+                <button type="button" class="@ModeClass(CompareViewMode.Split)" @onclick="() => _viewMode = CompareViewMode.Split">Split</button>
+                <button type="button" class="@ModeClass(CompareViewMode.Preview)" @onclick="() => _viewMode = CompareViewMode.Preview">Preview</button>
+            </div>
+
+            <div class="bcv-segment">
+                <button type="button" class="@LayoutClass(PanelLayout.Horizontal)" @onclick="() => _layout = PanelLayout.Horizontal">Side</button>
+                <button type="button" class="@LayoutClass(PanelLayout.Vertical)" @onclick="() => _layout = PanelLayout.Vertical">Stack</button>
+            </div>
+
+            <label class="bcv-toggle">
+                <input type="checkbox" @bind="_showOnlyIssues" />
+                <span>Issues</span>
+            </label>
+
+            <label class="bcv-toggle">
+                <input type="checkbox" @bind="_hideUnchanged" />
+                <span>Hide unchanged</span>
+            </label>
+
+            <button type="button" class="bcv-theme-btn" @onclick="ToggleTheme">@(_theme == CompareTheme.Dark ? "Light" : "Dark")</button>
+        </div>
+    </header>
+
+    <section class="bcv-summary">
+        <div class="bcv-summary-card accent">
+            <span class="bcv-summary-value">@ChangedFiles.Count</span>
+            <span class="bcv-summary-label">Changed files</span>
+        </div>
+        <div class="bcv-summary-card add">
+            <span class="bcv-summary-value">@ChangedFiles.Count(x => x.ChangeKind == DiffChangeKind.Added)</span>
+            <span class="bcv-summary-label">Added</span>
+        </div>
+        <div class="bcv-summary-card mod">
+            <span class="bcv-summary-value">@ChangedFiles.Count(x => x.ChangeKind == DiffChangeKind.Modified)</span>
+            <span class="bcv-summary-label">Modified</span>
+        </div>
+        <div class="bcv-summary-card del">
+            <span class="bcv-summary-value">@ChangedFiles.Count(x => x.ChangeKind == DiffChangeKind.Removed)</span>
+            <span class="bcv-summary-label">Removed</span>
+        </div>
+        <div class="bcv-summary-card">
+            <span class="bcv-summary-value">@TotalLineChanges</span>
+            <span class="bcv-summary-label">Line changes</span>
+        </div>
+    </section>
+
+    <main class="bcv-body">
+        <aside class="bcv-sidebar">
+            <section class="bcv-sidebar-panel">
+                <div class="bcv-panel-header">
+                    <div>
+                        <strong>Changed files</strong>
+                        <span>@VisibleFiles.Count file(s)</span>
+                    </div>
+                    <input class="bcv-search" placeholder="Search files..." @bind="_search" @bind:event="oninput" />
+                </div>
+
+                <div class="bcv-file-list">
+                    @if (VisibleFiles.Count == 0)
+                    {
+                        <div class="bcv-empty">No files match this filter.</div>
+                    }
+                    else
+                    {
+                        @foreach (var file in VisibleFiles)
+                        {
+                            <button type="button" class="bcv-file-item @(IsSelected(file) ? "selected" : null)" @onclick="() => SelectFile(file)">
+                                <span class="bcv-file-status @StatusClass(file.ChangeKind)">@StatusText(file.ChangeKind)</span>
+                                <span class="bcv-file-main">
+                                    <span class="bcv-file-name">@file.DisplayName</span>
+                                    <span class="bcv-file-path">@file.RelativePath</span>
+                                </span>
+                                <span class="bcv-file-meta">
+                                    @if (file.IsImportant)
+                                    {
+                                        <span class="bcv-pill important">Important</span>
+                                    }
+                                    @if (file.HasWarning)
+                                    {
+                                        <span class="bcv-pill warn">Warn</span>
+                                    }
+                                    <span class="bcv-lines"><span class="plus">+@file.AddedLines</span><span class="minus">-@file.RemovedLines</span></span>
+                                </span>
+                            </button>
+                        }
+                    }
+                </div>
+            </section>
+
+            <div class="bcv-sidebar-resizer">
+                <input type="range" min="25" max="75" step="1" @bind="_sidebarTopPercent" @bind:event="oninput" aria-label="Resize sidebar panels" />
+            </div>
+
+            <section class="bcv-sidebar-panel">
+                <div class="bcv-panel-header compact">
+                    <div>
+                        <strong>Branches & history</strong>
+                        <span>@Branches.Count branch(es)</span>
+                    </div>
+                </div>
+
+                <div class="bcv-branch-list">
+                    @foreach (var branch in Branches)
+                    {
+                        <button type="button" class="bcv-branch-item @(branch.Id == ActiveBranchId ? "active" : null)" @onclick="() => SelectBranch(branch.Id)">
+                            <span class="bcv-branch-dot"></span>
+                            <span class="bcv-branch-main">
+                                <span class="bcv-branch-name">@branch.Name</span>
+                                <span class="bcv-branch-meta">@branch.SnapshotCount snapshot(s)</span>
+                            </span>
+                            @if (branch.IsActive)
+                            {
+                                <span class="bcv-pill active">Active</span>
+                            }
+                        </button>
+                    }
+                </div>
+
+                <div class="bcv-timeline">
+                    @foreach (var snapshot in Snapshots)
+                    {
+                        <button type="button" class="bcv-snapshot @(snapshot.Id == RightSnapshotId ? "right" : null) @(snapshot.Id == LeftSnapshotId ? "left" : null)" @onclick="() => SelectSnapshot(snapshot.Id)">
+                            <span class="bcv-snapshot-time">@snapshot.CreatedLabel</span>
+                            <span class="bcv-snapshot-name">@snapshot.Name</span>
+                            <span class="bcv-snapshot-stats">@snapshot.FileCount files - @snapshot.SymbolCount symbols</span>
+                        </button>
+                    }
+                </div>
+            </section>
+        </aside>
+
+        <section class="bcv-main @LayoutCss">
+            @if (SelectedFile is null)
+            {
+                <div class="bcv-empty-state">
+                    <div class="bcv-empty-icon">D</div>
+                    <h2>Select a changed file</h2>
+                    <p>Choose a file from the left panel to inspect the exact snapshot difference.</p>
+                </div>
+            }
+            else
+            {
+                <header class="bcv-file-header">
+                    <div>
+                        <div class="bcv-file-title-row">
+                            <span class="bcv-file-status @StatusClass(SelectedFile.ChangeKind)">@StatusText(SelectedFile.ChangeKind)</span>
+                            <h2>@SelectedFile.DisplayName</h2>
+                        </div>
+                        <div class="bcv-file-full-path">@SelectedFile.RelativePath</div>
+                    </div>
+
+                    <div class="bcv-file-actions">
+                        @if (SelectedFile.IsGenerated)
+                        {
+                            <span class="bcv-chip">Generated</span>
+                        }
+                        @if (SelectedFile.IsSource)
+                        {
+                            <span class="bcv-chip">Source metadata</span>
+                        }
+                        @if (SelectedFile.IsMarkdown)
+                        {
+                            <span class="bcv-chip">Markdown diff</span>
+                        }
+                        <span class="bcv-change-counter"><span class="plus">+@SelectedFile.AddedLines</span><span class="minus">-@SelectedFile.RemovedLines</span></span>
+                    </div>
+                </header>
+
+                @if (_viewMode == CompareViewMode.Preview)
+                {
+                    <article class="bcv-preview">
+                        <h3>Change summary</h3>
+                        <p>@SelectedFile.Explanation</p>
+                        <div class="bcv-preview-grid">
+                            <div><strong>Change type</strong><span>@SelectedFile.ChangeKind</span></div>
+                            <div><strong>File kind</strong><span>@SelectedFile.FileKind</span></div>
+                            <div><strong>Importance</strong><span>@(SelectedFile.IsImportant ? "Important" : "Normal")</span></div>
+                            <div><strong>Line diff</strong><span>@(SelectedFile.TextDiff.Hunks.Count > 0 ? "Available" : "Metadata only")</span></div>
+                        </div>
+                        @if (SelectedFile.TextDiff.Hunks.Count == 0)
+                        {
+                            <div class="bcv-warning-box">Historical source text is not available for this item. SourceWorker can still show file-level metadata, hashes, and generated context changes.</div>
+                        }
+                    </article>
+                }
+                else if (_viewMode == CompareViewMode.Split)
+                {
+                    <DiffSplitView File="SelectedFile" HideUnchanged="_hideUnchanged" Layout="_layout" />
+                }
+                else
+                {
+                    <DiffUnifiedView File="SelectedFile" HideUnchanged="_hideUnchanged" />
+                }
+            }
+        </section>
+    </main>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Snapshot Compare";
+    [Parameter] public string LeftLabel { get; set; } = "Previous snapshot";
+    [Parameter] public string RightLabel { get; set; } = "Current snapshot";
+    [Parameter] public IReadOnlyList<BranchItem> Branches { get; set; } = [];
+    [Parameter] public IReadOnlyList<SnapshotItem> Snapshots { get; set; } = [];
+    [Parameter] public IReadOnlyList<DiffFileItem> Files { get; set; } = [];
+    [Parameter] public string? ActiveBranchId { get; set; }
+    [Parameter] public string? LeftSnapshotId { get; set; }
+    [Parameter] public string? RightSnapshotId { get; set; }
+    [Parameter] public EventCallback<string> BranchSelected { get; set; }
+    [Parameter] public EventCallback<string> SnapshotSelected { get; set; }
+    [Parameter] public EventCallback<DiffFileItem> FileSelected { get; set; }
+
+    private DiffFileItem? SelectedFile { get; set; }
+    private CompareViewMode _viewMode = CompareViewMode.Unified;
+    private PanelLayout _layout = PanelLayout.Horizontal;
+    private CompareTheme _theme = CompareTheme.Dark;
+    private bool _showOnlyIssues = true;
+    private bool _hideUnchanged = true;
+    private int _sidebarTopPercent = 58;
+    private string _search = string.Empty;
+
+    private string ThemeClass => _theme == CompareTheme.Dark ? "theme-dark" : "theme-light";
+    private string LayoutCss => _layout == PanelLayout.Horizontal ? "layout-horizontal" : "layout-vertical";
+    private string ShellStyle => $"--sidebar-top:{_sidebarTopPercent}%; --sidebar-bottom:{100 - _sidebarTopPercent}%;";
+    private IReadOnlyList<DiffFileItem> ChangedFiles => Files.Where(x => x.ChangeKind != DiffChangeKind.Unchanged).ToList();
+
+    private IReadOnlyList<DiffFileItem> VisibleFiles
+    {
+        get
+        {
+            IEnumerable<DiffFileItem> query = Files;
+            if (_showOnlyIssues)
+                query = query.Where(x => x.ChangeKind != DiffChangeKind.Unchanged || x.HasWarning);
+            if (!string.IsNullOrWhiteSpace(_search))
+                query = query.Where(x => x.RelativePath.Contains(_search, StringComparison.OrdinalIgnoreCase) || x.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase));
+            return query.OrderByDescending(x => x.IsImportant).ThenByDescending(x => x.HasWarning).ThenBy(x => x.RelativePath).ToList();
+        }
+    }
+
+    private int TotalLineChanges => Files.Sum(x => x.AddedLines + x.RemovedLines);
+
+    protected override void OnParametersSet()
+    {
+        if (SelectedFile is not null)
+            SelectedFile = Files.FirstOrDefault(x => x.RelativePath == SelectedFile.RelativePath) ?? VisibleFiles.FirstOrDefault();
+        else
+            SelectedFile = VisibleFiles.FirstOrDefault();
+    }
+
+    private async Task SelectFile(DiffFileItem file)
+    {
+        SelectedFile = file;
+        if (FileSelected.HasDelegate)
+            await FileSelected.InvokeAsync(file);
+    }
+
+    private async Task SelectBranch(string id)
+    {
+        if (BranchSelected.HasDelegate)
+            await BranchSelected.InvokeAsync(id);
+    }
+
+    private async Task SelectSnapshot(string id)
+    {
+        if (SnapshotSelected.HasDelegate)
+            await SnapshotSelected.InvokeAsync(id);
+    }
+
+    private void ToggleTheme() => _theme = _theme == CompareTheme.Dark ? CompareTheme.Light : CompareTheme.Dark;
+    private string ModeClass(CompareViewMode mode) => _viewMode == mode ? "active" : string.Empty;
+    private string LayoutClass(PanelLayout layout) => _layout == layout ? "active" : string.Empty;
+    private bool IsSelected(DiffFileItem file) => SelectedFile?.RelativePath == file.RelativePath;
+
+    private static string StatusClass(DiffChangeKind kind) => kind switch
+    {
+        DiffChangeKind.Added => "added",
+        DiffChangeKind.Removed => "removed",
+        DiffChangeKind.Modified => "modified",
+        DiffChangeKind.RenamedMaybe => "renamed",
+        _ => "unchanged"
+    };
+
+    private static string StatusText(DiffChangeKind kind) => kind switch
+    {
+        DiffChangeKind.Added => "A",
+        DiffChangeKind.Removed => "D",
+        DiffChangeKind.Modified => "M",
+        DiffChangeKind.RenamedMaybe => "R",
+        _ => "U"
+    };
+
+    public enum CompareViewMode { Unified, Split, Preview }
+    public enum PanelLayout { Horizontal, Vertical }
+    public enum CompareTheme { Dark, Light }
+    public enum DiffChangeKind { Added, Removed, Modified, RenamedMaybe, Unchanged }
+    public enum DiffLineKind { Context, Added, Removed, Changed }
+    public sealed record BranchItem(string Id, string Name, string? Description, int SnapshotCount, bool IsActive, bool IsDefault);
+    public sealed record SnapshotItem(string Id, string Name, string CreatedLabel, int FileCount, int SymbolCount, bool IsDirty);
+
+    public sealed record DiffFileItem
+    {
+        public string RelativePath { get; init; } = "";
+        public string DisplayName { get; init; } = "";
+        public string FileKind { get; init; } = "Unknown";
+        public DiffChangeKind ChangeKind { get; init; }
+        public int AddedLines { get; init; }
+        public int RemovedLines { get; init; }
+        public int ModifiedLines { get; init; }
+        public bool IsGenerated { get; init; }
+        public bool IsSource { get; init; }
+        public bool IsMarkdown { get; init; }
+        public bool IsImportant { get; init; }
+        public bool HasWarning { get; init; }
+        public string Explanation { get; init; } = "This file changed between the selected snapshots.";
+        public SourceTextDiff TextDiff { get; init; } = new();
+    }
+
+    public sealed record SourceTextDiff
+    {
+        public IReadOnlyList<SourceTextDiffHunk> Hunks { get; init; } = [];
+    }
+
+    public sealed record SourceTextDiffHunk
+    {
+        public int OldStart { get; init; }
+        public int OldLength { get; init; }
+        public int NewStart { get; init; }
+        public int NewLength { get; init; }
+        public IReadOnlyList<SourceTextDiffLine> Lines { get; init; } = [];
+    }
+
+    public sealed record SourceTextDiffLine
+    {
+        public DiffLineKind Kind { get; init; }
+        public int? OldLineNumber { get; init; }
+        public int? NewLineNumber { get; init; }
+        public string Text { get; init; } = "";
+    }
+}

@@ -535,7 +535,7 @@ public sealed class AiExplanationPromptBuilder(
             tokens.EstimateCost(estimate, model),
             prompt,
             AiContextPackPromptBuilder.Hash(prompt),
-            warnings.Any(w => w.Severity.Equals("High", StringComparison.OrdinalIgnoreCase)));
+            false);
     }
 
     private async Task<string> BuildContextAsync(Project project, AiExplanationRequest request, List<AiExplanationSourceFile> included, CancellationToken cancellationToken)
@@ -782,12 +782,6 @@ public sealed class AiExplanationService(
     {
         var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
         var preview = await PreviewAsync(request, cancellationToken);
-        if (preview.IsBlocked)
-        {
-            var blocked = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.SafetyBlocked, null, "High-risk safety warning blocked explanation generation."), cancellationToken);
-            return ToResult(blocked, quality);
-        }
-
         var running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
         try
         {
@@ -844,13 +838,6 @@ public sealed class AiExplanationService(
             var configuration = await configurations.GetAsync(request.ProviderId, cancellationToken) ?? throw new InvalidOperationException("AI provider is not configured.");
             preview = await PreviewAsync(request, cancellationToken);
             await writer.WriteAsync(Update("preview", $"Prompt ready: {preview.TokenEstimate.PromptTokens} input tokens, max {preview.TokenEstimate.MaxOutputTokens} output tokens.", null, 0), cancellationToken);
-
-            if (preview.IsBlocked)
-            {
-                var blocked = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.SafetyBlocked, null, "High-risk safety warning blocked explanation generation."), cancellationToken);
-                await writer.WriteAsync(Update("blocked", "Safety warnings blocked explanation generation.", null, 0, ToResult(blocked, quality), isCompleted: true, isFailed: true), cancellationToken);
-                return;
-            }
 
             running = await runs.SaveAsync(NewRun(request, configuration, preview, AiRunStatus.Running, null, null), cancellationToken);
             var provider = registry.GetProvider(configuration.Kind.ToString()) ?? throw new InvalidOperationException("AI provider implementation was not found.");

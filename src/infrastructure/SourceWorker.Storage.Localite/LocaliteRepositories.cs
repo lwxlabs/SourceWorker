@@ -42,12 +42,25 @@ public static class LocaliteStorage
         services.AddSingleton<IConfigurationUsageRepository, LocaliteConfigurationUsageRepository>();
         services.AddSingleton<IBackgroundWorkerInfoRepository, LocaliteBackgroundWorkerInfoRepository>();
         services.AddSingleton<ITestInfoRepository, LocaliteTestInfoRepository>();
+        services.AddSingleton<ICodeAnalyzerRunRepository, LocaliteCodeAnalyzerRunRepository>();
+        services.AddSingleton<ICodeComponentRepository, LocaliteCodeComponentRepository>();
+        services.AddSingleton<IFrontendRouteRepository, LocaliteFrontendRouteRepository>();
+        services.AddSingleton<IScriptImportRepository, LocaliteScriptImportRepository>();
+        services.AddSingleton<IStyleUsageRepository, LocaliteStyleUsageRepository>();
+        services.AddSingleton<IPackageReferenceRepository, LocalitePackageReferenceRepository>();
+        services.AddSingleton<IBuildScriptRepository, LocaliteBuildScriptRepository>();
+        services.AddSingleton<IProjectLanguageProfileRepository, LocaliteProjectLanguageProfileRepository>();
+        services.AddSingleton<ICodeAnalysisSettingsRepository, LocaliteCodeAnalysisSettingsRepository>();
         services.AddSingleton<IAiProviderConfigurationRepository, LocaliteAiProviderConfigurationRepository>();
         services.AddSingleton<IAiRunRepository, LocaliteAiRunRepository>();
         services.AddSingleton<IDogfoodSessionRepository, LocaliteDogfoodSessionRepository>();
         services.AddSingleton<IDogfoodIssueRepository, LocaliteDogfoodIssueRepository>();
         services.AddSingleton<IProjectAiSettingsRepository, LocaliteProjectAiSettingsRepository>();
         services.AddSingleton<ILogRepository, LocaliteLogRepository>();
+        services.AddSingleton<ISourceContextBranchRepository, LocaliteSourceContextBranchRepository>();
+        services.AddSingleton<ISourceSnapshotRepository, LocaliteSourceSnapshotRepository>();
+        services.AddSingleton<ISourceSnapshotFileRepository, LocaliteSourceSnapshotFileRepository>();
+        services.AddSingleton<ISourceSnapshotMetricRepository, LocaliteSourceSnapshotMetricRepository>();
         return services;
     }
 }
@@ -238,6 +251,15 @@ internal static class Tables
     public const string ServiceRegistrations = "ServiceRegistrationRecord";
     public const string BackgroundWorkers = "BackgroundWorkerInfoRecord";
     public const string Tests = "TestInfoRecord";
+    public const string CodeAnalyzerRuns = "CodeAnalyzerRunRecord";
+    public const string CodeComponents = "CodeComponentRecord";
+    public const string FrontendRoutes = "FrontendRouteRecord";
+    public const string ScriptImports = "ScriptImportRecord";
+    public const string StyleUsages = "StyleUsageRecord";
+    public const string PackageReferences = "PackageReferenceInfoRecord";
+    public const string BuildScripts = "BuildScriptInfoRecord";
+    public const string ProjectLanguageProfiles = "ProjectLanguageProfileRecord";
+    public const string CodeAnalysisSettings = "CodeAnalysisSettingsRecord";
     public const string AiProviderConfigurations = "AiProviderConfigurationRecord";
     public const string AiRuns = "AiRunRecord";
     public const string AiSettings = "AiSettingsRecord";
@@ -245,7 +267,11 @@ internal static class Tables
     public const string DogfoodIssues = "DogfoodIssueRecord";
     public const string ProjectAiSettings = "ProjectAiSettingsRecord";
     public const string Logs = "LogEntryRecord";
-    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, AiProviderConfigurations, AiRuns, AiSettings, DogfoodSessions, DogfoodIssues, ProjectAiSettings, Logs];
+    public const string SourceContextBranches = "SourceContextBranchRecord";
+    public const string SourceSnapshots = "SourceSnapshotRecord";
+    public const string SourceSnapshotFiles = "SourceSnapshotFileRecord";
+    public const string SourceSnapshotMetrics = "SourceSnapshotMetricRecord";
+    public static readonly string[] All = [Projects, ScanRuns, IndexedFiles, DetectedTechnologies, GitSnapshots, Todos, GeneratedArtifacts, InstructionDocuments, InstructionSections, InstructionSourcePaths, SourcePathValidationResults, PromptRecipes, WorkerJobs, WorkerJobSteps, DoctorReports, CodeSymbols, CodeFileSummaries, CodeProjectSummaries, CodeFlows, CodeFlowSteps, Routes, ConfigurationUsages, ServiceRegistrations, BackgroundWorkers, Tests, CodeAnalyzerRuns, CodeComponents, FrontendRoutes, ScriptImports, StyleUsages, PackageReferences, BuildScripts, ProjectLanguageProfiles, CodeAnalysisSettings, AiProviderConfigurations, AiRuns, AiSettings, DogfoodSessions, DogfoodIssues, ProjectAiSettings, Logs, SourceContextBranches, SourceSnapshots, SourceSnapshotFiles, SourceSnapshotMetrics];
 }
 
 internal sealed record ProjectRecord(Guid Id, string Name, string RootPath, DateTimeOffset CreatedAt, DateTimeOffset? LastScannedAt);
@@ -409,6 +435,72 @@ public sealed class LocaliteTestInfoRepository(LocaliteTableStore store) : ITest
     public Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<TestInfo>(Tables.Tests, projectId, cancellationToken);
 }
 
+public sealed class LocaliteCodeAnalyzerRunRepository(LocaliteTableStore store) : ICodeAnalyzerRunRepository
+{
+    public async Task ReplaceForScanAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeAnalyzerRun> runs, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.CodeAnalyzerRuns, projectId, cancellationToken); foreach (var item in runs) await store.UpsertAsync(Tables.CodeAnalyzerRuns, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<CodeAnalyzerRun>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<CodeAnalyzerRun>(Tables.CodeAnalyzerRuns, projectId, cancellationToken);
+}
+
+public sealed class LocaliteCodeComponentRepository(LocaliteTableStore store) : ICodeComponentRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<CodeComponent> components, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.CodeComponents, projectId, cancellationToken); foreach (var item in components) await store.UpsertAsync(Tables.CodeComponents, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<CodeComponent>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<CodeComponent>(Tables.CodeComponents, projectId, cancellationToken);
+}
+
+public sealed class LocaliteFrontendRouteRepository(LocaliteTableStore store) : IFrontendRouteRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<FrontendRoute> routes, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.FrontendRoutes, projectId, cancellationToken); foreach (var item in routes) await store.UpsertAsync(Tables.FrontendRoutes, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<FrontendRoute>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<FrontendRoute>(Tables.FrontendRoutes, projectId, cancellationToken);
+}
+
+public sealed class LocaliteScriptImportRepository(LocaliteTableStore store) : IScriptImportRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<ScriptImport> imports, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.ScriptImports, projectId, cancellationToken); foreach (var item in imports) await store.UpsertAsync(Tables.ScriptImports, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<ScriptImport>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<ScriptImport>(Tables.ScriptImports, projectId, cancellationToken);
+}
+
+public sealed class LocaliteStyleUsageRepository(LocaliteTableStore store) : IStyleUsageRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<StyleUsage> styles, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.StyleUsages, projectId, cancellationToken); foreach (var item in styles) await store.UpsertAsync(Tables.StyleUsages, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<StyleUsage>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<StyleUsage>(Tables.StyleUsages, projectId, cancellationToken);
+}
+
+public sealed class LocalitePackageReferenceRepository(LocaliteTableStore store) : IPackageReferenceRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<PackageReferenceInfo> packages, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.PackageReferences, projectId, cancellationToken); foreach (var item in packages) await store.UpsertAsync(Tables.PackageReferences, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<PackageReferenceInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<PackageReferenceInfo>(Tables.PackageReferences, projectId, cancellationToken);
+}
+
+public sealed class LocaliteBuildScriptRepository(LocaliteTableStore store) : IBuildScriptRepository
+{
+    public async Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<BuildScriptInfo> scripts, CancellationToken cancellationToken) { await store.DeleteByProjectAsync(Tables.BuildScripts, projectId, cancellationToken); foreach (var item in scripts) await store.UpsertAsync(Tables.BuildScripts, item.Id, projectId, scanRunId.ToString(), item, cancellationToken); }
+    public Task<IReadOnlyList<BuildScriptInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => store.ListAsync<BuildScriptInfo>(Tables.BuildScripts, projectId, cancellationToken);
+}
+
+public sealed class LocaliteProjectLanguageProfileRepository(LocaliteTableStore store) : IProjectLanguageProfileRepository
+{
+    public async Task SaveAsync(ProjectLanguageProfile profile, CancellationToken cancellationToken)
+    {
+        await store.DeleteByProjectAsync(Tables.ProjectLanguageProfiles, profile.ProjectId, cancellationToken);
+        await store.UpsertAsync(Tables.ProjectLanguageProfiles, profile.ProjectId, profile.ProjectId, profile.ScanRunId.ToString(), profile, cancellationToken);
+    }
+
+    public async Task<ProjectLanguageProfile?> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<ProjectLanguageProfile>(Tables.ProjectLanguageProfiles, projectId, cancellationToken)).OrderByDescending(p => p.GeneratedUtc).FirstOrDefault();
+}
+
+public sealed class LocaliteCodeAnalysisSettingsRepository(LocaliteTableStore store) : ICodeAnalysisSettingsRepository
+{
+    public async Task<CodeAnalysisSettings?> GetAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<CodeAnalysisSettings>(Tables.CodeAnalysisSettings, projectId, cancellationToken)).OrderByDescending(s => s.UpdatedUtc).FirstOrDefault();
+
+    public async Task<CodeAnalysisSettings> SaveAsync(CodeAnalysisSettings settings, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.CodeAnalysisSettings, settings.ProjectId, settings.ProjectId, "code-analysis-settings", settings, cancellationToken);
+        return settings;
+    }
+}
+
 public sealed class LocaliteAiProviderConfigurationRepository(LocaliteTableStore store) : IAiProviderConfigurationRepository
 {
     public async Task<AiProviderConfiguration> SaveAsync(AiProviderConfiguration configuration, CancellationToken cancellationToken)
@@ -488,4 +580,104 @@ public sealed class LocaliteLogRepository(LocaliteTableStore store) : ILogReposi
 
     public async Task<IReadOnlyList<LogEntry>> ListAsync(CancellationToken cancellationToken)
         => (await store.ListAsync<LogEntry>(Tables.Logs, null, cancellationToken)).OrderByDescending(l => l.CreatedUtc).Take(200).ToArray();
+}
+
+public sealed class LocaliteSourceContextBranchRepository(LocaliteTableStore store) : ISourceContextBranchRepository
+{
+    public async Task<SourceContextBranch> SaveAsync(SourceContextBranch branch, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.SourceContextBranches, branch.Id, branch.ProjectId, branch.Name, branch, cancellationToken);
+        return branch;
+    }
+
+    public async Task<SourceContextBranch?> GetAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken)
+        => (await store.GetAsync<SourceContextBranch>(Tables.SourceContextBranches, branchId, cancellationToken)) is { } branch && branch.ProjectId == projectId && !branch.IsDeleted ? branch : null;
+
+    public async Task<SourceContextBranch?> GetByNameAsync(Guid projectId, string name, CancellationToken cancellationToken)
+        => (await GetByProjectAsync(projectId, cancellationToken)).FirstOrDefault(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    public async Task<IReadOnlyList<SourceContextBranch>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<SourceContextBranch>(Tables.SourceContextBranches, projectId, cancellationToken))
+            .Where(b => !b.IsDeleted)
+            .OrderByDescending(b => b.IsActive)
+            .ThenByDescending(b => b.IsDefault)
+            .ThenBy(b => b.Name)
+            .ToArray();
+}
+
+public sealed class LocaliteSourceSnapshotRepository(LocaliteTableStore store) : ISourceSnapshotRepository
+{
+    public async Task<SourceSnapshot> SaveAsync(SourceSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        await store.UpsertAsync(Tables.SourceSnapshots, snapshot.Id, snapshot.ProjectId, snapshot.ScanRunId.ToString(), snapshot, cancellationToken);
+        return snapshot;
+    }
+
+    public async Task<SourceSnapshot?> GetAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken)
+        => (await store.GetAsync<SourceSnapshot>(Tables.SourceSnapshots, snapshotId, cancellationToken)) is { } snapshot && snapshot.ProjectId == projectId ? snapshot : null;
+
+    public async Task<SourceSnapshot?> GetByScanRunAsync(Guid projectId, Guid scanRunId, CancellationToken cancellationToken)
+        => (await GetByProjectAsync(projectId, cancellationToken)).FirstOrDefault(s => s.ScanRunId == scanRunId);
+
+    public async Task<IReadOnlyList<SourceSnapshot>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken)
+        => (await store.ListAsync<SourceSnapshot>(Tables.SourceSnapshots, projectId, cancellationToken))
+            .OrderByDescending(s => s.CreatedUtc)
+            .ToArray();
+
+    public async Task<IReadOnlyList<SourceSnapshot>> GetByBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken)
+        => (await GetByProjectAsync(projectId, cancellationToken)).Where(s => s.ContextBranchId == branchId).ToArray();
+
+    public async Task DeleteAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken)
+    {
+        var snapshot = await GetAsync(projectId, snapshotId, cancellationToken);
+        if (snapshot is not null)
+        {
+            await store.DeleteAsync(Tables.SourceSnapshots, snapshotId, cancellationToken);
+        }
+    }
+}
+
+public sealed class LocaliteSourceSnapshotFileRepository(LocaliteTableStore store) : ISourceSnapshotFileRepository
+{
+    public async Task ReplaceForSnapshotAsync(Guid projectId, Guid snapshotId, IReadOnlyList<SourceSnapshotFile> files, CancellationToken cancellationToken)
+    {
+        foreach (var existing in (await store.ListAsync<SourceSnapshotFile>(Tables.SourceSnapshotFiles, projectId, cancellationToken)).Where(f => f.SnapshotId == snapshotId))
+        {
+            await store.DeleteAsync(Tables.SourceSnapshotFiles, existing.Id, cancellationToken);
+        }
+
+        foreach (var file in files)
+        {
+            await store.UpsertAsync(Tables.SourceSnapshotFiles, file.Id, projectId, $"{snapshotId:N}:{file.RelativePath}", file, cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyList<SourceSnapshotFile>> GetBySnapshotAsync(Guid projectId, Guid snapshotId, CancellationToken cancellationToken)
+        => (await store.ListAsync<SourceSnapshotFile>(Tables.SourceSnapshotFiles, projectId, cancellationToken))
+            .Where(f => f.SnapshotId == snapshotId)
+            .OrderBy(f => f.RelativePath)
+            .ToArray();
+}
+
+public sealed class LocaliteSourceSnapshotMetricRepository(LocaliteTableStore store) : ISourceSnapshotMetricRepository
+{
+    public async Task ReplaceForSnapshotAsync(Guid snapshotId, IReadOnlyList<SourceSnapshotMetric> metrics, CancellationToken cancellationToken)
+    {
+        foreach (var existing in (await store.ListAsync<SourceSnapshotMetric>(Tables.SourceSnapshotMetrics, null, cancellationToken)).Where(m => m.SnapshotId == snapshotId))
+        {
+            await store.DeleteAsync(Tables.SourceSnapshotMetrics, existing.Id, cancellationToken);
+        }
+
+        foreach (var metric in metrics)
+        {
+            await store.UpsertAsync(Tables.SourceSnapshotMetrics, metric.Id, null, snapshotId.ToString(), metric, cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyList<SourceSnapshotMetric>> GetBySnapshotAsync(Guid snapshotId, CancellationToken cancellationToken)
+        => (await store.ListAsync<SourceSnapshotMetric>(Tables.SourceSnapshotMetrics, null, cancellationToken))
+            .Where(m => m.SnapshotId == snapshotId)
+            .OrderBy(m => m.Category)
+            .ThenBy(m => m.Name)
+            .ToArray();
 }

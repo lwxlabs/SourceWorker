@@ -171,6 +171,39 @@ app.MapGet("/api/projects/{id:guid}/scan-runs/latest", async (Guid id, IScanRunR
     return scan is null ? Results.NotFound() : Results.Ok(scan);
 });
 
+app.MapGet("/api/projects/{id:guid}/context-branches", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetContextBranchesQuery(id), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/context-branches", async (Guid id, CreateContextBranchRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CreateContextBranchCommand(id, request.Name, request.Description), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-branches/{branchId:guid}", async (Guid id, Guid branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new GetContextBranchQuery(id, branchId), cancellationToken) is { } branch ? Results.Ok(branch) : Results.NotFound());
+app.MapPut("/api/projects/{id:guid}/context-branches/{branchId:guid}", async (Guid id, Guid branchId, UpdateContextBranchRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new UpdateContextBranchCommand(id, branchId, request.Name, request.Description), cancellationToken)));
+app.MapDelete("/api/projects/{id:guid}/context-branches/{branchId:guid}", async (Guid id, Guid branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new RemoveContextBranchCommand(id, branchId), cancellationToken) ? Results.NoContent() : Results.BadRequest(new { message = "The context branch could not be removed." }));
+app.MapPost("/api/projects/{id:guid}/context-branches/{branchId:guid}/activate", async (Guid id, Guid branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new ActivateContextBranchCommand(id, branchId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshots", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetSnapshotsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/context-branches/{branchId:guid}/snapshots", async (Guid id, Guid branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetSnapshotsQuery(id, branchId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshots/{snapshotId:guid}", async (Guid id, Guid snapshotId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new GetSnapshotQuery(id, snapshotId), cancellationToken) is { } snapshot ? Results.Ok(snapshot) : Results.NotFound());
+app.MapDelete("/api/projects/{id:guid}/snapshots/{snapshotId:guid}", async (Guid id, Guid snapshotId, IRequestFlow flow, CancellationToken cancellationToken)
+    => await flow.Send(new DeleteSnapshotCommand(id, snapshotId), cancellationToken) ? Results.NoContent() : Results.NotFound());
+app.MapGet("/api/projects/{id:guid}/snapshot-diff/latest", async (Guid id, [FromQuery] Guid? branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetLatestSnapshotDiffQuery(id, branchId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshot-diff/branches", async (Guid id, [FromQuery] Guid leftBranchId, [FromQuery] Guid rightBranchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CompareBranchSnapshotsQuery(id, leftBranchId, rightBranchId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshot-diff", async (Guid id, [FromQuery] Guid leftSnapshotId, [FromQuery] Guid rightSnapshotId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CompareSnapshotsQuery(id, leftSnapshotId, rightSnapshotId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshot-diff/file", async (Guid id, [FromQuery] Guid leftSnapshotId, [FromQuery] Guid rightSnapshotId, [FromQuery] string relativePath, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CompareSnapshotFileQuery(id, leftSnapshotId, rightSnapshotId, relativePath), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/snapshot-diff/pack", async (Guid id, BranchDiffPackRequest request, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new CreateBranchDiffPackCommand(id, request.LeftSnapshotId, request.RightSnapshotId), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/snapshot-diff/pack/latest", async (Guid id, [FromQuery] Guid branchId, IRequestFlow flow, CancellationToken cancellationToken)
+    => Results.Ok(await flow.Send(new GetLatestBranchDiffPackQuery(id, branchId), cancellationToken)));
+
 app.MapGet("/api/storage/info", async (IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new GetStorageInfoQuery(), cancellationToken)));
 
@@ -189,6 +222,17 @@ app.MapGet("/api/projects/{id:guid}/routes", async (Guid id, IRequestFlow flow, 
 app.MapGet("/api/projects/{id:guid}/service-registrations", async (Guid id, IServiceRegistrationRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/configuration-usages", async (Guid id, IConfigurationUsageRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/tests", async (Guid id, ITestInfoRepository repo, CancellationToken cancellationToken) => Results.Ok(await repo.GetByProjectAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/languages", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetCodeLanguagesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/analyzers", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetCodeAnalyzersQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/analyzer-runs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetCodeAnalyzerRunsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/components", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetCodeComponentsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/frontend-routes", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetFrontendRoutesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/imports", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetScriptImportsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/styles", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetStyleUsagesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/packages", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetPackageReferencesQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/build-scripts", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetBuildScriptsQuery(id), cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/code/settings", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetCodeAnalysisSettingsQuery(id), cancellationToken)));
+app.MapPut("/api/projects/{id:guid}/code/settings", async (Guid id, CodeAnalysisSettings settings, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new UpdateCodeAnalysisSettingsCommand(settings with { ProjectId = id }), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextBrowserQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser/files", async (Guid id, [FromQuery] bool showTechnical, [FromQuery] bool showExports, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetContextFilesQuery(id, showTechnical, showExports), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/context-browser/files/{*relativePath}", async (Guid id, string relativePath, IRequestFlow flow, CancellationToken cancellationToken) => Results.Text(await flow.Send(new ReadContextFileQuery(id, relativePath), cancellationToken), "text/plain"));
@@ -347,3 +391,6 @@ public sealed record AiExplanationSaveApiRequest(bool ConfirmOverwrite = false, 
 public sealed record ValidateProjectPathRequest(string Path);
 public sealed record StartDogfoodSessionRequest(IReadOnlyList<DogfoodSessionProject> Projects);
 public sealed record UpdateIssueStatusRequest(string Status);
+public sealed record CreateContextBranchRequest(string Name, string? Description);
+public sealed record UpdateContextBranchRequest(string? Name, string? Description);
+public sealed record BranchDiffPackRequest(Guid LeftSnapshotId, Guid RightSnapshotId);

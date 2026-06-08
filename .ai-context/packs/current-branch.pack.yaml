@@ -6,8 +6,8 @@ purpose: Understand the current branch before editing.
 maxRecommendedUse: compact
 tokenEstimate: 0
 freshnessStatus: fresh
-sourceScanRunId: "524b0fea-14f1-40fb-8c59-0e51bf95d28b"
-generatedUtc: "2026-06-02T21:10:36.9475983+00:00"
+sourceScanRunId: "69afcf5a-d2ed-4bd6-a790-9a6aeac9bfdd"
+generatedUtc: "2026-06-06T01:00:02.3844611+00:00"
 files:
   - .ai-context/branches/current.md
   - .ai-context/scans/latest-scan.md

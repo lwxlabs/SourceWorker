@@ -39,7 +39,8 @@ public static class SourceWorkerNavigation
         new("ask", "Ask", "ai", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("docs", "Docs", "docs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("packs", "Packs", "packs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
-        new("markdown", "Markdown", "markdown", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
+        new("markdown", "Markdown", "markdown", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
+        new("branches", "Branches", "branches", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
     ];
 
     public static IReadOnlyList<ProjectNavigationItem> ProjectAdvanced { get; } =

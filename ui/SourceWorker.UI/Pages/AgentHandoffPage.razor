@@ -1,100 +1,97 @@
-@page "/projects/{ProjectId:guid}/handoff"
 @inject ISourceWorkerApiClient Api
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject ToastService Toast
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="handoff">
-    @if (loading)
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else
+{
+    <section class="handoff-hero">
+        <div>
+            <p class="eyebrow">Agent Handoff</p>
+            <h2>@ProjectName</h2>
+            <p>@PurposeLine</p>
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="pill ok">@HandoffReadiness</span>
+                <span class="pill">Last scan: @(project?.LastScannedAt?.ToString("g") ?? "never")</span>
+            </div>
+        </div>
+        <div class="project-actions">
+            <button class="btn btn-primary" @onclick="CopyHandoff" disabled="@(handoff is null)">Copy Handoff</button>
+            <button class="btn" @onclick="CopyCodexPrompt" disabled="@(handoff is null)">Copy Codex Prompt</button>
+            <button class="btn" @onclick="CopyJuniePrompt" disabled="@(handoff is null)">Copy Junie Prompt</button>
+            <a class="btn" href="/projects/@ProjectId/ai">Ask with this context</a>
+        </div>
+    </section>
+
+    <Cards Title="What To Give An Agent">
+        <div class="grid three">
+            <div class="list-row"><strong>Quick coding context</strong><span>ai-handoff</span></div>
+            <div class="list-row"><strong>Architecture/deep context</strong><span>backend-docs</span></div>
+            <div class="list-row"><strong>Current branch context</strong><span>current-branch</span></div>
+        </div>
+    </Cards>
+
+    <Cards Title="AI Explanation">
+        <div class="list-row">
+            <strong>@(explanationExists ? "Generated" : "Not generated")</strong>
+            <span>.ai-context/docs/backend/07-ai-explanation.md</span>
+        </div>
+        <div class="project-actions">
+            <a class="btn btn-primary" href="/projects/@ProjectId/explanation">@(explanationExists ? "Open explanation" : "Generate explanation")</a>
+            @if (explanationExists)
+            {
+                <button class="btn" @onclick="CopyExplanation">Copy explanation</button>
+            }
+        </div>
+    </Cards>
+
+    <Cards Title="Handoff Preview">
+        <MarkDown Preview="true" SplitView="false" Value="@handoff?.Markdown" EnableMenu="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
+    </Cards>
+
+    <Cards Title="Understanding Summary">
+        <div class="metric-grid">
+            <MetricCard Label="Scan Completeness" Value="@($"{completeness?.Score ?? 0}%")" />
+            <MetricCard Label="Files Indexed" Value="@FilesIndexed" />
+            <MetricCard Label="C# Files" Value="@CSharpFiles" />
+            <MetricCard Label="Symbols" Value="@Symbols" />
+            <MetricCard Label="Tests" Value="@Tests" />
+            <MetricCard Label="Domain Flows" Value="@DomainFlows" />
+        </div>
+        <p class="muted">@completeness?.CodeIntelligenceExplanation</p>
+    </Cards>
+
+    @if (completeness?.Warnings.Count > 0)
     {
-        <LoadingState />
+        <Cards Title="Warnings / Needs Attention">
+            @foreach (var warning in completeness.Warnings.Take(8))
+            {
+                <div class="list-row"><strong>@warning.Code</strong><span>@warning.Message</span></div>
+            }
+        </Cards>
     }
-    else if (!string.IsNullOrWhiteSpace(error))
-    {
-        <ErrorState Message="@error" />
-    }
-    else
-    {
-        <section class="handoff-hero">
-            <div>
-                <p class="eyebrow">Agent Handoff</p>
-                <h2>@ProjectName</h2>
-                <p>@PurposeLine</p>
-                <div class="d-flex gap-2 flex-wrap">
-                    <span class="pill ok">@HandoffReadiness</span>
-                    <span class="pill">Last scan: @(project?.LastScannedAt?.ToString("g") ?? "never")</span>
+
+    <details class="mt-3">
+        <summary>Scan stages</summary>
+        <div class="stage-list">
+            @foreach (var stage in completeness?.Stages ?? [])
+            {
+                <div class="stage-row">
+                    <strong>@stage.Name</strong>
+                    <span class="pill @StageClass(stage.Status)">@stage.Status</span>
+                    <span>@stage.Count</span>
                 </div>
-            </div>
-            <div class="project-actions">
-                <button class="btn btn-primary" @onclick="CopyHandoff" disabled="@(handoff is null)">Copy Handoff</button>
-                <button class="btn" @onclick="CopyCodexPrompt" disabled="@(handoff is null)">Copy Codex Prompt</button>
-                <button class="btn" @onclick="CopyJuniePrompt" disabled="@(handoff is null)">Copy Junie Prompt</button>
-                <a class="btn" href="/projects/@ProjectId/ai">Ask with this context</a>
-            </div>
-        </section>
-
-        <Cards Title="What To Give An Agent">
-            <div class="grid three">
-                <div class="list-row"><strong>Quick coding context</strong><span>ai-handoff</span></div>
-                <div class="list-row"><strong>Architecture/deep context</strong><span>backend-docs</span></div>
-                <div class="list-row"><strong>Current branch context</strong><span>current-branch</span></div>
-            </div>
-        </Cards>
-
-        <Cards Title="AI Explanation">
-            <div class="list-row">
-                <strong>@(explanationExists ? "Generated" : "Not generated")</strong>
-                <span>.ai-context/docs/backend/07-ai-explanation.md</span>
-            </div>
-            <div class="project-actions">
-                <a class="btn btn-primary" href="/projects/@ProjectId/explanation">@(explanationExists ? "Open explanation" : "Generate explanation")</a>
-                @if (explanationExists)
-                {
-                    <button class="btn" @onclick="CopyExplanation">Copy explanation</button>
-                }
-            </div>
-        </Cards>
-
-        <Cards Title="Handoff Preview">
-            <MarkdownViewer Content="@handoff?.Markdown" />
-        </Cards>
-
-        <Cards Title="Understanding Summary">
-            <div class="metric-grid">
-                <MetricCard Label="Scan Completeness" Value="@($"{completeness?.Score ?? 0}%")" />
-                <MetricCard Label="Files Indexed" Value="@FilesIndexed" />
-                <MetricCard Label="C# Files" Value="@CSharpFiles" />
-                <MetricCard Label="Symbols" Value="@Symbols" />
-                <MetricCard Label="Tests" Value="@Tests" />
-                <MetricCard Label="Domain Flows" Value="@DomainFlows" />
-            </div>
-            <p class="muted">@completeness?.CodeIntelligenceExplanation</p>
-        </Cards>
-
-        @if (completeness?.Warnings.Count > 0)
-        {
-            <Cards Title="Warnings / Needs Attention">
-                @foreach (var warning in completeness.Warnings.Take(8))
-                {
-                    <div class="list-row"><strong>@warning.Code</strong><span>@warning.Message</span></div>
-                }
-            </Cards>
-        }
-
-        <details class="mt-3">
-            <summary>Scan stages</summary>
-            <div class="stage-list">
-                @foreach (var stage in completeness?.Stages ?? [])
-                {
-                    <div class="stage-row">
-                        <strong>@stage.Name</strong>
-                        <span class="pill @StageClass(stage.Status)">@stage.Status</span>
-                        <span>@stage.Count</span>
-                    </div>
-                }
-            </div>
-        </details>
-    }
-</ProjectWorkspaceLayout>
+            }
+        </div>
+    </details>
+}
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

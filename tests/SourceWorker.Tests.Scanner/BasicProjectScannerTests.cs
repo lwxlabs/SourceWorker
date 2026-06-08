@@ -152,6 +152,7 @@ public sealed class BasicProjectScannerTests
         var output = Path.Combine(root, ".ai-context", "docs", "backend");
         var external = Path.Combine(root, "instructions", "Result", "Backend");
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "recipes", "backend-docs-compact.yaml")));
+        Assert.True(File.Exists(Path.Combine(output, "00-project-index.md")));
         Assert.True(File.Exists(Path.Combine(output, "README.md")));
         Assert.True(File.Exists(Path.Combine(output, "01-project-structure.md")));
         Assert.True(File.Exists(Path.Combine(output, "02-architecture.md")));
@@ -159,10 +160,17 @@ public sealed class BasicProjectScannerTests
         Assert.True(File.Exists(Path.Combine(output, "04-configuration-and-secrets.md")));
         Assert.True(File.Exists(Path.Combine(output, "05-tasks-and-risks.md")));
         Assert.True(File.Exists(Path.Combine(output, "06-verification-checklist.md")));
+        Assert.True(File.Exists(Path.Combine(output, "08-code-snippets.md")));
+        Assert.True(File.Exists(Path.Combine(output, "09-reading-guide.md")));
+        Assert.True(File.Exists(Path.Combine(external, "00-project-index.md")));
         Assert.True(File.Exists(Path.Combine(external, "README.md")));
         Assert.True(File.Exists(Path.Combine(external, "06-verification-checklist.md")));
+        Assert.True(File.Exists(Path.Combine(external, "08-code-snippets.md")));
+        Assert.True(File.Exists(Path.Combine(external, "09-reading-guide.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "exports", "backend-docs-compact.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "packs", "backend-docs.pack.yaml")));
+        Assert.Contains("00-project-index.md", await File.ReadAllTextAsync(Path.Combine(root, ".ai-context", "packs", "backend-docs.pack.yaml")));
+        Assert.Contains("08-code-snippets.md", await File.ReadAllTextAsync(Path.Combine(root, ".ai-context", "exports", "backend-docs-compact.yaml")));
         Assert.DoesNotContain("GeneratedBy: SourceWorker", await File.ReadAllTextAsync(Path.Combine(output, "README.md")));
         Assert.Contains("SourceWorker:Generated", await File.ReadAllTextAsync(Path.Combine(output, "README.md")));
     }

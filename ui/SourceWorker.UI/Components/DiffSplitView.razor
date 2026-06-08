@@ -1,0 +1,67 @@
+<div class="bcv-diff-split @LayoutClass">
+    @if (File.TextDiff.Hunks.Count == 0)
+    {
+        <div class="bcv-warning-box">
+            No split diff is available for this file. Showing metadata-only change.
+        </div>
+    }
+    else
+    {
+        <section class="bcv-split-pane">
+            <header>Previous</header>
+            <div class="bcv-split-code">
+                @foreach (var line in LeftLines)
+                {
+                    if (HideUnchanged && line.Kind == BranchCompareViewer.DiffLineKind.Context)
+                        continue;
+
+                    <div class="bcv-split-line @LeftLineClass(line.Kind)">
+                        <span>@line.OldLineNumber</span>
+                        <code>@line.Text</code>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="bcv-split-pane">
+            <header>Current</header>
+            <div class="bcv-split-code">
+                @foreach (var line in RightLines)
+                {
+                    if (HideUnchanged && line.Kind == BranchCompareViewer.DiffLineKind.Context)
+                        continue;
+
+                    <div class="bcv-split-line @RightLineClass(line.Kind)">
+                        <span>@line.NewLineNumber</span>
+                        <code>@line.Text</code>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BranchCompareViewer.DiffFileItem File { get; set; } = default!;
+    [Parameter] public bool HideUnchanged { get; set; }
+    [Parameter] public BranchCompareViewer.PanelLayout Layout { get; set; }
+
+    private string LayoutClass => Layout == BranchCompareViewer.PanelLayout.Horizontal ? "split-horizontal" : "split-vertical";
+    private IEnumerable<BranchCompareViewer.SourceTextDiffLine> AllLines => File.TextDiff.Hunks.SelectMany(x => x.Lines);
+    private IEnumerable<BranchCompareViewer.SourceTextDiffLine> LeftLines => AllLines.Where(x => x.Kind != BranchCompareViewer.DiffLineKind.Added);
+    private IEnumerable<BranchCompareViewer.SourceTextDiffLine> RightLines => AllLines.Where(x => x.Kind != BranchCompareViewer.DiffLineKind.Removed);
+
+    private static string LeftLineClass(BranchCompareViewer.DiffLineKind kind) => kind switch
+    {
+        BranchCompareViewer.DiffLineKind.Removed => "line-removed",
+        BranchCompareViewer.DiffLineKind.Changed => "line-changed",
+        _ => "line-context"
+    };
+
+    private static string RightLineClass(BranchCompareViewer.DiffLineKind kind) => kind switch
+    {
+        BranchCompareViewer.DiffLineKind.Added => "line-added",
+        BranchCompareViewer.DiffLineKind.Changed => "line-changed",
+        _ => "line-context"
+    };
+}

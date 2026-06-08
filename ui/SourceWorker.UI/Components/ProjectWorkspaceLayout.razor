@@ -1,6 +1,6 @@
 @inject ISelectedProjectState SelectedProject
 
-@if (loading)
+@if (context is null && loading)
 {
     <LoadingState />
 }
@@ -16,7 +16,12 @@ else if (context is null)
 else
 {
     <section class="project-workspace">
-        <ProjectHeader Context="@context" OnRefreshRequested="Refresh" />
+        @if (!string.IsNullOrWhiteSpace(refreshError))
+        {
+            <div class="alert alert-warning" role="status">@refreshError</div>
+        }
+
+        <ProjectHeader Context="@context" OnRefreshRequested="RefreshWorkspaceHeaderAsync" />
         <ProjectTabs ProjectId="@ProjectId" Active="@Active" />
         <div class="project-workspace-body">
             @ChildContent
@@ -32,19 +37,28 @@ else
     private ProjectWorkspaceContext? context;
     private bool loading = true;
     private string? error;
+    private string? refreshError;
+    private Guid? loadedProjectId;
 
     protected override async Task OnParametersSetAsync()
     {
-        await Refresh();
+        if (loadedProjectId == ProjectId && context is not null)
+        {
+            return;
+        }
+
+        loadedProjectId = ProjectId;
+        await LoadWorkspaceAsync();
     }
 
-    private async Task Refresh()
+    private async Task LoadWorkspaceAsync()
     {
         loading = true;
         try
         {
             context = await SelectedProject.LoadAsync(ProjectId);
             error = null;
+            refreshError = null;
         }
         catch (Exception ex)
         {
@@ -53,6 +67,19 @@ else
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task RefreshWorkspaceHeaderAsync()
+    {
+        try
+        {
+            context = await SelectedProject.LoadAsync(ProjectId);
+            refreshError = null;
+        }
+        catch (Exception ex)
+        {
+            refreshError = ex.Message;
         }
     }
 }

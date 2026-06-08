@@ -8,13 +8,16 @@ public sealed class OutputProfileService : IOutputProfileService, IOutputRouting
 {
     public static readonly string[] BackendDocsFiles =
     [
+        "00-project-index.md",
         "README.md",
         "01-project-structure.md",
         "02-architecture.md",
         "03-important-files-and-flows.md",
         "04-configuration-and-secrets.md",
         "05-tasks-and-risks.md",
-        "06-verification-checklist.md"
+        "06-verification-checklist.md",
+        "08-code-snippets.md",
+        "09-reading-guide.md"
     ];
 
     public Task<IReadOnlyList<OutputProfile>> GetProfilesAsync(Project project, CancellationToken cancellationToken)

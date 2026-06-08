@@ -1,0 +1,61 @@
+@page "/projects/{ProjectId:guid}"
+@page "/projects/{ProjectId:guid}/{*Section}"
+
+<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="@ActiveSection">
+    @switch (NormalizedSection)
+    {
+        case "":
+            <ProjectDashboard ProjectId="@ProjectId" />
+            break;
+        case "handoff":
+            <AgentHandoffPage ProjectId="@ProjectId" />
+            break;
+        case "explanation":
+            <AiExplanationPage ProjectId="@ProjectId" />
+            break;
+        case "ai":
+            <AiPreviewPage ProjectId="@ProjectId" />
+            break;
+        case "ai/runs":
+            <AiRunsPage ProjectId="@ProjectId" />
+            break;
+        case "docs":
+            <DocsPage ProjectId="@ProjectId" />
+            break;
+        case "packs":
+            <PacksPage ProjectId="@ProjectId" />
+            break;
+        case "markdown":
+            <MarkdownWorkspacePage ProjectId="@ProjectId" />
+            break;
+        case "branches":
+            <BranchesPage ProjectId="@ProjectId" />
+            break;
+        case "scan-health":
+            <ScanHealthPage ProjectId="@ProjectId" />
+            break;
+        case "code":
+            <CodePage ProjectId="@ProjectId" />
+            break;
+        case "artifacts":
+            <ArtifactsPage ProjectId="@ProjectId" />
+            break;
+        case "jobs":
+            <JobsPage ProjectId="@ProjectId" />
+            break;
+        case "context":
+            <ContextPage ProjectId="@ProjectId" />
+            break;
+        default:
+            <EmptyState Message="@($"Unknown project section: {Section}")" />
+            break;
+    }
+</ProjectWorkspaceLayout>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public string? Section { get; set; }
+
+    private string NormalizedSection => (Section ?? "").Trim('/').ToLowerInvariant();
+    private string ActiveSection => NormalizedSection.StartsWith("ai/", StringComparison.OrdinalIgnoreCase) ? "ai" : NormalizedSection;
+}

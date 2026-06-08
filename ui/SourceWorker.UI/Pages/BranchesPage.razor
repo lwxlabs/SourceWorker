@@ -1,0 +1,314 @@
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+
+<section class="handoff-hero d-flex flex-column">
+    <div class="d-flex flex-row">
+        <div>
+            @* <p class="eyebrow">SourceWorker Branches</p> *@
+            <h2>Context snapshots and diffs</h2>
+            @* <p>SourceWorker branches are local context timelines. They do not create, switch, delete, or merge Git branches.</p> *@
+        </div>
+        <div class="actions">
+            <button class="btn" @onclick="LoadAsync">Refresh</button>
+            <button class="btn btn-primary" @onclick="CompareLatestAsync" disabled="@(selectedBranch is null || snapshots.Count < 2)">Compare latest snapshots</button>
+            <button class="btn" @onclick="CreatePackAsync" disabled="@(diff is null || diff.LeftSnapshotId == Guid.Empty || diff.RightSnapshotId == Guid.Empty)">Create branch diff handoff</button>
+        </div>
+    </div>
+    <div class=" d-flex justify-content-between">
+        <div>
+            <input placeholder="Branch name" @bind="newBranchName" />
+            <input placeholder="Description" @bind="newBranchDescription" />
+            <button class="btn" @onclick="CreateBranchAsync">Create</button>
+        </div>
+
+        @*  <label>
+            Compare active branch with
+            <select @bind="compareBranchId">
+                <option value="">Choose another branch</option>
+                @foreach (var branch in branches.Where(b => selectedBranch is null || b.Id != selectedBranch.Id))
+                {
+                    <option value="@branch.Id">@branch.Name @(branch.LastSnapshotId is null ? "(no snapshot)" : "")</option>
+                }
+            </select>
+        </label>
+        <button class="btn" @onclick="CompareWithBranchAsync" disabled="@(selectedBranch is null || string.IsNullOrWhiteSpace(compareBranchId))">Compare branches</button> *@
+        @if (selectedBranch is null)
+        {
+            <p>No SourceWorker context branches yet. The next scan will create <code>main-context</code>.</p>
+        }
+        else
+        {
+            <p>
+                Active branch: <strong>@selectedBranch.Name</strong>.
+                Last snapshot: @(selectedBranch.LastSnapshotId?.ToString("N")[..8] ?? "none").
+                @if (!string.IsNullOrWhiteSpace(selectedBranch.OptionalGitBranchName))
+                {
+                    <span>Git: @selectedBranch.OptionalGitBranchName @((selectedBranch.OptionalGitIsDirty ?? false) ? "(dirty)" : "")</span>
+                }
+            </p>
+        }
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <p class="callout bad">@error</p>
+}
+
+@if (pack is not null)
+{
+    <Cards Title="Branch Diff Pack">
+        <p>Saved to <code>@pack.SuggestedPath</code>.</p>
+        <pre>@pack.Markdown</pre>
+    </Cards>
+}
+
+<BranchCompareViewer Title="Context Snapshot Compare"
+                     LeftLabel="@LeftLabel"
+                     RightLabel="@RightLabel"
+                     Branches="@ViewerBranches"
+                     Snapshots="@ViewerSnapshots"
+                     Files="@viewerFiles"
+                     ActiveBranchId="@selectedBranch?.Id.ToString()"
+                     LeftSnapshotId="@diff?.LeftSnapshotId.ToString()"
+                     RightSnapshotId="@diff?.RightSnapshotId.ToString()"
+                     BranchSelected="OnViewerBranchSelectedAsync"
+                     SnapshotSelected="OnViewerSnapshotSelectedAsync"
+                     FileSelected="OnViewerFileSelectedAsync" />
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private IReadOnlyList<SourceContextBranchDto> branches = [];
+    private IReadOnlyList<SourceSnapshotDto> snapshots = [];
+    private SourceContextBranchDto? selectedBranch;
+    private SourceDiffReportDto? diff;
+    private BranchDiffPackDto? pack;
+    private IReadOnlyList<BranchCompareViewer.DiffFileItem> viewerFiles = [];
+    private string? error;
+    private string newBranchName = "";
+    private string? newBranchDescription;
+    private string compareBranchId = "";
+
+    private string LeftLabel => FindSnapshotLabel(diff?.LeftSnapshotId) ?? "Previous snapshot";
+    private string RightLabel => FindSnapshotLabel(diff?.RightSnapshotId) ?? "Current snapshot";
+
+    private IReadOnlyList<BranchCompareViewer.BranchItem> ViewerBranches => branches
+        .Select(branch => new BranchCompareViewer.BranchItem(
+            branch.Id.ToString(),
+            branch.Name,
+            branch.Description,
+            branch.Id == selectedBranch?.Id ? snapshots.Count : branch.LastSnapshotId is null ? 0 : 1,
+            branch.IsActive,
+            branch.IsDefault))
+        .ToList();
+
+    private IReadOnlyList<BranchCompareViewer.SnapshotItem> ViewerSnapshots => snapshots
+        .OrderByDescending(snapshot => snapshot.CreatedUtc)
+        .Select(snapshot => new BranchCompareViewer.SnapshotItem(
+            snapshot.Id.ToString(),
+            snapshot.Name,
+            snapshot.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+            snapshot.IndexedFileCount,
+            snapshot.SymbolCount,
+            snapshot.OptionalGitIsDirty ?? false))
+        .ToList();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            error = null;
+            branches = await Api.GetContextBranchesAsync(ProjectId);
+            selectedBranch = branches.FirstOrDefault(b => b.IsActive) ?? branches.FirstOrDefault();
+            snapshots = selectedBranch is null ? [] : await Api.GetSnapshotsAsync(ProjectId, selectedBranch.Id);
+            if (!string.IsNullOrWhiteSpace(compareBranchId) && branches.All(b => b.Id.ToString() != compareBranchId))
+                compareBranchId = "";
+
+            diff = null;
+            pack = null;
+            viewerFiles = [];
+            if (selectedBranch is not null && snapshots.Count >= 2)
+            {
+                diff = await Api.GetLatestSnapshotDiffAsync(ProjectId, selectedBranch.Id);
+                viewerFiles = MapFiles(diff);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task CreateBranchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newBranchName)) return;
+        await Api.CreateContextBranchAsync(ProjectId, newBranchName, newBranchDescription);
+        newBranchName = "";
+        newBranchDescription = null;
+        await LoadAsync();
+    }
+
+    private async Task SelectBranchAsync(SourceContextBranchDto branch)
+    {
+        await Api.ActivateContextBranchAsync(ProjectId, branch.Id);
+        await LoadAsync();
+    }
+
+    private async Task RemoveBranchAsync(SourceContextBranchDto branch)
+    {
+        await Api.DeleteContextBranchAsync(ProjectId, branch.Id);
+        await LoadAsync();
+    }
+
+    private async Task CompareLatestAsync()
+    {
+        if (selectedBranch is null) return;
+        diff = await Api.GetLatestSnapshotDiffAsync(ProjectId, selectedBranch.Id);
+        viewerFiles = MapFiles(diff);
+    }
+
+    private async Task CompareWithBranchAsync()
+    {
+        if (selectedBranch is null || !Guid.TryParse(compareBranchId, out var otherBranchId)) return;
+        diff = await Api.CompareBranchSnapshotsAsync(ProjectId, otherBranchId, selectedBranch.Id);
+        viewerFiles = MapFiles(diff);
+    }
+
+    private async Task CreatePackAsync()
+    {
+        if (diff is null || diff.LeftSnapshotId == Guid.Empty || diff.RightSnapshotId == Guid.Empty) return;
+        pack = await Api.CreateBranchDiffPackAsync(ProjectId, diff.LeftSnapshotId, diff.RightSnapshotId);
+        Toast.ShowSuccess("Branch diff handoff created.");
+    }
+
+    private async Task OnViewerBranchSelectedAsync(string branchId)
+    {
+        var branch = branches.FirstOrDefault(x => x.Id.ToString() == branchId);
+        if (branch is not null)
+            await SelectBranchAsync(branch);
+    }
+
+    private Task OnViewerSnapshotSelectedAsync(string snapshotId) => Task.CompletedTask;
+
+    private async Task OnViewerFileSelectedAsync(BranchCompareViewer.DiffFileItem file)
+    {
+        if (diff is null || file.TextDiff.Hunks.Count > 0)
+            return;
+
+        try
+        {
+            var textDiff = await Api.CompareSnapshotFileAsync(ProjectId, diff.LeftSnapshotId, diff.RightSnapshotId, file.RelativePath);
+            var updated = file with { TextDiff = MapTextDiff(textDiff) };
+            viewerFiles = viewerFiles.Select(x => x.RelativePath == file.RelativePath ? updated : x).ToList();
+        }
+        catch (Exception ex)
+        {
+            var updated = file with { HasWarning = true, Explanation = $"{file.Explanation} File diff could not be loaded: {ex.Message}" };
+            viewerFiles = viewerFiles.Select(x => x.RelativePath == file.RelativePath ? updated : x).ToList();
+        }
+    }
+
+    private IReadOnlyList<BranchCompareViewer.DiffFileItem> MapFiles(SourceDiffReportDto report)
+        => report.FileChanges.Select(MapFile).ToList();
+
+    private static BranchCompareViewer.DiffFileItem MapFile(SourceDiffFileChangeDto change)
+    {
+        var path = change.RelativePath.Replace('\\', '/');
+        return new BranchCompareViewer.DiffFileItem
+        {
+            RelativePath = path,
+            DisplayName = Path.GetFileName(path),
+            FileKind = change.FileKind.ToString(),
+            ChangeKind = MapChangeKind(change.ChangeKind),
+            AddedLines = change.AddedLines ?? 0,
+            RemovedLines = change.RemovedLines ?? 0,
+            ModifiedLines = change.ModifiedLines ?? 0,
+            IsGenerated = change.IsGenerated,
+            IsSource = change.FileKind is SourceSnapshotFileKind.Source or SourceSnapshotFileKind.Test or SourceSnapshotFileKind.ProjectFile or SourceSnapshotFileKind.SolutionFile,
+            IsMarkdown = path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase),
+            IsImportant = change.IsImportant,
+            HasWarning = change.ChangeKind != SourceDiffChangeKind.Unchanged && change.DiffPreview is null,
+            Explanation = change.Explanation ?? "This file changed between the selected snapshots.",
+            TextDiff = MapDiffPreview(change.DiffPreview)
+        };
+    }
+
+    private static BranchCompareViewer.SourceTextDiff MapTextDiff(SourceTextDiffDto diff)
+        => new()
+        {
+            Hunks = diff.Hunks.Select(hunk => new BranchCompareViewer.SourceTextDiffHunk
+            {
+                OldStart = hunk.OldStart,
+                OldLength = hunk.OldLength,
+                NewStart = hunk.NewStart,
+                NewLength = hunk.NewLength,
+                Lines = hunk.Lines.Select(line => new BranchCompareViewer.SourceTextDiffLine
+                {
+                    Kind = MapLineKind(line.Kind),
+                    OldLineNumber = line.OldLineNumber,
+                    NewLineNumber = line.NewLineNumber,
+                    Text = line.Text
+                }).ToList()
+            }).ToList()
+        };
+
+    private static BranchCompareViewer.SourceTextDiff MapDiffPreview(string? diffPreview)
+    {
+        if (string.IsNullOrWhiteSpace(diffPreview))
+            return new BranchCompareViewer.SourceTextDiff();
+
+        var lines = diffPreview.Replace("\r\n", "\n").Split('\n')
+            .Select(line => new BranchCompareViewer.SourceTextDiffLine
+            {
+                Kind = line.StartsWith('+') ? BranchCompareViewer.DiffLineKind.Added :
+                    line.StartsWith('-') ? BranchCompareViewer.DiffLineKind.Removed :
+                    BranchCompareViewer.DiffLineKind.Context,
+                Text = line
+            })
+            .ToList();
+
+        return new BranchCompareViewer.SourceTextDiff
+        {
+            Hunks =
+            [
+                new BranchCompareViewer.SourceTextDiffHunk
+                {
+                    OldStart = 0,
+                    OldLength = 0,
+                    NewStart = 0,
+                    NewLength = lines.Count,
+                    Lines = lines
+                }
+            ]
+        };
+    }
+
+    private static BranchCompareViewer.DiffChangeKind MapChangeKind(SourceDiffChangeKind kind) => kind switch
+    {
+        SourceDiffChangeKind.Added => BranchCompareViewer.DiffChangeKind.Added,
+        SourceDiffChangeKind.Removed => BranchCompareViewer.DiffChangeKind.Removed,
+        SourceDiffChangeKind.Modified => BranchCompareViewer.DiffChangeKind.Modified,
+        SourceDiffChangeKind.RenamedMaybe => BranchCompareViewer.DiffChangeKind.RenamedMaybe,
+        _ => BranchCompareViewer.DiffChangeKind.Unchanged
+    };
+
+    private static BranchCompareViewer.DiffLineKind MapLineKind(SourceTextDiffLineKind kind) => kind switch
+    {
+        SourceTextDiffLineKind.Added => BranchCompareViewer.DiffLineKind.Added,
+        SourceTextDiffLineKind.Removed => BranchCompareViewer.DiffLineKind.Removed,
+        SourceTextDiffLineKind.Changed => BranchCompareViewer.DiffLineKind.Changed,
+        _ => BranchCompareViewer.DiffLineKind.Context
+    };
+
+    private string? FindSnapshotLabel(Guid? snapshotId)
+    {
+        if (snapshotId is null || snapshotId == Guid.Empty)
+            return null;
+
+        var snapshot = snapshots.FirstOrDefault(x => x.Id == snapshotId);
+        return snapshot is null ? snapshotId.Value.ToString("N")[..8] : $"{snapshot.Name} {snapshot.CreatedUtc.ToLocalTime():HH:mm:ss}";
+    }
+}

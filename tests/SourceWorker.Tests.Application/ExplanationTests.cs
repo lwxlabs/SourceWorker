@@ -87,6 +87,29 @@ public sealed class ExplanationTests
     }
 
     [Fact]
+    public async Task Explanation_run_treats_high_safety_warnings_as_advisory()
+    {
+        using var temp = new TempProject();
+        var project = new Project(Guid.NewGuid(), "Sample", temp.Root, DateTimeOffset.UtcNow);
+        var service = new AiExplanationService(
+            new ProjectRepo(project),
+            new PackRepo(),
+            new ConfigRepo(),
+            new ProviderRegistry(),
+            new BlockedPromptBuilder(),
+            new AiExplanationQualityService(),
+            new RunRepo(),
+            new ArtifactRepo(),
+            new ScanRepo(project.Id));
+
+        var result = await service.RunAsync(Request(project.Id), CancellationToken.None);
+
+        Assert.Equal(AiRunStatus.Completed, result.Status);
+        Assert.Contains(result.Warnings, warning => warning.Severity == "High");
+        Assert.True(File.Exists(Path.Combine(temp.Root, ".ai-context", "docs", "backend", "07-ai-explanation.md")));
+    }
+
+    [Fact]
     public async Task Explanation_stream_auto_saves_generated_explanation_file()
     {
         using var temp = new TempProject();
@@ -279,6 +302,26 @@ public sealed class ExplanationTests
     {
         public Task<AiExplanationPreview> BuildPreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken)
             => Task.FromResult(new AiExplanationPreview(request.ProjectId, request.ProviderId, AiProviderKind.Ollama, request.Model, request.ContextPackId, request.ExplanationProfile, [], [], [], new AiTokenEstimate(10, request.MaxOutputTokens, 10 + request.MaxOutputTokens), new AiCostEstimate(null, null, null), "prompt", "prompt-hash", false));
+    }
+
+    private sealed class BlockedPromptBuilder : IAiExplanationPromptBuilder
+    {
+        public Task<AiExplanationPreview> BuildPreviewAsync(AiExplanationRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(new AiExplanationPreview(
+                request.ProjectId,
+                request.ProviderId,
+                AiProviderKind.Ollama,
+                request.Model,
+                request.ContextPackId,
+                request.ExplanationProfile,
+                [],
+                [],
+                [new AiSafetyWarning("secret-like-value", "High", "Prompt content appears to contain a secret-like value.")],
+                new AiTokenEstimate(10, request.MaxOutputTokens, 10 + request.MaxOutputTokens),
+                new AiCostEstimate(null, null, null),
+                "prompt",
+                "prompt-hash",
+                true));
     }
 
     private sealed class RunRepo : IAiRunRepository

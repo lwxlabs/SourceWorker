@@ -36,7 +36,6 @@
   </Folder>
   <Folder Name="/ui/">
     <Project Path="ui/SourceWorker.ApiClient/SourceWorker.ApiClient.csproj" />
-    <Project Path="ui/SourceWorker.Dashboard/SourceWorker.Dashboard.csproj" />
     <Project Path="ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj" />
     <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
   </Folder>

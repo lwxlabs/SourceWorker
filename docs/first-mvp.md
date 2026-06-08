@@ -260,20 +260,19 @@ MVP 2.1 adds protected AI preview endpoints:
 
 AI endpoints are preview-only. They do not write files. API keys are masked in responses and are not written to `.ai-context`.
 
-## Dashboard
+## Desktop UI
 
-Start the read-only Blazor dashboard:
+Start the desktop UI:
 
 ```powershell
 dotnet run --project src/services/SourceWorker.LocalApi
-dotnet run --project ui/SourceWorker.Dashboard
+dotnet run --project ui/SourceWorker.Desktop
 ```
 
 Projects:
 
 - `ui/SourceWorker.ApiClient`: typed Local API client.
 - `ui/SourceWorker.UI`: reusable Razor components/pages.
-- `ui/SourceWorker.Dashboard`: first Blazor Web App host.
 - `ui/SourceWorker.Desktop`: Windows-first MAUI Blazor Hybrid host.
 
 Routes:
@@ -356,6 +355,18 @@ MVP 2.9 adds Markdown Workspace and Provider Management:
 
 `index.yaml` uses format version 5 and includes project identity, latest scan, Git state, table-backed Localite storage metadata, context files, recipes, imported instructions, stale status, artifact lifecycle counts, cleanup recommendations, code intelligence counts, flow counts, context browser availability, output routes, packs, exports, and internal docs state.
 
+## MVP 3.0 Context Branches + Snapshot Diff
+
+SourceWorker now has its own project context branch model. These branches are local SourceWorker timelines for scans, generated docs, handoffs, AI explanations, and snapshot history. They are not Git branches.
+
+Each project gets a default `main-context` branch. Scans create snapshots in the active SourceWorker context branch. Snapshots capture scan metrics, file hashes, generated context hashes, handoff/docs hashes, optional AI explanation hash, code-intelligence counts, and optional read-only Git metadata when available.
+
+Normal source file contents are not stored in snapshot history. SourceWorker stores path/hash/metadata for source files. Generated/context markdown can store text content so Branches can show readable diffs for handoffs, backend docs, and AI explanation files.
+
+The Branches project tab supports creating, activating, and removing SourceWorker context branches, comparing snapshots, and generating a Branch Diff Handoff under `.ai-context/branches/diffs/`.
+
+Git is optional metadata only. SourceWorker does not create, switch, check out, delete, merge, reset, clean, or apply Git changes.
+
 The scan writes:
 
 - `.ai-context/CONTEXT.md`
@@ -426,5 +437,5 @@ Targeted verification:
 - AI Local API endpoints: `dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Ai`
 - Dogfood application logic: `dotnet test tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj --filter Dogfood`
 - Dogfood Local API endpoints: `dotnet test tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj --filter Dogfood`
-- UI-only changes: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`
+- UI-only changes: build `ui/SourceWorker.UI` and `ui/SourceWorker.Desktop`
 - Docs-only: no tests required

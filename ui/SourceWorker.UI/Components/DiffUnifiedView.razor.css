@@ -1,0 +1,51 @@
+﻿.bcv-diff-unified {
+    min-height: 0;
+    overflow: auto;
+    padding: 1rem;
+}
+
+.bcv-hunk {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    background: var(--panel);
+}
+
+.bcv-hunk-header {
+    background: var(--panel-2);
+    color: var(--muted);
+    padding: .55rem .85rem;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: .78rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.bcv-diff-line {
+    display: grid;
+    grid-template-columns: 52px 52px 28px minmax(0, 1fr);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.5;
+    border-bottom: 1px solid var(--line);
+}
+
+.bcv-diff-line span,
+.bcv-diff-line code {
+    padding: .18rem .5rem;
+    min-width: 0;
+}
+
+.bcv-line-old,
+.bcv-line-new {
+    color: var(--muted);
+    text-align: right;
+    border-right: 1px solid var(--line);
+    user-select: none;
+}
+
+.bcv-diff-line code {
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--text);
+}

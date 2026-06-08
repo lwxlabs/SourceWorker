@@ -36,7 +36,8 @@
         </details>
         @if (!string.IsNullOrWhiteSpace(Content))
         {
-            <MarkdownViewer Content="@Content" />
+            <MarkDown Preview="true" SplitView="false" Value="@Content" EnableMenu="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
+
         }
     }
 </Cards>

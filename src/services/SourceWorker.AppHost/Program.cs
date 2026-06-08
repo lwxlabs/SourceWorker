@@ -29,10 +29,7 @@ try
     var state = orchestrator.GetState();
     logger.LogInformation("SourceWorker AppHost is running.");
     logger.LogInformation("Local API: {Url} (PID: {Pid})", state.LocalApi.BaseUrl, state.LocalApi.ProcessId);
-    if (state.Dashboard != null)
-    {
-        logger.LogInformation("Dashboard: {Url} (PID: {Pid})", state.Dashboard.BaseUrl, state.Dashboard.ProcessId);
-    }
+    logger.LogInformation("UI: run SourceWorker.Desktop for the desktop app.");
     
     logger.LogInformation("Press Ctrl+C to shut down.");
     
@@ -59,7 +56,6 @@ finally
 AppHostOptions ParseOptions(string[] args)
 {
     var apiOnly = args.Contains("--api-only");
-    var dashboardOnly = args.Contains("--dashboard-only");
     var open = args.Contains("--open");
     var noOpen = args.Contains("--no-open");
     
@@ -73,7 +69,6 @@ AppHostOptions ParseOptions(string[] args)
     return new AppHostOptions
     {
         ApiOnly = apiOnly,
-        DashboardOnly = dashboardOnly,
         OpenBrowser = open && !noOpen,
         ApiPort = port
     };

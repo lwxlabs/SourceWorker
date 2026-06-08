@@ -1,18 +1,8 @@
 @page "/jobs"
-@page "/projects/{ProjectId:guid}/jobs"
 @inject ISourceWorkerApiClient Api
 @using System.Timers
 
-@if (ProjectId is Guid projectId)
-{
-    <ProjectWorkspaceLayout ProjectId="@projectId" Active="jobs">
-        @JobContent("Project Jobs")
-    </ProjectWorkspaceLayout>
-}
-else
-{
-    @JobContent("All Jobs")
-}
+@JobContent(ProjectId is Guid ? "Project Jobs" : "All Jobs")
 
 @code {
     [Parameter] public Guid? ProjectId { get; set; }

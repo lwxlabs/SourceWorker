@@ -24,6 +24,27 @@ async function loadMonaco(loaderUrl, baseUrl) {
     return monacoLoaderPromise;
 }
 
+function ensureMonacoThemes() {
+    if (!window.monaco || window.lwxlabMarkdown._themesRegistered) return;
+
+    window.monaco.editor.defineTheme("lwxlab-gray", {
+        base: "vs",
+        inherit: true,
+        rules: [],
+        colors: {
+            "editor.background": "#f3f4f6",
+            "editor.foreground": "#1f2937",
+            "editorLineNumber.foreground": "#64748b",
+            "editorCursor.foreground": "#111827",
+            "editor.selectionBackground": "#cbd5e1",
+            "editor.inactiveSelectionBackground": "#e2e8f0",
+            "editor.lineHighlightBackground": "#e5e7eb"
+        }
+    });
+
+    window.lwxlabMarkdown._themesRegistered = true;
+}
+
 async function runHighlight(preview, options) {
     if (!window.hljs) {
         if (!highlightPromise) {
@@ -93,6 +114,7 @@ window.lwxlabMarkdown.init = async function (instanceId, editorId, previewId, do
     if (options.enableMonaco) {
         try {
             const monaco = await loadMonaco(options.monacoLoaderUrl, options.monacoBaseUrl);
+            ensureMonacoThemes();
             const wrapper = document.createElement('div');
             wrapper.className = 'lwx-md-monaco';
             textarea.parentNode.insertBefore(wrapper, textarea.nextSibling);
@@ -217,22 +239,7 @@ window.lwxlabMarkdown.setTheme = async function (instanceId, monacoTheme, mermai
     instance.options.mermaidTheme = mermaidTheme;
 
     if (window.monaco) {
-        if (!window.lwxlabMarkdown._grayThemeRegistered) {
-            window.monaco.editor.defineTheme("lwxlab-gray", {
-                base: "vs",
-                inherit: true,
-                rules: [],
-                colors: {
-                    "editor.background": "#f3f4f6",
-                    "editor.foreground": "#1f2937",
-                    "editorLineNumber.foreground": "#64748b",
-                    "editorCursor.foreground": "#111827",
-                    "editor.selectionBackground": "#cbd5e1"
-                }
-            });
-
-            window.lwxlabMarkdown._grayThemeRegistered = true;
-        }
+        ensureMonacoThemes();
 
         if (instance.editor) {
             window.monaco.editor.setTheme(monacoTheme || "vs");
@@ -274,6 +281,7 @@ window.lwxlabMarkdown.startSplitDrag = function (
 
     const isHorizontal = direction === "Horizontal";
     const rect = body.getBoundingClientRect();
+    let latestRatio = currentRatio || 50;
 
     document.body.classList.add(
         "lwx-md-is-resizing",
@@ -281,6 +289,7 @@ window.lwxlabMarkdown.startSplitDrag = function (
     );
 
     const onMove = (event) => {
+        event.preventDefault();
         const size = isHorizontal ? rect.height : rect.width;
 
         if (!size || size <= 0) {
@@ -295,8 +304,9 @@ window.lwxlabMarkdown.startSplitDrag = function (
 
         ratio = Math.max(minEditorPercent || 20, ratio);
         ratio = Math.min(100 - (minPreviewPercent || 20), ratio);
+        latestRatio = ratio;
 
-        root.style.setProperty("--lwx-md-split-ratio", `${ratio}%`);
+        body.style.setProperty("--lwx-md-split-ratio", `${ratio}%`);
 
         if (instance.editor && window.monaco) {
             window.requestAnimationFrame(() => {
@@ -307,16 +317,10 @@ window.lwxlabMarkdown.startSplitDrag = function (
             });
         }
 
-        if (instance.splitDebounceTimer) {
-            clearTimeout(instance.splitDebounceTimer);
-        }
-
-        instance.splitDebounceTimer = setTimeout(() => {
-            window.lwxlabMarkdown.invokeBlazor(instanceId, "NotifySplitRatioChanged", ratio);
-        }, 80);
     };
 
-    const onUp = () => {
+    const onUp = (event) => {
+        event.preventDefault();
         document.body.classList.remove(
             "lwx-md-is-resizing",
             "lwx-md-is-resizing-horizontal",
@@ -325,6 +329,8 @@ window.lwxlabMarkdown.startSplitDrag = function (
 
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+
+        window.lwxlabMarkdown.invokeBlazor(instanceId, "NotifySplitRatioChanged", latestRatio);
 
         if (instance.editor && window.monaco) {
             setTimeout(() => {
@@ -358,6 +364,18 @@ window.lwxlabMarkdown.layout = function (instanceId) {
             } catch {
             }
         }, 0);
+    }
+};
+
+window.lwxlabMarkdown.refresh = async function (instanceId) {
+    const instance = window.lwxlabMarkdown.instances?.[instanceId];
+    if (!instance || instance.disposed) return;
+
+    window.lwxlabMarkdown.layout(instanceId);
+
+    const preview = document.getElementById(`${instanceId}-preview`);
+    if (preview) {
+        await window.lwxlabMarkdown.enhancePreview(instanceId, preview.id, instance.options || {});
     }
 };
 

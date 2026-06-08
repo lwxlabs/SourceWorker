@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using LwX.Flow;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SourceWorker.Application;
@@ -31,10 +32,7 @@ public sealed class ProjectScanWorker(IServiceProvider serviceProvider) : Backgr
     {
         var jobs = serviceProvider.GetRequiredService<IJobRepository>();
         var projects = serviceProvider.GetRequiredService<IProjectRepository>();
-        var scanner = serviceProvider.GetRequiredService<IProjectScanner>();
-        var fileIndex = serviceProvider.GetRequiredService<IFileIndexRepository>();
-        var contextWriter = serviceProvider.GetRequiredService<IContextWriter>();
-        var recipeRunner = serviceProvider.GetRequiredService<IRecipeRunner>();
+        var flow = serviceProvider.GetRequiredService<IRequestFlow>();
         var job = await jobs.GetAsync(jobId, cancellationToken);
         if (job?.ProjectId is null) return;
 
@@ -42,19 +40,12 @@ public sealed class ProjectScanWorker(IServiceProvider serviceProvider) : Backgr
         {
             job = await Update(job, jobs, WorkerJobStatus.Running, 5, "Reading project folder", null, cancellationToken);
             var projectId = job.ProjectId.GetValueOrDefault();
-            var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{job.ProjectId}' was not found.");
-            job = await Update(job, jobs, WorkerJobStatus.Running, 15, "Applying ignore rules", null, cancellationToken);
-            job = await Update(job, jobs, WorkerJobStatus.Running, 25, "Detecting solution files", null, cancellationToken);
-            var scan = await scanner.ScanAsync(project, cancellationToken);
-            job = await Update(job, jobs, WorkerJobStatus.Running, 55, "Indexing files", $"{scan.Files.Count} files indexed", cancellationToken);
-            await fileIndex.ReplaceForScanAsync(scan.ScanRun.Id, scan.Files, scan.Todos, scan.Technologies, cancellationToken);
-            job = await Update(job, jobs, WorkerJobStatus.Running, 70, "Extracting TODOs", $"{scan.Todos.Count} TODO/FIXME/REVIEW items found", cancellationToken);
-            job = await Update(job, jobs, WorkerJobStatus.Running, 80, "Detecting Git state", scan.Git.Branch ?? "No Git branch detected", cancellationToken);
-            job = await Update(job, jobs, WorkerJobStatus.Running, 90, "Writing context files", null, cancellationToken);
-            await contextWriter.WriteBasicContextAsync(scan, cancellationToken);
-            await recipeRunner.RunBackendDocsCompactAsync(scan, cancellationToken);
-            await projects.UpdateAsync(project with { LastScannedAt = scan.ScanRun.CompletedAt }, cancellationToken);
-            await Update(job, jobs, WorkerJobStatus.Completed, 100, "Completed", "Scan completed", cancellationToken);
+            _ = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException($"Project '{job.ProjectId}' was not found.");
+            job = await Update(job, jobs, WorkerJobStatus.Running, 20, "Starting scan", "Using the shared scan/context pipeline", cancellationToken);
+            job = await Update(job, jobs, WorkerJobStatus.Running, 45, "Scanning project and extracting code intelligence", null, cancellationToken);
+            var response = await flow.Send(new GenerateBasicContextCommand(projectId), cancellationToken);
+            job = await Update(job, jobs, WorkerJobStatus.Running, 90, "Creating context snapshot", $"{response.Files.Count} context files written", cancellationToken);
+            await Update(job, jobs, WorkerJobStatus.Completed, 100, "Completed", "Scan completed and context snapshot updated", cancellationToken);
         }
         catch (Exception ex)
         {

@@ -9,9 +9,7 @@ namespace SourceWorker.Tests.AppHost;
 public sealed class AppHostTests
 {
     private readonly Mock<ILocalApiLifecycleService> localApi = new();
-    private readonly Mock<IProcessLauncher> processLauncher = new();
     private readonly Mock<IRuntimePathResolver> paths = new();
-    private readonly Mock<ILocalBrowserLauncher> browser = new();
     private readonly AppHostOrchestrator orchestrator;
 
     public AppHostTests()
@@ -27,25 +25,18 @@ public sealed class AppHostTests
                 DateTimeOffset.UtcNow,
                 TimeSpan.FromMilliseconds(10),
                 ["starting Local API"]));
-        processLauncher.Setup(p => p.StartProcessAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
-            .ReturnsAsync((string name, string _, string _, IDictionary<string, string> _) => new ManagedProcessInfo(name, 222, ManagedProcessStatus.Running, null, DateTimeOffset.UtcNow));
-
         orchestrator = new AppHostOrchestrator(
             localApi.Object,
-            processLauncher.Object,
             paths.Object,
-            browser.Object,
             Mock.Of<ILogger<AppHostOrchestrator>>());
     }
 
     [Fact]
-    public async Task StartAsync_StartsApiAndDashboardByDefault()
+    public async Task StartAsync_StartsApiOnlyByDefault()
     {
         await orchestrator.StartAsync(new AppHostOptions());
 
         localApi.Verify(p => p.StartAsync(It.IsAny<LocalApiLaunchOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        processLauncher.Verify(p => p.StartProcessAsync("Dashboard", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()), Times.Once);
-        browser.Verify(p => p.OpenBrowser(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -53,35 +44,24 @@ public sealed class AppHostTests
     {
         await orchestrator.StartAsync(new AppHostOptions(OpenBrowser: true));
 
-        browser.Verify(p => p.OpenBrowser(It.IsAny<string>()), Times.Once);
+        localApi.Verify(p => p.StartAsync(It.IsAny<LocalApiLaunchOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task StartAsync_WithApiOnly_DoesNotStartDashboard()
+    public async Task StartAsync_WithApiOnly_StartsApiOnly()
     {
         await orchestrator.StartAsync(new AppHostOptions(ApiOnly: true));
 
         localApi.Verify(p => p.StartAsync(It.IsAny<LocalApiLaunchOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        processLauncher.Verify(p => p.StartProcessAsync("Dashboard", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
     }
 
     [Fact]
-    public async Task StartAsync_WithDashboardOnly_DoesNotStartApi()
-    {
-        await orchestrator.StartAsync(new AppHostOptions(DashboardOnly: true));
-
-        localApi.Verify(p => p.StartAsync(It.IsAny<LocalApiLaunchOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-        processLauncher.Verify(p => p.StartProcessAsync("Dashboard", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task StopAsync_StopsDashboardAndOwnedApi()
+    public async Task StopAsync_StopsOwnedApi()
     {
         await orchestrator.StartAsync(new AppHostOptions());
 
         await orchestrator.StopAsync();
 
-        processLauncher.Verify(p => p.StopProcessAsync(222), Times.Once);
         localApi.Verify(p => p.StopAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

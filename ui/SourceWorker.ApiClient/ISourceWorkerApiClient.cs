@@ -17,6 +17,16 @@ public interface ISourceWorkerApiClient
     Task<IReadOnlyList<JobStatusDto>> GetProjectJobsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<JobStatusDto?> GetJobStatusAsync(Guid jobId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetJobLogsAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SourceContextBranchDto>> GetContextBranchesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<SourceContextBranchDto> CreateContextBranchAsync(Guid projectId, string name, string? description = null, CancellationToken cancellationToken = default);
+    Task<SourceContextBranchDto> ActivateContextBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken = default);
+    Task DeleteContextBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SourceSnapshotDto>> GetSnapshotsAsync(Guid projectId, Guid? branchId = null, CancellationToken cancellationToken = default);
+    Task<SourceDiffReportDto> GetLatestSnapshotDiffAsync(Guid projectId, Guid? branchId = null, CancellationToken cancellationToken = default);
+    Task<SourceDiffReportDto> CompareBranchSnapshotsAsync(Guid projectId, Guid leftBranchId, Guid rightBranchId, CancellationToken cancellationToken = default);
+    Task<SourceDiffReportDto> CompareSnapshotsAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken = default);
+    Task<SourceTextDiffDto> CompareSnapshotFileAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, string relativePath, CancellationToken cancellationToken = default);
+    Task<BranchDiffPackDto> CreateBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken = default);
 
     Task<DoctorReport> GetDoctorAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<ContextFreshnessReport> GetContextStatusAsync(Guid projectId, CancellationToken cancellationToken = default);
@@ -32,6 +42,17 @@ public interface ISourceWorkerApiClient
     Task<IReadOnlyList<ServiceRegistration>> GetServiceRegistrationsAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ConfigurationUsage>> GetConfigurationUsagesAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TestInfo>> GetTestsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<ProjectLanguageProfile?> GetCodeLanguagesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CodeAnalyzerDescriptor>> GetCodeAnalyzersAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CodeAnalyzerRun>> GetCodeAnalyzerRunsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CodeComponent>> GetCodeComponentsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<FrontendRoute>> GetFrontendRoutesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ScriptImport>> GetScriptImportsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StyleUsage>> GetStyleUsagesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PackageReferenceInfo>> GetPackageReferencesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BuildScriptInfo>> GetBuildScriptsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<CodeAnalysisSettings> GetCodeAnalysisSettingsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<CodeAnalysisSettings> UpdateCodeAnalysisSettingsAsync(Guid projectId, CodeAnalysisSettings settings, CancellationToken cancellationToken = default);
     Task<ContextBrowserSummary> GetContextBrowserAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContextBrowserFile>> GetContextFilesAsync(Guid projectId, bool showTechnical = false, bool showExports = false, CancellationToken cancellationToken = default);
     Task<string> ReadContextAsync(Guid projectId, string relativePath, CancellationToken cancellationToken = default);

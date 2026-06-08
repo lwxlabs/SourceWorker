@@ -203,6 +203,83 @@ public enum FlowOrigin { SourceCodeDetected, TestInferred, RecipeGenerated, Sour
 public enum ProjectHandoffProfile { Library, WebApi, WorkerService, DesktopApp, FullstackApp, TestHeavyLibrary, Unknown }
 public enum ScanWarningSeverity { Info, Warning, Error }
 
+public enum CodeLanguage { Unknown, CSharp, Razor, JavaScript, TypeScript, Vue, Angular, Html, Css, Json, Yaml, Dockerfile, GitHubActions, Xml }
+public enum CodeFramework { Unknown, DotNet, AspNetCore, Blazor, Maui, Node, Express, React, Vue, Angular, Vite, Webpack, Tailwind, Docker, GitHubActions, TypeScript, JavaScript }
+public enum AnalyzerCapability { Symbols, Components, Routes, Imports, Styles, Packages, BuildScripts, Configuration, Tests, Flows, Technologies }
+public enum AnalyzerState { Enabled, Disabled, Experimental, Failed }
+public enum ComponentType { Unknown, RazorComponent, BlazorPage, MauiPage, VueComponent, AngularComponent, HtmlPage, CssModule, JavaScriptModule, TypeScriptModule }
+public enum PackageEcosystem { NuGet, Npm, Docker, GitHubActions, Unknown }
+
+public sealed record CodeAnalyzerDescriptor(
+    string Id,
+    string Name,
+    CodeLanguage Language,
+    AnalyzerState State,
+    IReadOnlyList<AnalyzerCapability> Capabilities,
+    IReadOnlyList<string> FilePatterns,
+    bool IsExperimental = false);
+
+public sealed record CodeAnalysisSettings(
+    Guid ProjectId,
+    IReadOnlyDictionary<string, bool> AnalyzerEnabled,
+    bool IncludeTests = true,
+    bool IncludeGeneratedFiles = false,
+    bool IncludeNodeModules = false,
+    bool IncludeDist = false,
+    int MaxFileSizeBytes = 524288,
+    int MaxFilesPerAnalyzer = 1000,
+    DateTimeOffset UpdatedUtc = default);
+
+public sealed record CodeAnalyzerRun(
+    Guid Id,
+    Guid ProjectId,
+    Guid ScanRunId,
+    string AnalyzerId,
+    CodeLanguage Language,
+    AnalyzerState State,
+    int FilesConsidered,
+    int FilesAnalyzed,
+    int ItemsDetected,
+    TimeSpan Duration,
+    IReadOnlyList<string> Warnings,
+    string? ErrorMessage,
+    DateTimeOffset StartedUtc,
+    DateTimeOffset CompletedUtc);
+
+public sealed record ProjectLanguageProfile(
+    Guid ProjectId,
+    Guid ScanRunId,
+    IReadOnlyList<CodeLanguage> Languages,
+    IReadOnlyList<CodeFramework> Frameworks,
+    IReadOnlyDictionary<CodeLanguage, int> FileCounts,
+    IReadOnlyDictionary<CodeFramework, int> FrameworkEvidenceCounts,
+    IReadOnlyList<string> Warnings,
+    DateTimeOffset GeneratedUtc);
+
+public sealed record CodeComponent(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string Name, ComponentType Type, CodeLanguage Language, string? Framework, int LineNumber, IReadOnlyList<string> Attributes);
+public sealed record FrontendRoute(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string RoutePattern, string? ComponentName, string Framework, int LineNumber);
+public sealed record StyleUsage(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string SelectorOrClass, string UsageKind, int LineNumber);
+public sealed record ScriptImport(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string Module, string ImportKind, int LineNumber);
+public sealed record PackageReferenceInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string Name, string? Version, PackageEcosystem Ecosystem, string Scope);
+public sealed record BuildScriptInfo(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, string Name, string Command, PackageEcosystem Ecosystem);
+public sealed record CodeAnalyzerResult(
+    CodeAnalyzerDescriptor Analyzer,
+    IReadOnlyList<CodeSymbol> Symbols,
+    IReadOnlyList<RouteInfo> Routes,
+    IReadOnlyList<ServiceRegistration> ServiceRegistrations,
+    IReadOnlyList<ConfigurationUsage> ConfigurationUsages,
+    IReadOnlyList<BackgroundWorkerInfo> BackgroundWorkers,
+    IReadOnlyList<TestInfo> Tests,
+    IReadOnlyList<CodeFlow> Flows,
+    IReadOnlyList<CodeComponent> Components,
+    IReadOnlyList<FrontendRoute> FrontendRoutes,
+    IReadOnlyList<StyleUsage> Styles,
+    IReadOnlyList<ScriptImport> Imports,
+    IReadOnlyList<PackageReferenceInfo> PackageReferences,
+    IReadOnlyList<BuildScriptInfo> BuildScripts,
+    IReadOnlyList<DetectedTechnology> Technologies,
+    CodeAnalyzerRun Run);
+
 public sealed record ContextBrowserNode(string Name, string RelativePath, string Kind, IReadOnlyList<ContextBrowserNode> Children);
 public sealed record ContextBrowserFile(string RelativePath, string AbsolutePath, string Kind, long SizeBytes, DateTimeOffset LastModifiedUtc);
 public sealed record ContextBrowserSummary(Guid ProjectId, IReadOnlyList<ContextBrowserFile> Files, IReadOnlyList<ProjectRecipe> Recipes, IReadOnlyList<CodeFlow> Flows, IReadOnlyList<RouteInfo> Routes, IReadOnlyList<TodoItem> Todos, IReadOnlyList<GeneratedArtifact> ProblemArtifacts);
@@ -512,6 +589,25 @@ public sealed record MarkdownFileContent(MarkdownFileSummary Summary, string Mar
 public sealed record MarkdownFileSaveRequest(string RelativePath, string Markdown, string? ExpectedContentHash, MarkdownSaveMode SaveMode = MarkdownSaveMode.Normal);
 public sealed record MarkdownFileSaveResult(bool Saved, string RelativePath, string NewContentHash, DateTimeOffset LastModifiedUtc, string? Warning, bool RequiresConfirmation);
 public sealed record MarkdownValidationResult(bool IsValid, IReadOnlyList<string> Warnings);
+
+public sealed record OptionalGitMetadata(string? BranchName, string? CommitSha, bool? IsDirty);
+public enum SourceContextBranchKind { Default, UserCreated, Imported, Temporary, Archived }
+public sealed record SourceContextBranch(Guid Id, Guid ProjectId, string Name, string? Description, SourceContextBranchKind Kind, DateTimeOffset CreatedUtc, DateTimeOffset? LastSeenUtc, Guid? LastScanRunId, Guid? LastSnapshotId, bool IsActive, bool IsDeleted, bool IsDefault, string? OptionalGitBranchName, string? OptionalGitCommitSha, bool? OptionalGitIsDirty, string? Notes);
+public enum SourceSnapshotFileKind { Source, Markdown, GeneratedContext, BackendDoc, AgentHandoff, AiExplanation, ContextPack, Test, ProjectFile, SolutionFile, Config, Unknown }
+public sealed record SourceSnapshot(Guid Id, Guid ProjectId, Guid ContextBranchId, Guid ScanRunId, string Name, DateTimeOffset CreatedUtc, string? ContextHash, string? HandoffHash, string? BackendDocsHash, string? AiExplanationHash, int IndexedFileCount, int CSharpFileCount, int SymbolCount, int RouteCount, int FlowCount, int TestCount, int TodoCount, int GeneratedArtifactCount, string? OptionalGitBranchName, string? OptionalGitCommitSha, bool? OptionalGitIsDirty, string? Notes);
+public sealed record SourceSnapshotFile(Guid Id, Guid SnapshotId, Guid ProjectId, string RelativePath, SourceSnapshotFileKind FileKind, string? ContentHash, long SizeBytes, DateTimeOffset? LastModifiedUtc, bool IsGenerated, bool IsContextFile, bool IsSourceFile, bool IsMarkdown, bool IsDeleted, int ImportanceScore, string? TextContent = null);
+public sealed record SourceSnapshotMetric(Guid Id, Guid SnapshotId, string Name, string Category, int? IntValue, decimal? DecimalValue, string? TextValue);
+public enum SourceDiffChangeKind { Added, Removed, Modified, RenamedMaybe, Unchanged }
+public sealed record SourceDiffReport(Guid ProjectId, Guid LeftSnapshotId, Guid RightSnapshotId, Guid LeftBranchId, Guid RightBranchId, SourceDiffSummary Summary, IReadOnlyList<SourceDiffFileChange> FileChanges, IReadOnlyList<SourceDiffMetricChange> MetricChanges, IReadOnlyList<SourceDiffFileChange> HandoffChanges, IReadOnlyList<SourceDiffFileChange> DocsChanges, IReadOnlyList<SourceDiffCodeIntelligenceChange> SymbolChanges, IReadOnlyList<SourceDiffCodeIntelligenceChange> FlowChanges, IReadOnlyList<SourceDiffCodeIntelligenceChange> RouteChanges, IReadOnlyList<SourceDiffCodeIntelligenceChange> TodoChanges, IReadOnlyList<SourceDiffCodeIntelligenceChange> TestChanges, IReadOnlyList<string> Warnings);
+public sealed record SourceDiffSummary(int ChangedFileCount, int AddedFileCount, int RemovedFileCount, int ModifiedFileCount, bool GeneratedDocsChanged, bool HandoffChanged, bool AiExplanationChanged, bool SymbolsChanged, bool FlowsChanged, bool RoutesChanged, bool TestsChanged, bool TodosChanged, string HumanSummary);
+public sealed record SourceDiffFileChange(string RelativePath, SourceDiffChangeKind ChangeKind, SourceSnapshotFileKind FileKind, string? LeftHash, string? RightHash, int? AddedLines, int? RemovedLines, int? ModifiedLines, string? DiffPreview, bool IsGenerated, bool IsImportant, string? Explanation);
+public sealed record SourceDiffMetricChange(string Name, string Category, string? LeftValue, string? RightValue, string? Delta, string? Explanation);
+public sealed record SourceDiffCodeIntelligenceChange(string Kind, string Name, string? RelativePath, SourceDiffChangeKind ChangeKind, string? Explanation);
+public sealed record SourceTextDiff(string RelativePath, string LeftTitle, string RightTitle, IReadOnlyList<SourceTextDiffHunk> Hunks);
+public sealed record SourceTextDiffHunk(int OldStart, int OldLength, int NewStart, int NewLength, IReadOnlyList<SourceTextDiffLine> Lines);
+public sealed record SourceTextDiffLine(SourceTextDiffLineKind Kind, int? OldLineNumber, int? NewLineNumber, string Text);
+public enum SourceTextDiffLineKind { Context, Added, Removed, Changed }
+public sealed record BranchDiffPack(Guid ProjectId, Guid LeftSnapshotId, Guid RightSnapshotId, string Markdown, DateTimeOffset CreatedUtc, string SuggestedPath);
 
 public sealed record AiProviderValidationResult(string ProviderId, AiProviderKind Kind, bool IsValid, IReadOnlyList<AiProviderValidationIssue> Issues, AiProviderSetupState SetupState);
 public sealed record AiProviderValidationIssue(string Code, string Severity, string Message, string? Field = null);

@@ -37,13 +37,16 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
 
         var files = new Dictionary<string, string>
         {
+            ["00-project-index.md"] = ProjectIndex(scan, doc),
             ["README.md"] = Readme(scan, doc),
             ["01-project-structure.md"] = ProjectStructure(scan),
             ["02-architecture.md"] = Architecture(scan),
             ["03-important-files-and-flows.md"] = ImportantFilesAndFlows(scan, doc, codeFlows, routeInfos, serviceRegs, workerInfos),
             ["04-configuration-and-secrets.md"] = Configuration(scan, configUsages),
             ["05-tasks-and-risks.md"] = TasksAndRisks(scan, doc),
-            ["06-verification-checklist.md"] = Verification(doc, testInfos)
+            ["06-verification-checklist.md"] = Verification(doc, testInfos),
+            ["08-code-snippets.md"] = CodeSnippets(scan, routeInfos, serviceRegs, configUsages, testInfos),
+            ["09-reading-guide.md"] = ReadingGuide(scan, doc, codeFlows, routeInfos, testInfos)
         };
 
         var generated = new List<GeneratedArtifact>();
@@ -166,6 +169,7 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
 
         ## Generated Files
 
+        - `00-project-index.md`
         - `README.md`
         - `01-project-structure.md`
         - `02-architecture.md`
@@ -173,6 +177,9 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         - `04-configuration-and-secrets.md`
         - `05-tasks-and-risks.md`
         - `06-verification-checklist.md`
+        - `07-ai-explanation.md` (AI-generated only after explicit user action)
+        - `08-code-snippets.md`
+        - `09-reading-guide.md`
 
         ## Verification And Export
 
@@ -183,6 +190,50 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         - `dotnet run --project src/services/SourceWorker.Cli -- pack-export <path> backend-docs --out <file>`
 
         Use these compact notes as developer handoff material. They are scanner and instruction derived, not AI-authored.
+        """;
+
+    private static string ProjectIndex(ProjectScanResult scan, ProjectInstructionDocument? doc)
+        => $"""
+        # Project Index
+
+        This file is a docs-side project index for the generated backend documentation set. It intentionally does not replace or move any existing `index.md` file.
+
+        ## Project
+
+        - Name: {scan.Project.Name}
+        - Root: `{scan.Project.RootPath}`
+        - Solution: {scan.SolutionPath ?? "none detected"}
+        - Technologies: {TechnologySummary(scan)}
+        - Projects: {scan.Projects.Count}
+        - Test projects: {scan.Projects.Count(p => p.IsTestProject)}
+        - Files indexed: {scan.Files.Count}
+        - Imported instructions: {(doc is null ? "none" : doc.Title)}
+
+        ## Backend Docs
+
+        - `00-project-index.md`: this generated project index.
+        - `README.md`: backend docs overview and commands.
+        - `01-project-structure.md`: folders, projects, and tests.
+        - `02-architecture.md`: detected architecture shape and references.
+        - `03-important-files-and-flows.md`: entrypoints, routes, services, workers, and flows.
+        - `04-configuration-and-secrets.md`: config files, Docker files, secret-handling notes, and config usages.
+        - `05-tasks-and-risks.md`: source TODO/FIXME/REVIEW items and imported tasks.
+        - `06-verification-checklist.md`: build/test/scan verification notes.
+        - `07-ai-explanation.md`: optional AI-generated explanation after explicit user action.
+        - `08-code-snippets.md`: practical code references and copyable snippets.
+        - `09-reading-guide.md`: recommended reading order for humans and AI agents.
+
+        ## Context Packs
+
+        - Quick agent handoff: `.ai-context/packs/ai-handoff.pack.yaml`
+        - Backend docs pack: `.ai-context/packs/backend-docs.pack.yaml`
+        - AI explanation pack: `.ai-context/packs/ai-explanation.pack.yaml`
+
+        ## Export
+
+        - Canonical internal docs: `.ai-context/docs/backend`
+        - External mirror: `instructions/Result/Backend`
+        - Export profile: `.ai-context/exports/backend-docs-compact.yaml`
         """;
 
     private static string ProjectStructure(ProjectScanResult scan)
@@ -317,6 +368,82 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         ## Detected Tests
 
         {ListOrNone(tests.Take(30).Select(t => $"- `{t.ClassName}.{t.MethodName}` in `{t.RelativePath}:{t.LineNumber}`"))}
+        """;
+
+    private static string CodeSnippets(ProjectScanResult scan, IReadOnlyList<RouteInfo> routes, IReadOnlyList<ServiceRegistration> services, IReadOnlyList<ConfigurationUsage> configs, IReadOnlyList<TestInfo> tests)
+        => $"""
+        # Code Snippets And References
+
+        This file collects small, copyable references from the scan. It avoids source-code rewrites and does not include secrets.
+
+        ## Entrypoints
+
+        ```text
+        {ListOrNone(scan.MainEntrypoints.Select(e => e))}
+        ```
+
+        ## Project Files
+
+        ```text
+        {ListOrNone(scan.Projects.Select(p => p.RelativePath))}
+        ```
+
+        ## Local API / Route References
+
+        {ListOrNone(routes.Take(40).Select(r => $"- `{r.HttpMethod} {r.RoutePattern}` in `{r.RelativePath}:{r.LineNumber}`"))}
+
+        ## Service Registration References
+
+        {ListOrNone(services.Take(40).Select(s => $"- `{s.RegistrationMethod}` registers `{s.ServiceType}` -> `{s.ImplementationType ?? "self"}` in `{s.RelativePath}:{s.LineNumber}`"))}
+
+        ## Configuration Access References
+
+        {ListOrNone(configs.Take(40).Select(c => $"- `{c.UsageKind}` `{c.KeyOrSection}` in `{c.RelativePath}:{c.LineNumber}`"))}
+
+        ## Test References
+
+        {ListOrNone(tests.Take(40).Select(t => $"- `{t.ClassName}.{t.MethodName}` in `{t.RelativePath}:{t.LineNumber}`"))}
+        """;
+
+    private static string ReadingGuide(ProjectScanResult scan, ProjectInstructionDocument? doc, IReadOnlyList<CodeFlow> flows, IReadOnlyList<RouteInfo> routes, IReadOnlyList<TestInfo> tests)
+        => $"""
+        # Reading Guide
+
+        Use this order when a developer or AI coding agent needs to understand the project without guessing.
+
+        ## Start Here
+
+        1. `.ai-context/agent-handoff.md`
+        2. `.ai-context/docs/backend/00-project-index.md`
+        3. `.ai-context/docs/backend/README.md`
+        4. Root `README.md`, if present
+
+        ## Understand Structure
+
+        1. `.ai-context/docs/backend/01-project-structure.md`
+        2. `.ai-context/docs/backend/02-architecture.md`
+        3. Main project files:
+        {ListOrNone(scan.Projects.Where(p => !p.IsTestProject).Take(10).Select(p => $"   - `{p.RelativePath}`"))}
+
+        ## Understand Behavior
+
+        1. `.ai-context/docs/backend/03-important-files-and-flows.md`
+        2. `.ai-context/docs/backend/08-code-snippets.md`
+        3. High-confidence flows:
+        {ListOrNone(flows.Where(f => f.Confidence == FlowConfidence.High).Take(10).Select(f => $"   - {f.Name}"))}
+        4. Routes:
+        {ListOrNone(routes.Take(10).Select(r => $"   - `{r.HttpMethod} {r.RoutePattern}`"))}
+
+        ## Understand Quality
+
+        1. `.ai-context/docs/backend/05-tasks-and-risks.md`
+        2. `.ai-context/docs/backend/06-verification-checklist.md`
+        3. Representative tests:
+        {ListOrNone(tests.Take(10).Select(t => $"   - `{t.ClassName}.{t.MethodName}`"))}
+
+        ## Imported Instructions
+
+        {(doc is null ? "No imported instruction file was found for this project." : $"- `{doc.SourceFilePath}`")}
         """;
 
     private static string TechnologySummary(ProjectScanResult scan)

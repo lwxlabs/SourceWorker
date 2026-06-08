@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/code"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="code">
 <h1>Code Intelligence</h1>
 
 <div class="grid two">
@@ -9,6 +7,154 @@
     <Cards Title="Configuration And Services">
         <MetricCard Label="Services" Value="@services.Count.ToString()" />
         <MetricCard Label="Configuration" Value="@configs.Count.ToString()" />
+    </Cards>
+</div>
+
+<Cards Title="Language Profile">
+    @if (languageProfile is null)
+    {
+        <p>No language profile has been recorded yet. Scan the project to run the analyzer pipeline.</p>
+    }
+    else
+    {
+        <div class="chip-row">
+            @foreach (var language in languageProfile.Languages)
+            {
+                <span class="pill">@language</span>
+            }
+        </div>
+        <div class="chip-row">
+            @foreach (var framework in languageProfile.Frameworks)
+            {
+                <span class="pill muted">@framework</span>
+            }
+        </div>
+        <div class="grid four">
+            @foreach (var item in languageProfile.FileCounts.OrderByDescending(x => x.Value).Take(8))
+            {
+                <MetricCard Label="@item.Key.ToString()" Value="@item.Value.ToString()" />
+            }
+        </div>
+    }
+</Cards>
+
+<Cards Title="Analyzer Pipeline">
+    <div class="grid four">
+        <MetricCard Label="Analyzers" Value="@analyzers.Count.ToString()" />
+        <MetricCard Label="Runs" Value="@analyzerRuns.Count.ToString()" />
+        <MetricCard Label="Components" Value="@components.Count.ToString()" />
+        <MetricCard Label="Packages" Value="@packages.Count.ToString()" />
+    </div>
+
+    @if (settings is not null)
+    {
+        <details>
+            <summary>Analyzer settings</summary>
+            <div class="settings-list">
+                @foreach (var analyzer in analyzers.OrderBy(a => a.Name))
+                {
+                    <label class="toggle-row">
+                        <input type="checkbox"
+                               checked="@IsAnalyzerEnabled(analyzer.Id)"
+                               @onchange="args => SetAnalyzerEnabled(analyzer.Id, args)" />
+                        <span>@analyzer.Name</span>
+                        <small>@analyzer.Language</small>
+                    </label>
+                }
+            </div>
+            <button class="button" @onclick="SaveAnalyzerSettingsAsync">Save analyzer settings</button>
+            @if (!string.IsNullOrWhiteSpace(settingsMessage))
+            {
+                <p>@settingsMessage</p>
+            }
+        </details>
+    }
+
+    <div class="list">
+        @foreach (var run in analyzerRuns.OrderBy(r => r.AnalyzerId))
+        {
+            <div class="list-row">
+                <strong>@run.AnalyzerId</strong>
+                <span>@run.State</span>
+                <span>@run.FilesConsidered files</span>
+                <span>@run.ItemsDetected items</span>
+                @if (!string.IsNullOrWhiteSpace(run.ErrorMessage))
+                {
+                    <code>@run.ErrorMessage</code>
+                }
+            </div>
+        }
+    </div>
+</Cards>
+
+<Cards Title="Components And Frontend Routes">
+    @if (components.Count == 0 && frontendRoutes.Count == 0)
+    {
+        <p>No Razor, Blazor, MAUI, Vue, Angular, HTML, JavaScript, or TypeScript components/routes were detected.</p>
+    }
+    <div class="list">
+        @foreach (var component in components.Take(100))
+        {
+            <div class="list-row">
+                <strong>@component.Name</strong>
+                <span>@component.Type</span>
+                @if (component.Attributes.Count > 0)
+                {
+                    <code>@string.Join(", ", component.Attributes.Take(3))</code>
+                }
+                <code>@component.RelativePath:@component.LineNumber</code>
+            </div>
+        }
+        @foreach (var route in frontendRoutes.Take(100))
+        {
+            <div class="list-row">
+                <strong>@route.RoutePattern</strong>
+                <span>@route.Framework</span>
+                <span>@route.ComponentName</span>
+                <code>@route.RelativePath:@route.LineNumber</code>
+            </div>
+        }
+    </div>
+</Cards>
+
+<div class="grid two">
+    <Cards Title="Packages And Build Scripts">
+        @foreach (var package in packages.Take(80))
+        {
+            <div class="list-row">
+                <strong>@package.Name</strong>
+                <span>@package.Version</span>
+                <span>@package.Ecosystem</span>
+                <code>@package.RelativePath</code>
+            </div>
+        }
+        @foreach (var script in buildScripts.Take(40))
+        {
+            <div class="list-row">
+                <strong>@script.Name</strong>
+                <code>@script.Command</code>
+                <span>@script.Ecosystem</span>
+            </div>
+        }
+    </Cards>
+
+    <Cards Title="Imports And Styles">
+        @foreach (var import in imports.Take(60))
+        {
+            <div class="list-row">
+                <strong>@import.Module</strong>
+                <span>@import.ImportKind</span>
+                <code>@import.RelativePath:@import.LineNumber</code>
+            </div>
+        }
+        @foreach (var style in styles.Take(60))
+        {
+            <div class="list-row">
+                <strong>@style.SelectorOrClass</strong>
+                <span>@style.UsageKind</span>
+                <code>@style.RelativePath:@style.LineNumber</code>
+            </div>
+        }
     </Cards>
 </div>
 
@@ -22,7 +168,6 @@
         <div class="list-row"><strong>@($"{test.ClassName}.{test.MethodName}")</strong><code>@test.RelativePath:@test.LineNumber</code></div>
     }
 </Cards>
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
@@ -32,6 +177,18 @@
     private IReadOnlyList<ServiceRegistration> services = [];
     private IReadOnlyList<ConfigurationUsage> configs = [];
     private IReadOnlyList<TestInfo> tests = [];
+    private ProjectLanguageProfile? languageProfile;
+    private IReadOnlyList<CodeAnalyzerDescriptor> analyzers = [];
+    private IReadOnlyList<CodeAnalyzerRun> analyzerRuns = [];
+    private IReadOnlyList<CodeComponent> components = [];
+    private IReadOnlyList<FrontendRoute> frontendRoutes = [];
+    private IReadOnlyList<ScriptImport> imports = [];
+    private IReadOnlyList<StyleUsage> styles = [];
+    private IReadOnlyList<PackageReferenceInfo> packages = [];
+    private IReadOnlyList<BuildScriptInfo> buildScripts = [];
+    private CodeAnalysisSettings? settings;
+    private Dictionary<string, bool> analyzerEnabled = [];
+    private string? settingsMessage;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -41,5 +198,44 @@
         services = await Api.GetServiceRegistrationsAsync(ProjectId);
         configs = await Api.GetConfigurationUsagesAsync(ProjectId);
         tests = await Api.GetTestsAsync(ProjectId);
+        languageProfile = await Api.GetCodeLanguagesAsync(ProjectId);
+        analyzers = await Api.GetCodeAnalyzersAsync(ProjectId);
+        analyzerRuns = await Api.GetCodeAnalyzerRunsAsync(ProjectId);
+        components = await Api.GetCodeComponentsAsync(ProjectId);
+        frontendRoutes = await Api.GetFrontendRoutesAsync(ProjectId);
+        imports = await Api.GetScriptImportsAsync(ProjectId);
+        styles = await Api.GetStyleUsagesAsync(ProjectId);
+        packages = await Api.GetPackageReferencesAsync(ProjectId);
+        buildScripts = await Api.GetBuildScriptsAsync(ProjectId);
+        settings = await Api.GetCodeAnalysisSettingsAsync(ProjectId);
+        analyzerEnabled = settings.AnalyzerEnabled.ToDictionary(x => x.Key, x => x.Value);
+    }
+
+    private bool IsAnalyzerEnabled(string analyzerId)
+        => analyzerEnabled.TryGetValue(analyzerId, out var enabled)
+            ? enabled
+            : analyzers.FirstOrDefault(a => a.Id == analyzerId)?.State != AnalyzerState.Disabled;
+
+    private void SetAnalyzerEnabled(string analyzerId, ChangeEventArgs args)
+    {
+        analyzerEnabled[analyzerId] = args.Value is bool value && value;
+        settingsMessage = "Analyzer settings changed. Save and rescan to apply.";
+    }
+
+    private async Task SaveAnalyzerSettingsAsync()
+    {
+        settings = await Api.UpdateCodeAnalysisSettingsAsync(
+            ProjectId,
+            new CodeAnalysisSettings(
+                ProjectId,
+                analyzerEnabled,
+                settings?.IncludeTests ?? true,
+                settings?.IncludeGeneratedFiles ?? false,
+                settings?.IncludeNodeModules ?? false,
+                settings?.IncludeDist ?? false,
+                settings?.MaxFileSizeBytes ?? 524288,
+                settings?.MaxFilesPerAnalyzer ?? 1000));
+        analyzerEnabled = settings.AnalyzerEnabled.ToDictionary(x => x.Key, x => x.Value);
+        settingsMessage = "Analyzer settings saved. Rescan the project to refresh results.";
     }
 }

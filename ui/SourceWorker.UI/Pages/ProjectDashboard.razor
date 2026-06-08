@@ -1,8 +1,6 @@
-@page "/projects/{ProjectId:guid}"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="">
-    <div class="grid two">
+<div class="grid two">
         <Cards Title="Open Handoff">
             <p>The handoff is the main thing to give Codex, Junie, ChatGPT, Cursor, or another agent.</p>
             <div class="d-flex gap-2">
@@ -27,9 +25,9 @@
                 }
             }
         </Cards>
-    </div>
+</div>
 
-    <div class="grid two">
+<div class="grid two">
         <Cards Title="Scan Status">
             <div class="metric-grid">
                 <MetricCard Label="Completeness" Value="@($"{completeness?.Score ?? 0}%")" />
@@ -51,21 +49,21 @@
             @if (quickPreview is not null)
             {
                 <div class="list-row"><strong>Tokens</strong><span>@quickPreview.Preview.TokenEstimate.TotalTokens</span></div>
-                <MarkdownViewer Content="@(quickPreview.Run?.OutputText ?? quickPreview.Preview.PromptText)" />
-            }
-        </Cards>
-    </div>
+                <MarkDown Preview="true" SplitView="false" Value="@(quickPreview.Run?.OutputText ?? quickPreview.Preview.PromptText)" EnableMenu="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
 
-    @if (completeness?.Warnings.Count > 0)
-    {
-        <Cards Title="Needs Attention">
-            @foreach (var warning in completeness.Warnings.Take(6))
-            {
-                <div class="list-row"><strong>@warning.Code</strong><span>@warning.Message</span></div>
             }
         </Cards>
-    }
-</ProjectWorkspaceLayout>
+</div>
+
+@if (completeness?.Warnings.Count > 0)
+{
+    <Cards Title="Needs Attention">
+        @foreach (var warning in completeness.Warnings.Take(6))
+        {
+            <div class="list-row"><strong>@warning.Code</strong><span>@warning.Message</span></div>
+        }
+    </Cards>
+}
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

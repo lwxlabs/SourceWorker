@@ -1,0 +1,50 @@
+<div class="bcv-diff-unified">
+    @if (File.TextDiff.Hunks.Count == 0)
+    {
+        <div class="bcv-warning-box">
+            No line diff is available for this file. Showing metadata-only change.
+        </div>
+    }
+    else
+    {
+        @foreach (var hunk in File.TextDiff.Hunks)
+        {
+            <section class="bcv-hunk">
+                <header class="bcv-hunk-header">@@ -@hunk.OldStart,@hunk.OldLength +@hunk.NewStart,@hunk.NewLength</header>
+                @foreach (var line in hunk.Lines)
+                {
+                    if (HideUnchanged && line.Kind == BranchCompareViewer.DiffLineKind.Context)
+                        continue;
+
+                    <div class="bcv-diff-line @LineClass(line.Kind)">
+                        <span class="bcv-line-old">@line.OldLineNumber</span>
+                        <span class="bcv-line-new">@line.NewLineNumber</span>
+                        <span class="bcv-line-prefix">@LinePrefix(line.Kind)</span>
+                        <code>@line.Text</code>
+                    </div>
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BranchCompareViewer.DiffFileItem File { get; set; } = default!;
+    [Parameter] public bool HideUnchanged { get; set; }
+
+    private static string LineClass(BranchCompareViewer.DiffLineKind kind) => kind switch
+    {
+        BranchCompareViewer.DiffLineKind.Added => "line-added",
+        BranchCompareViewer.DiffLineKind.Removed => "line-removed",
+        BranchCompareViewer.DiffLineKind.Changed => "line-changed",
+        _ => "line-context"
+    };
+
+    private static string LinePrefix(BranchCompareViewer.DiffLineKind kind) => kind switch
+    {
+        BranchCompareViewer.DiffLineKind.Added => "+",
+        BranchCompareViewer.DiffLineKind.Removed => "-",
+        BranchCompareViewer.DiffLineKind.Changed => "~",
+        _ => " "
+    };
+}

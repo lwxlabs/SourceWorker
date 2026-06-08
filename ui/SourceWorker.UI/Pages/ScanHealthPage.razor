@@ -1,7 +1,5 @@
-@page "/projects/{ProjectId:guid}/scan-health"
 @inject ISourceWorkerApiClient Api
 
-<ProjectWorkspaceLayout ProjectId="@ProjectId" Active="scan-health">
     <h1>Scan Health</h1>
     <p>Use this page to understand what SourceWorker scanned, what it skipped, and why code intelligence may be incomplete.</p>
 
@@ -35,7 +33,6 @@
             }
         </Cards>
     }
-</ProjectWorkspaceLayout>
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }

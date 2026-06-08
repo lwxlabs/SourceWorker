@@ -39,6 +39,29 @@ Project workspace navigation:
 
 Advanced global pages are Diagnostics, Logs, Dogfood, and All Jobs. Project Jobs are the normal place to watch scan/export progress; global jobs are for diagnostics. Artifacts are presented as Generated Files Health, not as a primary user concept.
 
+## Context Branches And Snapshot Diff
+
+MVP 3.0 adds SourceWorker Context Branches. These are local SourceWorker timelines for project understanding, generated docs, handoffs, snapshots, and notes. They are not Git branches.
+
+SourceWorker creates a default `main-context` branch for each project. A scan records a new snapshot in the active context branch. Snapshots store scan metrics, file hashes, code-intelligence counts, generated context hashes, handoff/docs hashes, AI explanation hash when present, and optional Git metadata if Git is available.
+
+Git is optional metadata only:
+
+- current Git branch name
+- current commit SHA
+- dirty/clean state
+
+SourceWorker never creates, switches, deletes, checks out, merges, resets, cleans, or applies Git changes for this feature. Projects without Git still get full context branches, snapshots, and snapshot diffs.
+
+Snapshot history deliberately does not store normal source file contents. For source files, SourceWorker stores path, kind, size, hash, timestamps, and importance metadata. Generated/context markdown such as `.ai-context/agent-handoff.md`, `.ai-context/docs/backend/*.md`, and branch diff packs may keep text content so SourceWorker can show readable line diffs.
+
+The Branches project tab lets the user:
+
+- create and activate SourceWorker context branches
+- compare latest snapshots
+- see changed files, metrics, handoff/docs changes, and code-intelligence count changes
+- create a Branch Diff Handoff markdown file under `.ai-context/branches/diffs/`
+
 The primary generated file is:
 
 ```text
@@ -62,7 +85,7 @@ Handoff quality rules:
 - `src/core/SourceWorker.Application` contains ports and use cases. Commands and queries are modeled with `LwX.Flow`-style request/handler abstractions.
 - `src/core/SourceWorker.Contracts` contains API/CLI-facing DTOs.
 - `src/libs/SourceWorker.Scanner` contains project scanning plus deterministic C# code intelligence and rule-based flow extraction.
-- `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, exposes context browsing, and owns the safe Markdown Workspace file policy.
+- `src/libs/SourceWorker.Context` writes `.ai-context/` markdown files, validates imported source paths, routes outputs, writes context packs/export profiles, checks freshness, manages artifact lifecycle, exposes context browsing, owns the safe Markdown Workspace file policy, and manages SourceWorker context branches/snapshot diffs.
 - `src/libs/SourceWorker.Recipes` hosts rule-based recipe execution, including `backend-docs-compact`.
 - `src/libs/SourceWorker.AI` owns AI prompt building, context-pack prompting, token/cost estimates, safety checks, redaction preview, and AI run orchestration.
 - Dogfood, friction capture, next-action, project path validation, project AI defaults, Quick Ask, and log records follow the same clean architecture flow: dependency-free Domain models, Application ports/handlers, Localite repositories, Local API endpoints, ApiClient methods, and dashboard pages.
@@ -73,10 +96,9 @@ Handoff quality rules:
 - `src/services/SourceWorker.LocalApi` exposes local HTTP endpoints.
 - `src/services/SourceWorker.Worker` provides the in-process queue and project scan worker.
 - `ui/SourceWorker.ApiClient` is the typed Local API client boundary for UI hosts.
-- `ui/SourceWorker.UI` contains reusable Razor components and pages for future browser/desktop hosts.
-- `ui/SourceWorker.Dashboard` is the first Blazor Web App host. It is read-only and Local API-driven.
+- `ui/SourceWorker.UI` contains reusable Razor components and pages for the desktop host.
 - `ui/SourceWorker.Desktop` is the Windows-first MAUI Blazor Hybrid app for normal daily use.
-- `src/libs/SourceWorker.Hosting` contains reusable Local API/AppHost process orchestration shared by AppHost and Desktop.
+- `src/libs/SourceWorker.Hosting` contains reusable Local API process orchestration shared by AppHost and Desktop.
 
 ## CLI
 
@@ -141,11 +163,11 @@ The easiest way to start everything is using the **AppHost**:
 dotnet run --project src/services/SourceWorker.AppHost -- --open
 ```
 
-AppHost remains useful for development and browser/debug workflows. It will:
+AppHost remains useful for Local API development/debug workflows. It will:
 1. Start the **Local API**.
 2. Wait for it to become healthy.
-3. Start the **Dashboard** with auto-discovery.
-4. Open your browser to the dashboard.
+
+For the normal UI, run `SourceWorker.Desktop`.
 
 ### Manual Startup (Alternative)
 
@@ -153,14 +175,14 @@ If you need to run components separately:
 
 ```powershell
 dotnet run --project src/services/SourceWorker.LocalApi
-dotnet run --project ui/SourceWorker.Dashboard
+dotnet run --project ui/SourceWorker.Desktop
 ```
 
-## Dashboard
+## Desktop UI
 
 The UI is interactive for MVP 1.9. It allows registering projects, scanning projects with real-time job progress, exporting docs and packs, previewing context cleanup, and performing safe cleanup with confirmation. It uses a safety-level model to protect destructive actions. It does not read Localite or the filesystem directly; it only uses `SourceWorker.ApiClient`.
 
-MVP 2.1 adds dashboard routes for safe AI preview:
+MVP 2.1 adds UI routes for safe AI preview:
 
 - `/settings/ai`: configure OpenAI, Ollama, or OpenAI-compatible providers and test provider health.
 - `/projects/{projectId}/ai`: select a context pack, preview the generated prompt, see safety warnings and token estimates, then run a preview-only AI request.
@@ -315,7 +337,7 @@ Targeted examples:
 
 - AI provider domain/application changes: run AI provider tests and affected Application tests.
 - AI provider Local API endpoints: run LocalApi AI endpoint tests and ApiClient AI tests.
-- AI dashboard UI: build `ui/SourceWorker.UI` and `ui/SourceWorker.Dashboard`; run ApiClient AI tests if the client changed.
+- AI/desktop UI: build `ui/SourceWorker.UI` and `ui/SourceWorker.Desktop`; run ApiClient AI tests if the client changed.
 - Docs-only: no tests required.
 - Shared contract changes: run affected ApiClient and LocalApi tests; full tests only if broad contracts break many projects.
 - Final milestone: build solution, run targeted AI/ApiClient/LocalApi tests, and only run full tests if shared architecture, storage, security middleware, or application base abstractions changed.

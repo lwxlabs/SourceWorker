@@ -91,6 +91,55 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
     public async Task<IReadOnlyList<string>> GetJobLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
         => await GetAsync<string[]>($"/api/jobs/{jobId}/logs", cancellationToken) ?? [];
 
+    public async Task<IReadOnlyList<SourceContextBranchDto>> GetContextBranchesAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<SourceContextBranchDto[]>($"/api/projects/{projectId}/context-branches", cancellationToken) ?? [];
+
+    public async Task<SourceContextBranchDto> CreateContextBranchAsync(Guid projectId, string name, string? description = null, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/context-branches", new { name, description }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<SourceContextBranchDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Context branch response was empty.");
+    }
+
+    public async Task<SourceContextBranchDto> ActivateContextBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsync($"/api/projects/{projectId}/context-branches/{branchId}/activate", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<SourceContextBranchDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Context branch response was empty.");
+    }
+
+    public async Task DeleteContextBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}/context-branches/{branchId}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<SourceSnapshotDto>> GetSnapshotsAsync(Guid projectId, Guid? branchId = null, CancellationToken cancellationToken = default)
+        => await GetAsync<SourceSnapshotDto[]>(branchId is Guid id ? $"/api/projects/{projectId}/context-branches/{id}/snapshots" : $"/api/projects/{projectId}/snapshots", cancellationToken) ?? [];
+
+    public Task<SourceDiffReportDto> GetLatestSnapshotDiffAsync(Guid projectId, Guid? branchId = null, CancellationToken cancellationToken = default)
+        => Required<SourceDiffReportDto>($"/api/projects/{projectId}/snapshot-diff/latest{(branchId is Guid id ? $"?branchId={id}" : "")}", cancellationToken);
+
+    public Task<SourceDiffReportDto> CompareBranchSnapshotsAsync(Guid projectId, Guid leftBranchId, Guid rightBranchId, CancellationToken cancellationToken = default)
+        => Required<SourceDiffReportDto>($"/api/projects/{projectId}/snapshot-diff/branches?leftBranchId={leftBranchId}&rightBranchId={rightBranchId}", cancellationToken);
+
+    public Task<SourceDiffReportDto> CompareSnapshotsAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken = default)
+        => Required<SourceDiffReportDto>($"/api/projects/{projectId}/snapshot-diff?leftSnapshotId={leftSnapshotId}&rightSnapshotId={rightSnapshotId}", cancellationToken);
+
+    public Task<SourceTextDiffDto> CompareSnapshotFileAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, string relativePath, CancellationToken cancellationToken = default)
+        => Required<SourceTextDiffDto>($"/api/projects/{projectId}/snapshot-diff/file?leftSnapshotId={leftSnapshotId}&rightSnapshotId={rightSnapshotId}&relativePath={Uri.EscapeDataString(relativePath)}", cancellationToken);
+
+    public async Task<BranchDiffPackDto> CreateBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/snapshot-diff/pack", new { leftSnapshotId, rightSnapshotId }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<BranchDiffPackDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Branch diff pack response was empty.");
+    }
+
     public Task<DoctorReport> GetDoctorAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<DoctorReport>($"/api/projects/{projectId}/doctor", cancellationToken);
 
@@ -137,6 +186,44 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     public async Task<IReadOnlyList<TestInfo>> GetTestsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => await GetAsync<TestInfo[]>($"/api/projects/{projectId}/tests", cancellationToken) ?? [];
+
+    public Task<ProjectLanguageProfile?> GetCodeLanguagesAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => GetAsync<ProjectLanguageProfile>($"/api/projects/{projectId}/code/languages", cancellationToken);
+
+    public async Task<IReadOnlyList<CodeAnalyzerDescriptor>> GetCodeAnalyzersAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<CodeAnalyzerDescriptor[]>($"/api/projects/{projectId}/code/analyzers", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<CodeAnalyzerRun>> GetCodeAnalyzerRunsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<CodeAnalyzerRun[]>($"/api/projects/{projectId}/code/analyzer-runs", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<CodeComponent>> GetCodeComponentsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<CodeComponent[]>($"/api/projects/{projectId}/code/components", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<FrontendRoute>> GetFrontendRoutesAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<FrontendRoute[]>($"/api/projects/{projectId}/code/frontend-routes", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<ScriptImport>> GetScriptImportsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<ScriptImport[]>($"/api/projects/{projectId}/code/imports", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<StyleUsage>> GetStyleUsagesAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<StyleUsage[]>($"/api/projects/{projectId}/code/styles", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<PackageReferenceInfo>> GetPackageReferencesAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<PackageReferenceInfo[]>($"/api/projects/{projectId}/code/packages", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<BuildScriptInfo>> GetBuildScriptsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<BuildScriptInfo[]>($"/api/projects/{projectId}/code/build-scripts", cancellationToken) ?? [];
+
+    public Task<CodeAnalysisSettings> GetCodeAnalysisSettingsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => Required<CodeAnalysisSettings>($"/api/projects/{projectId}/code/settings", cancellationToken);
+
+    public async Task<CodeAnalysisSettings> UpdateCodeAnalysisSettingsAsync(Guid projectId, CodeAnalysisSettings settings, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync($"/api/projects/{projectId}/code/settings", settings with { ProjectId = projectId }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<CodeAnalysisSettings>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Code analysis settings response was empty.");
+    }
 
     public Task<ContextBrowserSummary> GetContextBrowserAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<ContextBrowserSummary>($"/api/projects/{projectId}/context-browser", cancellationToken);
