@@ -104,6 +104,37 @@ public sealed class ContextBranchSnapshotTests
         Assert.Equal(active.LastSnapshotId, snapshots.First().Id);
     }
 
+    [Fact]
+    public async Task ProjectScanWorker_writes_rolling_ten_scan_diff_after_each_scan()
+    {
+        using var workspace = new TemporaryProject();
+        var readme = Path.Combine(workspace.Root, "README.md");
+        File.WriteAllText(readme, "# Rolling Diff Test");
+        File.WriteAllText(Path.Combine(workspace.Root, "RollingDiff.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        var services = CreateServices();
+        var flow = services.GetRequiredService<IRequestFlow>();
+        var jobs = services.GetRequiredService<IJobRepository>();
+        var artifacts = services.GetRequiredService<IGeneratedArtifactRepository>();
+
+        var project = await flow.Send(new AddProjectCommand(workspace.Root, "Rolling Diff"));
+        var firstJob = await jobs.AddAsync(new WorkerJob(Guid.NewGuid(), project.Id, WorkerJobType.ProjectScan, WorkerJobStatus.Queued, 0, "Queued", DateTimeOffset.UtcNow), CancellationToken.None);
+        await ProjectScanWorker.ExecuteJobAsync(firstJob.Id, services, CancellationToken.None);
+
+        File.AppendAllText(readme, $"{Environment.NewLine}Second scan changed this file.");
+        var secondJob = await jobs.AddAsync(new WorkerJob(Guid.NewGuid(), project.Id, WorkerJobType.ProjectScan, WorkerJobStatus.Queued, 0, "Queued", DateTimeOffset.UtcNow), CancellationToken.None);
+        await ProjectScanWorker.ExecuteJobAsync(secondJob.Id, services, CancellationToken.None);
+
+        var relativePath = ".ai-context/branches/diffs/10-scan-diff.md";
+        var absolutePath = Path.Combine(workspace.Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        var markdown = await File.ReadAllTextAsync(absolutePath);
+        var tracked = await artifacts.GetByPathAsync(project.Id, relativePath, CancellationToken.None);
+
+        Assert.Contains("# SourceWorker Scan Diff", markdown);
+        Assert.Contains("README.md", markdown);
+        Assert.NotNull(tracked);
+        Assert.Equal(GeneratedArtifactType.InternalContextFile, tracked!.Type);
+    }
+
     private static ServiceProvider CreateServices()
         => new ServiceCollection()
             .AddSourceWorkerApplication()

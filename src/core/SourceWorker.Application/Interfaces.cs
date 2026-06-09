@@ -323,6 +323,9 @@ public interface IBranchDiffPackService
     Task<BranchDiffPack> BuildBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken);
     Task<BranchDiffPack> BuildLatestBranchDiffPackAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
     Task<BranchDiffPack> SaveBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken);
+    Task<BranchDiffPack?> BuildScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken);
+    Task<BranchDiffPack?> SaveScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken);
+    Task<BranchDiffPack?> SaveLatestTenScanDiffAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken);
 }
 
 public interface IOptionalGitMetadataService

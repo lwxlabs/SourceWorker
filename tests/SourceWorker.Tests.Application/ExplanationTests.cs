@@ -36,6 +36,33 @@ public sealed class ExplanationTests
     }
 
     [Fact]
+    public async Task Explanation_prompt_can_include_scan_diff_with_selected_scope()
+    {
+        using var temp = new TempProject();
+        temp.Write(".ai-context/agent-handoff.md", "# Agent Handoff\n\nUseful handoff.");
+        temp.Write("README.md", "# Sample\n\nSample project.");
+        var project = new Project(Guid.NewGuid(), "Sample", temp.Root, DateTimeOffset.UtcNow);
+        var builder = new AiExplanationPromptBuilder(
+            new ProjectRepo(project),
+            new PackRepo(),
+            new ConfigRepo(),
+            new StaticAiModelCatalogService(),
+            new SimpleAiTokenEstimator(),
+            new AiSafetyService(),
+            new SymbolRepo(project.Id, "src/PublicApi.cs"),
+            new TestRepo(),
+            new BranchService(project.Id),
+            new BranchDiffService());
+
+        var request = Request(project.Id) with { IncludeScanDiff = true, ScanDiffScope = SourceBranchScanDiffScope.AllBranchScans };
+        var preview = await builder.BuildPreviewAsync(request, CancellationToken.None);
+
+        Assert.Contains("Kind: scan-diff", preview.PromptText);
+        Assert.Contains("Scope: AllBranchScans", preview.PromptText);
+        Assert.Contains(preview.IncludedFiles, f => f.RelativePath == ".ai-context/branches/diffs/10-scan-diff.md" && f.Included);
+    }
+
+    [Fact]
     public async Task Explanation_run_and_save_writes_only_generated_explanation_file()
     {
         using var temp = new TempProject();
@@ -253,6 +280,39 @@ public sealed class ExplanationTests
     {
         public Task<IReadOnlyList<TestInfo>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<TestInfo>>([]);
         public Task SaveAsync(Guid projectId, Guid scanRunId, IReadOnlyList<TestInfo> tests, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class BranchService(Guid projectId) : ISourceContextBranchService
+    {
+        private readonly SourceContextBranch branch = new(Guid.NewGuid(), projectId, "main-context", null, SourceContextBranchKind.Default, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null, true, false, true, null, null, null, null);
+        public Task<SourceContextBranch> ActivateBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken) => Task.FromResult(branch);
+        public Task<SourceContextBranch> CreateBranchAsync(Guid projectId, string name, string? description, CancellationToken cancellationToken) => Task.FromResult(branch);
+        public Task<bool> RemoveBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<SourceContextBranch> EnsureDefaultBranchAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult(branch);
+        public Task<SourceContextBranch> GetActiveBranchAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult(branch);
+        public Task<SourceContextBranch?> GetBranchAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken) => Task.FromResult<SourceContextBranch?>(branch);
+        public Task<IReadOnlyList<SourceContextBranch>> GetBranchesAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<SourceContextBranch>>([branch]);
+        public Task<SourceContextBranch> RenameBranchAsync(Guid projectId, Guid branchId, string name, CancellationToken cancellationToken) => Task.FromResult(branch);
+        public Task<SourceContextBranch> UpdateBranchDescriptionAsync(Guid projectId, Guid branchId, string? description, CancellationToken cancellationToken) => Task.FromResult(branch);
+    }
+
+    private sealed class BranchDiffService : IBranchDiffPackService
+    {
+        public Task<BranchDiffPack> BuildBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken)
+            => Task.FromResult(new BranchDiffPack(projectId, leftSnapshotId, rightSnapshotId, Markdown(SourceBranchScanDiffScope.LatestScan), DateTimeOffset.UtcNow, ".ai-context/branches/diffs/10-scan-diff.md"));
+        public Task<BranchDiffPack> BuildLatestBranchDiffPackAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken)
+            => BuildBranchDiffPackAsync(projectId, Guid.NewGuid(), Guid.NewGuid(), cancellationToken);
+        public Task<BranchDiffPack?> BuildScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken)
+            => Task.FromResult<BranchDiffPack?>(new BranchDiffPack(projectId, Guid.NewGuid(), Guid.NewGuid(), Markdown(scope), DateTimeOffset.UtcNow, ".ai-context/branches/diffs/10-scan-diff.md"));
+        public Task<BranchDiffPack> SaveBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken)
+            => BuildBranchDiffPackAsync(projectId, leftSnapshotId, rightSnapshotId, cancellationToken);
+        public Task<BranchDiffPack?> SaveLatestTenScanDiffAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken)
+            => BuildScanDiffAsync(projectId, branchId, SourceBranchScanDiffScope.LatestScan, cancellationToken);
+        public Task<BranchDiffPack?> SaveScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken)
+            => BuildScanDiffAsync(projectId, branchId, scope, cancellationToken);
+
+        private static string Markdown(SourceBranchScanDiffScope scope)
+            => $"# SourceWorker Scan Diff\n\nScope: {scope}\n\n## Changed Files\n- Modified: `README.md`";
     }
 
     private sealed class ProviderRegistry(IAiProvider? configuredProvider = null) : IAiProviderRegistry

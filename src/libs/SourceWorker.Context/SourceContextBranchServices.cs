@@ -471,8 +471,10 @@ public sealed class TextDiffService : ITextDiffService
     private static string[] Split(string? text) => (text ?? "").Replace("\r\n", "\n").Split('\n');
 }
 
-public sealed class BranchDiffPackService(IProjectRepository projects, ISourceSnapshotRepository snapshots, ISourceDiffService diffs) : IBranchDiffPackService
+public sealed class BranchDiffPackService(IProjectRepository projects, ISourceSnapshotRepository snapshots, ISourceDiffService diffs, IGeneratedArtifactRepository? artifacts = null) : IBranchDiffPackService
 {
+    private const string TenScanDiffPath = ".ai-context/branches/diffs/10-scan-diff.md";
+
     public async Task<BranchDiffPack> BuildBranchDiffPackAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken)
     {
         var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
@@ -492,11 +494,49 @@ public sealed class BranchDiffPackService(IProjectRepository projects, ISourceSn
     {
         var pack = await BuildBranchDiffPackAsync(projectId, leftSnapshotId, rightSnapshotId, cancellationToken);
         var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var rightSnapshot = await snapshots.GetAsync(projectId, rightSnapshotId, cancellationToken);
         var relative = $".ai-context/branches/diffs/{leftSnapshotId:N}-{rightSnapshotId:N}.md";
-        var full = Path.Combine(project.RootPath, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        await File.WriteAllTextAsync(full, pack.Markdown, cancellationToken);
+        await WriteGeneratedDiffAsync(project, relative, pack.Markdown, rightSnapshot?.ScanRunId, cancellationToken);
         return pack with { SuggestedPath = relative };
+    }
+
+    public async Task<BranchDiffPack?> SaveLatestTenScanDiffAsync(Guid projectId, Guid branchId, CancellationToken cancellationToken)
+        => await SaveScanDiffAsync(projectId, branchId, SourceBranchScanDiffScope.LatestScan, cancellationToken);
+
+    public async Task<BranchDiffPack?> BuildScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken)
+    {
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var branchSnapshots = (await snapshots.GetByBranchAsync(projectId, branchId, cancellationToken))
+            .OrderByDescending(s => s.CreatedUtc)
+            .ThenByDescending(s => s.Id)
+            .ToArray();
+        var selectedSnapshots = scope == SourceBranchScanDiffScope.AllBranchScans
+            ? branchSnapshots
+            : branchSnapshots.Take(2).ToArray();
+
+        if (selectedSnapshots.Length < 2)
+        {
+            return new BranchDiffPack(projectId, Guid.Empty, selectedSnapshots.FirstOrDefault()?.Id ?? Guid.Empty, BuildScanDiffMarkdown(project, scope, selectedSnapshots, []), DateTimeOffset.UtcNow, TenScanDiffPath);
+        }
+
+        var reports = new List<SourceDiffReport>();
+        for (var i = 0; i < selectedSnapshots.Length - 1; i++)
+        {
+            reports.Add(await diffs.CompareSnapshotsAsync(projectId, selectedSnapshots[i + 1].Id, selectedSnapshots[i].Id, cancellationToken));
+        }
+
+        return new BranchDiffPack(projectId, reports[0].LeftSnapshotId, reports[0].RightSnapshotId, BuildScanDiffMarkdown(project, scope, selectedSnapshots, reports), DateTimeOffset.UtcNow, TenScanDiffPath);
+    }
+
+    public async Task<BranchDiffPack?> SaveScanDiffAsync(Guid projectId, Guid branchId, SourceBranchScanDiffScope scope, CancellationToken cancellationToken)
+    {
+        var pack = await BuildScanDiffAsync(projectId, branchId, scope, cancellationToken);
+        if (pack is null) return null;
+
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        var rightSnapshot = pack.RightSnapshotId == Guid.Empty ? null : await snapshots.GetAsync(projectId, pack.RightSnapshotId, cancellationToken);
+        await WriteGeneratedDiffAsync(project, TenScanDiffPath, pack.Markdown, rightSnapshot?.ScanRunId, cancellationToken);
+        return pack;
     }
 
     private static string BuildMarkdown(Project project, SourceDiffReport report)
@@ -523,6 +563,82 @@ public sealed class BranchDiffPackService(IProjectRepository projects, ISourceSn
         builder.AppendLine("Use this diff as SourceWorker context. Inspect real source files before editing. Do not infer method names from this diff alone.");
         return builder.ToString();
     }
+
+    private static string BuildScanDiffMarkdown(Project project, SourceBranchScanDiffScope scope, IReadOnlyList<SourceSnapshot> snapshots, IReadOnlyList<SourceDiffReport> reports)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# SourceWorker Scan Diff");
+        builder.AppendLine();
+        builder.AppendLine($"Project: {project.Name}");
+        builder.AppendLine($"Scope: {scope}");
+        builder.AppendLine($"Generated UTC: {DateTimeOffset.UtcNow:O}");
+        builder.AppendLine($"Snapshots considered: {snapshots.Count}");
+        builder.AppendLine();
+        if (reports.Count == 0)
+        {
+            builder.AppendLine("At least two snapshots are needed before SourceWorker can list changed scan diffs.");
+            return builder.ToString();
+        }
+
+        builder.AppendLine("## Summary");
+        builder.AppendLine($"- Scan comparisons: {reports.Count}");
+        builder.AppendLine($"- Changed files across comparisons: {reports.Sum(r => r.Summary.ChangedFileCount)}");
+        builder.AppendLine($"- Added file entries: {reports.Sum(r => r.Summary.AddedFileCount)}");
+        builder.AppendLine($"- Removed file entries: {reports.Sum(r => r.Summary.RemovedFileCount)}");
+        builder.AppendLine($"- Modified file entries: {reports.Sum(r => r.Summary.ModifiedFileCount)}");
+        builder.AppendLine();
+
+        foreach (var report in reports)
+        {
+            var right = snapshots.FirstOrDefault(s => s.Id == report.RightSnapshotId);
+            var left = snapshots.FirstOrDefault(s => s.Id == report.LeftSnapshotId);
+            builder.AppendLine($"## {Label(left)} -> {Label(right)}");
+            builder.AppendLine();
+            builder.AppendLine(report.Summary.HumanSummary);
+            builder.AppendLine();
+
+            if (report.MetricChanges.Any(m => m.Delta != "0"))
+            {
+                builder.AppendLine("### Metrics");
+                foreach (var metric in report.MetricChanges.Where(m => m.Delta != "0"))
+                {
+                    builder.AppendLine($"- {metric.Name}: {metric.LeftValue} -> {metric.RightValue} ({metric.Delta})");
+                }
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("### Changed Files");
+            foreach (var change in report.FileChanges.Take(100))
+            {
+                var lineCounts = change.AddedLines is null && change.RemovedLines is null
+                    ? ""
+                    : $" (+{change.AddedLines ?? 0}/-{change.RemovedLines ?? 0})";
+                builder.AppendLine($"- {change.ChangeKind}: `{change.RelativePath}`{lineCounts}");
+            }
+            builder.AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
+    private async Task WriteGeneratedDiffAsync(Project project, string relativePath, string markdown, Guid? scanRunId, CancellationToken cancellationToken)
+    {
+        var full = Path.Combine(project.RootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        await File.WriteAllTextAsync(full, markdown, cancellationToken);
+
+        if (artifacts is not null)
+        {
+            var hash = Hash(markdown);
+            await artifacts.UpsertAsync(new GeneratedArtifact(Guid.NewGuid(), project.Id, scanRunId, "source-context-branch-diff", relativePath, full, GeneratedArtifactType.InternalContextFile, hash, DateTimeOffset.UtcNow, hash, GeneratedArtifactStatus.Generated, "SourceWorker.BranchDiff", null), cancellationToken);
+        }
+    }
+
+    private static string Label(SourceSnapshot? snapshot)
+        => snapshot is null ? "unknown snapshot" : $"{snapshot.Name} ({snapshot.CreatedUtc:yyyy-MM-dd HH:mm:ss} UTC)";
+
+    private static string Hash(string content)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 }
 
 public sealed class OptionalGitMetadataService : IOptionalGitMetadataService

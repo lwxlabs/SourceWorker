@@ -494,7 +494,9 @@ public sealed class AiExplanationPromptBuilder(
     IAiTokenEstimator tokens,
     IAiSafetyService safety,
     ICodeSymbolRepository symbols,
-    ITestInfoRepository tests) : IAiExplanationPromptBuilder
+    ITestInfoRepository tests,
+    ISourceContextBranchService? branches = null,
+    IBranchDiffPackService? branchDiffs = null) : IAiExplanationPromptBuilder
 {
     private static readonly string SuggestedPath = ".ai-context/docs/backend/07-ai-explanation.md";
 
@@ -563,6 +565,27 @@ public sealed class AiExplanationPromptBuilder(
             await AppendFileAsync(project, relative, "generated-context", 240, builder, included, cancellationToken);
         }
 
+        if (request.IncludeScanDiff)
+        {
+            if (branches is null || branchDiffs is null)
+            {
+                included.Add(new AiExplanationSourceFile(".ai-context/branches/diffs/10-scan-diff.md", "scan-diff", null, null, 0, false, "Context branch diff services are not available."));
+            }
+            else
+            {
+                var activeBranch = await branches.GetActiveBranchAsync(project.Id, cancellationToken);
+                var pack = await branchDiffs.SaveScanDiffAsync(project.Id, activeBranch.Id, request.ScanDiffScope, cancellationToken);
+                if (pack is null || string.IsNullOrWhiteSpace(pack.Markdown))
+                {
+                    included.Add(new AiExplanationSourceFile(".ai-context/branches/diffs/10-scan-diff.md", "scan-diff", null, null, 0, false, "Scan diff was not available."));
+                }
+                else
+                {
+                    AppendInlineContext(pack.SuggestedPath, "scan-diff", pack.Markdown, request.ScanDiffScope == SourceBranchScanDiffScope.AllBranchScans ? 1200 : 400, builder, included);
+                }
+            }
+        }
+
         if (request.IncludeSourceSnippets || request.IncludePublicApi)
         {
             var symbolFiles = (await symbols.GetByProjectAsync(project.Id, cancellationToken))
@@ -621,6 +644,20 @@ public sealed class AiExplanationPromptBuilder(
         }
 
         var lines = (await File.ReadAllLinesAsync(absolute, cancellationToken)).Take(maxLines).ToArray();
+        var text = StripSourceWorkerMetadata(string.Join(Environment.NewLine, lines));
+        builder.AppendLine();
+        builder.AppendLine("---");
+        builder.AppendLine($"Source: `{relativePath}`");
+        builder.AppendLine($"Kind: {kind}");
+        builder.AppendLine("---");
+        builder.AppendLine(text);
+        builder.AppendLine();
+        included.Add(new AiExplanationSourceFile(relativePath, kind, 1, lines.Length, tokens.Estimate(text, 0).PromptTokens, true));
+    }
+
+    private void AppendInlineContext(string relativePath, string kind, string markdown, int maxLines, StringBuilder builder, List<AiExplanationSourceFile> included)
+    {
+        var lines = markdown.Replace("\r\n", "\n").Split('\n').Take(maxLines).ToArray();
         var text = StripSourceWorkerMetadata(string.Join(Environment.NewLine, lines));
         builder.AppendLine();
         builder.AppendLine("---");

@@ -492,6 +492,7 @@ public sealed record AiRun(
 
 public enum ExplanationProfile { DeveloperOnboarding, ArchitectureDeepDive, PublicApiGuide, MaintenanceGuide, TestAndQualityGuide, FullProjectExplanation }
 public enum AiExplanationQualityStatus { Good, NeedsReview, Failed }
+public enum SourceBranchScanDiffScope { LatestScan, AllBranchScans }
 
 public sealed record AiExplanationRequest(
     Guid ProjectId,
@@ -509,7 +510,9 @@ public sealed record AiExplanationRequest(
     int MaxInputTokens,
     int MaxOutputTokens,
     bool StorePrompt,
-    bool StoreOutput);
+    bool StoreOutput,
+    bool IncludeScanDiff = false,
+    SourceBranchScanDiffScope ScanDiffScope = SourceBranchScanDiffScope.LatestScan);
 
 public sealed record AiExplanationPreview(
     Guid ProjectId,

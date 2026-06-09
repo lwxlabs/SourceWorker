@@ -96,7 +96,18 @@
                 <label><input type="checkbox" @bind="includePublicApi" @bind:after="SaveSettingsAsync" /> Include public API</label>
                 <label><input type="checkbox" @bind="includeFlows" @bind:after="SaveSettingsAsync" /> Include flows</label>
                 <label><input type="checkbox" @bind="includeArchitecture" @bind:after="SaveSettingsAsync" /> Include architecture</label>
+                <label><input type="checkbox" @bind="includeScanDiff" @bind:after="SaveSettingsAsync" /> Include scan diff</label>
             </div>
+            @if (includeScanDiff)
+            {
+                <label>
+                    Scan diff scope
+                    <select class="form-select" @bind="scanDiffScope" @bind:after="SaveSettingsAsync">
+                        <option value="@SourceBranchScanDiffScope.LatestScan">Latest scan change</option>
+                        <option value="@SourceBranchScanDiffScope.AllBranchScans">All branch scans</option>
+                    </select>
+                </label>
+            }
             <label>
                 Optional instruction
                 <textarea class="form-control" rows="3" @bind="instruction" @bind:after="SaveSettingsAsync" placeholder="Example: Explain this for a senior developer joining the project tomorrow."></textarea>
@@ -218,6 +229,8 @@
     private bool includePublicApi = true;
     private bool includeFlows = true;
     private bool includeArchitecture = true;
+    private bool includeScanDiff;
+    private SourceBranchScanDiffScope scanDiffScope = SourceBranchScanDiffScope.LatestScan;
     private int maxInputTokens = 60000;
     private int maxOutputTokens = 3000;
     private bool loading = true;
@@ -267,7 +280,7 @@
     }
 
     private AiExplanationRequestDto Request()
-        => new(ProjectId, providerId ?? "", model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens, false, true);
+        => new(ProjectId, providerId ?? "", model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens, false, true, includeScanDiff, scanDiffScope);
 
     private async Task PreviewAsync()
     {
@@ -523,6 +536,8 @@
             includePublicApi = saved.IncludePublicApi;
             includeFlows = saved.IncludeFlows;
             includeArchitecture = saved.IncludeArchitecture;
+            includeScanDiff = saved.IncludeScanDiff;
+            scanDiffScope = saved.ScanDiffScope;
             maxInputTokens = saved.MaxInputTokens;
             maxOutputTokens = saved.MaxOutputTokens;
         }
@@ -535,7 +550,7 @@
     private async Task SaveSettingsAsync()
     {
         if (!settingsLoaded) return;
-        var settings = new ExplanationPageSettings(providerId, model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens);
+        var settings = new ExplanationPageSettings(providerId, model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, includeScanDiff, scanDiffScope, maxInputTokens, maxOutputTokens);
         var json = System.Text.Json.JsonSerializer.Serialize(settings);
         await JS.InvokeAsync<object>("localStorage.setItem", [SettingsKey, json]);
     }
@@ -588,6 +603,8 @@
         bool IncludePublicApi,
         bool IncludeFlows,
         bool IncludeArchitecture,
+        bool IncludeScanDiff,
+        SourceBranchScanDiffScope ScanDiffScope,
         int MaxInputTokens,
         int MaxOutputTokens);
 }

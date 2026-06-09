@@ -191,7 +191,29 @@
             await SelectBranchAsync(branch);
     }
 
-    private Task OnViewerSnapshotSelectedAsync(string snapshotId) => Task.CompletedTask;
+    private async Task OnViewerSnapshotSelectedAsync(string snapshotId)
+    {
+        if (!Guid.TryParse(snapshotId, out var selectedSnapshotId))
+            return;
+
+        var ordered = snapshots
+            .OrderBy(snapshot => snapshot.CreatedUtc)
+            .ThenBy(snapshot => snapshot.Id)
+            .ToArray();
+        var index = Array.FindIndex(ordered, snapshot => snapshot.Id == selectedSnapshotId);
+        if (index < 0)
+            return;
+
+        if (index == 0)
+        {
+            Toast.ShowInfo("That scan is the first snapshot on this branch, so there is no previous scan to compare.");
+            return;
+        }
+
+        diff = await Api.CompareSnapshotsAsync(ProjectId, ordered[index - 1].Id, ordered[index].Id);
+        viewerFiles = MapFiles(diff);
+        pack = null;
+    }
 
     private async Task OnViewerFileSelectedAsync(BranchCompareViewer.DiffFileItem file)
     {

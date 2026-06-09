@@ -242,7 +242,7 @@ public sealed class GetJobStatusQueryHandler(IJobRepository jobs) : IRequestHand
         => (await jobs.GetAsync(request.JobId, cancellationToken))?.ToDto();
 }
 
-public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository, ICodeIntelligencePipeline codePipeline, ICodeAnalysisSettingsService codeSettings, ICodeSymbolRepository symbols, ICodeFlowRepository flows, IRouteInfoRepository routes, IServiceRegistrationRepository services, IConfigurationUsageRepository configs, IBackgroundWorkerInfoRepository workers, ITestInfoRepository tests, ICodeAnalyzerRunRepository analyzerRuns, ICodeComponentRepository components, IFrontendRouteRepository frontendRoutes, IScriptImportRepository imports, IStyleUsageRepository styles, IPackageReferenceRepository packages, IBuildScriptRepository buildScripts, IProjectLanguageProfileRepository languageProfiles, ISourceSnapshotService? snapshots = null)
+public sealed class GenerateBasicContextCommandHandler(IProjectRepository projects, IProjectScanner scanner, IFileIndexRepository fileIndex, IIndexedFileRepository indexedFiles, IScanRunRepository scanRuns, IContextWriter contextWriter, IRecipeRunner recipeRunner, IRecipeFactory recipeFactory, IRecipeRepository recipeRepository, ICodeIntelligencePipeline codePipeline, ICodeAnalysisSettingsService codeSettings, ICodeSymbolRepository symbols, ICodeFlowRepository flows, IRouteInfoRepository routes, IServiceRegistrationRepository services, IConfigurationUsageRepository configs, IBackgroundWorkerInfoRepository workers, ITestInfoRepository tests, ICodeAnalyzerRunRepository analyzerRuns, ICodeComponentRepository components, IFrontendRouteRepository frontendRoutes, IScriptImportRepository imports, IStyleUsageRepository styles, IPackageReferenceRepository packages, IBuildScriptRepository buildScripts, IProjectLanguageProfileRepository languageProfiles, ISourceSnapshotService? snapshots = null, IBranchDiffPackService? branchDiffs = null)
     : IRequestHandler<GenerateBasicContextCommand, ContextGenerationResponse>
 {
     public async Task<ContextGenerationResponse> Handle(GenerateBasicContextCommand request, CancellationToken cancellationToken)
@@ -281,7 +281,11 @@ public sealed class GenerateBasicContextCommandHandler(IProjectRepository projec
         await projects.UpdateAsync(project with { LastScannedAt = scan.ScanRun.CompletedAt }, cancellationToken);
         if (snapshots is not null)
         {
-            await snapshots.CreateSnapshotFromScanAsync(project.Id, scan.ScanRun.Id, cancellationToken);
+            var snapshot = await snapshots.CreateSnapshotFromScanAsync(project.Id, scan.ScanRun.Id, cancellationToken);
+            if (branchDiffs is not null)
+            {
+                await branchDiffs.SaveLatestTenScanDiffAsync(project.Id, snapshot.ContextBranchId, cancellationToken);
+            }
         }
         return new ContextGenerationResponse(written.OutputPath, written.Files);
     }
