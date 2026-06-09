@@ -89,6 +89,31 @@ notAChart
 """).Warnings, w => w.Contains("valid diagram", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Ai_snippet_ignore_rules_remove_noisy_lines_only()
+    {
+        var rules = """
+            enabled: true
+            contains: <!-- SourceWorker:Generated
+            contains: Completed at:
+            regex: ^\s*Started:
+            """;
+        var text = """
+            <!-- SourceWorker:Generated; ArtifactId=abc; Status=Generated -->
+            # Useful Context
+            Started: yesterday
+            Completed at: later
+            Keep this line.
+            """;
+
+        var filtered = AiIgnoreRules.ApplySnippetIgnores(rules, text);
+
+        Assert.Contains("Keep this line.", filtered);
+        Assert.DoesNotContain("SourceWorker:Generated", filtered);
+        Assert.DoesNotContain("Started:", filtered);
+        Assert.DoesNotContain("Completed at:", filtered);
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "sourceworker-markdown-" + Guid.NewGuid());

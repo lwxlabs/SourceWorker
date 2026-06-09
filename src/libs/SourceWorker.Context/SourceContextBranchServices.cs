@@ -307,15 +307,16 @@ public sealed class SourceSnapshotService(
     }
 }
 
-public sealed class SourceDiffService(ISourceSnapshotRepository snapshots, ISourceSnapshotFileRepository files, ITextDiffService textDiff) : ISourceDiffService
+public sealed class SourceDiffService(IProjectRepository projects, ISourceSnapshotRepository snapshots, ISourceSnapshotFileRepository files, ITextDiffService textDiff) : ISourceDiffService
 {
     public async Task<SourceDiffReport> CompareSnapshotsAsync(Guid projectId, Guid leftSnapshotId, Guid rightSnapshotId, CancellationToken cancellationToken)
     {
         var left = await snapshots.GetAsync(projectId, leftSnapshotId, cancellationToken) ?? throw new InvalidOperationException("Left snapshot was not found.");
         var right = await snapshots.GetAsync(projectId, rightSnapshotId, cancellationToken) ?? throw new InvalidOperationException("Right snapshot was not found.");
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
         var leftFiles = (await files.GetBySnapshotAsync(projectId, left.Id, cancellationToken)).ToDictionary(f => f.RelativePath, StringComparer.OrdinalIgnoreCase);
         var rightFiles = (await files.GetBySnapshotAsync(projectId, right.Id, cancellationToken)).ToDictionary(f => f.RelativePath, StringComparer.OrdinalIgnoreCase);
-        var changes = BuildFileChanges(leftFiles, rightFiles);
+        var changes = BuildFileChanges(project.RootPath, leftFiles, rightFiles);
         var metricChanges = BuildMetricChanges(left, right);
         var codeChanges = metricChanges
             .Where(m => m.Category == "code-intelligence" || m.Category == "scan")
@@ -371,10 +372,11 @@ public sealed class SourceDiffService(ISourceSnapshotRepository snapshots, ISour
         if (relativePath.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(relativePath)) throw new InvalidOperationException("Unsafe relative path.");
         var left = (await files.GetBySnapshotAsync(projectId, leftSnapshotId, cancellationToken)).FirstOrDefault(f => f.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
         var right = (await files.GetBySnapshotAsync(projectId, rightSnapshotId, cancellationToken)).FirstOrDefault(f => f.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
-        return textDiff.CreateSideBySideDiff(left?.TextContent, right?.TextContent, relativePath);
+        var project = await projects.GetAsync(projectId, cancellationToken) ?? throw new InvalidOperationException("Project was not found.");
+        return textDiff.CreateSideBySideDiff(left?.TextContent, right?.TextContent, relativePath, project.RootPath);
     }
 
-    private IReadOnlyList<SourceDiffFileChange> BuildFileChanges(IReadOnlyDictionary<string, SourceSnapshotFile> left, IReadOnlyDictionary<string, SourceSnapshotFile> right)
+    private IReadOnlyList<SourceDiffFileChange> BuildFileChanges(string projectRoot, IReadOnlyDictionary<string, SourceSnapshotFile> left, IReadOnlyDictionary<string, SourceSnapshotFile> right)
     {
         var paths = left.Keys.Concat(right.Keys).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
         var result = new List<SourceDiffFileChange>();
@@ -384,7 +386,7 @@ public sealed class SourceDiffService(ISourceSnapshotRepository snapshots, ISour
             right.TryGetValue(path, out var r);
             var change = l is null ? SourceDiffChangeKind.Added : r is null ? SourceDiffChangeKind.Removed : !string.Equals(l.ContentHash, r.ContentHash, StringComparison.OrdinalIgnoreCase) ? SourceDiffChangeKind.Modified : SourceDiffChangeKind.Unchanged;
             if (change == SourceDiffChangeKind.Unchanged) continue;
-            var diff = l?.TextContent is not null || r?.TextContent is not null ? textDiff.CreateSideBySideDiff(l?.TextContent, r?.TextContent, path) : null;
+            var diff = l?.TextContent is not null || r?.TextContent is not null ? textDiff.CreateSideBySideDiff(l?.TextContent, r?.TextContent, path, projectRoot) : null;
             var addedLines = diff?.Hunks.Sum(h => h.Lines.Count(line => line.Kind == SourceTextDiffLineKind.Added));
             var removedLines = diff?.Hunks.Sum(h => h.Lines.Count(line => line.Kind == SourceTextDiffLineKind.Removed));
             var modifiedLines = diff?.Hunks.Sum(h => h.Lines.Count(line => line.Kind == SourceTextDiffLineKind.Changed));
@@ -430,9 +432,12 @@ public sealed class TextDiffService : ITextDiffService
     }
 
     public SourceTextDiff CreateSideBySideDiff(string? leftText, string? rightText, string path)
+        => CreateSideBySideDiff(leftText, rightText, path, null);
+
+    public SourceTextDiff CreateSideBySideDiff(string? leftText, string? rightText, string path, string? projectRoot)
     {
-        var left = Split(leftText);
-        var right = Split(rightText);
+        var left = Split(projectRoot is null ? leftText : AiIgnoreRules.ApplyProjectSnippetIgnores(projectRoot, leftText ?? ""));
+        var right = Split(projectRoot is null ? rightText : AiIgnoreRules.ApplyProjectSnippetIgnores(projectRoot, rightText ?? ""));
         var rows = new List<SourceTextDiffLine>();
         var max = Math.Max(left.Length, right.Length);
         var added = 0;
@@ -618,7 +623,7 @@ public sealed class BranchDiffPackService(IProjectRepository projects, ISourceSn
             builder.AppendLine();
         }
 
-        return builder.ToString();
+        return AiIgnoreRules.ApplyProjectSnippetIgnores(project.RootPath, builder.ToString());
     }
 
     private async Task WriteGeneratedDiffAsync(Project project, string relativePath, string markdown, Guid? scanRunId, CancellationToken cancellationToken)

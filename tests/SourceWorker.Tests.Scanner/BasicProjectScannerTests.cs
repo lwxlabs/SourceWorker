@@ -55,6 +55,8 @@ public sealed class BasicProjectScannerTests
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "scans", "latest-scan.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "branches", "current.md")));
         Assert.True(File.Exists(Path.Combine(root, ".ai-context", "instructions", "README.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "ai-ignore.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".ai-context", "ai-snippet-ignore.md")));
     }
 
     [Fact]
@@ -89,6 +91,59 @@ public sealed class BasicProjectScannerTests
 
         Assert.DoesNotContain(scan.Todos, todo => todo.RelativePath.StartsWith("instructions/Result/", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(scan.Files, file => file.RelativePath.StartsWith("instructions/Result/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Scanner_applies_project_ai_ignore_patterns()
+    {
+        var root = await CreateSampleProject();
+        Directory.CreateDirectory(Path.Combine(root, "tmp"));
+        Directory.CreateDirectory(Path.Combine(root, ".ai-context"));
+        await File.WriteAllTextAsync(Path.Combine(root, "tmp", "Ignored.cs"), "public class Ignored { }");
+        await File.WriteAllTextAsync(Path.Combine(root, "debug.log"), "ignore me");
+        await File.WriteAllTextAsync(Path.Combine(root, ".ai-context", "ai-ignore.md"), """
+            # SourceWorker AI Ignore
+            enabled: true
+            tmp/
+            *.log
+            """);
+
+        var project = new Project(Guid.NewGuid(), "Sample", root, DateTimeOffset.UtcNow);
+        var scan = await new BasicProjectScanner(new EmptyGitInspector()).ScanAsync(project, CancellationToken.None);
+
+        Assert.DoesNotContain(scan.Files, file => file.RelativePath == "tmp/Ignored.cs");
+        Assert.DoesNotContain(scan.Files, file => file.RelativePath == "debug.log");
+    }
+
+    [Fact]
+    public async Task Scanner_applies_glob_ignore_patterns_and_exceptions()
+    {
+        var root = await CreateSampleProject();
+        Directory.CreateDirectory(Path.Combine(root, "src"));
+        Directory.CreateDirectory(Path.Combine(root, ".ai-context"));
+        await File.WriteAllTextAsync(Path.Combine(root, "generated-data.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(root, "generated-output"), "ignore me");
+        await File.WriteAllTextAsync(Path.Combine(root, "generated-keep.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(root, "src", "Drop.cs"), "public class Drop { }");
+        await File.WriteAllTextAsync(Path.Combine(root, "src", "Keep.cs"), "public class Keep { }");
+        await File.WriteAllTextAsync(Path.Combine(root, ".ai-context", "ai-ignore.md"), """
+            # SourceWorker AI Ignore
+            enabled: true
+            generated-*.json
+            generated-*
+            !generated-keep.json
+            *.cs
+            !src/Keep.cs
+            """);
+
+        var project = new Project(Guid.NewGuid(), "Sample", root, DateTimeOffset.UtcNow);
+        var scan = await new BasicProjectScanner(new EmptyGitInspector()).ScanAsync(project, CancellationToken.None);
+
+        Assert.DoesNotContain(scan.Files, file => file.RelativePath == "generated-data.json");
+        Assert.DoesNotContain(scan.Files, file => file.RelativePath == "generated-output");
+        Assert.DoesNotContain(scan.Files, file => file.RelativePath == "src/Drop.cs");
+        Assert.Contains(scan.Files, file => file.RelativePath == "generated-keep.json");
+        Assert.Contains(scan.Files, file => file.RelativePath == "src/Keep.cs");
     }
 
     [Fact]

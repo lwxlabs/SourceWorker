@@ -1,12 +1,16 @@
 @if (Title is not null)
 {
     <section class="card-panel">
-        <h2>@Title</h2>
+        <div class="card-panel-header">
+            <h2>@Title</h2>
+            @HeaderActions
+        </div>
         @ChildContent
     </section>
 }
 
 @code {
     [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

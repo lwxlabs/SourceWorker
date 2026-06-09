@@ -1,0 +1,280 @@
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+
+<section class="handoff-hero">
+    <div>
+        <p class="eyebrow">AI Ignore</p>
+        <h2>Project ignore rules</h2>
+        <p>Exclude files from scans, and remove noisy lines from compare views, scan diffs, and provider prompts.</p>
+    </div>
+    <div class="project-actions">
+        <button class="btn" @onclick="LoadAsync" disabled="@busy">Reload</button>
+        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@busy">Save rules</button>
+    </div>
+</section>
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else
+{
+    <Cards Title="Ignore Rules">
+        <HeaderActions>
+            <button type="button" class="icon-info-button" title="How ignore rules work" @onclick="() => showHelp = true">i</button>
+        </HeaderActions>
+        <ChildContent>
+            <div class="tabs">
+                <button type="button" class="tab-button @(activeTab == IgnoreTab.Files ? "active" : null)" @onclick="() => activeTab = IgnoreTab.Files">Files, folders, extensions</button>
+                <button type="button" class="tab-button @(activeTab == IgnoreTab.Snippets ? "active" : null)" @onclick="() => activeTab = IgnoreTab.Snippets">Snippets</button>
+            </div>
+
+            @if (activeTab == IgnoreTab.Files)
+            {
+                <div class="ignore-editor">
+                    <label class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="fileRulesEnabled" />
+                        <span>Enable file/folder/extension ignore rules</span>
+                    </label>
+                    <LwXLab.MarkDown @ref="fileEditor"
+                                      @bind-Value="fileRules"
+                                      Preview="false"
+                                      SplitView="false"
+                                      ShowPreviewWhenEditing="false"
+                                      AllowPreviewToggle="false"
+                                      ShowThemeSelector="false"
+                                      ShowToolBarButtons="true"
+                                      ToolbarButtons="@FileButtons"
+                                      Height="520px"
+                                      Placeholder="Add ignore patterns, one per line..." />
+                </div>
+            }
+            else
+            {
+                <div class="ignore-editor">
+                    <label class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="snippetRulesEnabled" />
+                        <span>Enable snippet ignore rules</span>
+                    </label>
+                    <LwXLab.MarkDown @ref="snippetEditor"
+                                      @bind-Value="snippetRules"
+                                      Preview="false"
+                                      SplitView="false"
+                                      ShowPreviewWhenEditing="false"
+                                      AllowPreviewToggle="false"
+                                      ShowThemeSelector="false"
+                                      ShowToolBarButtons="true"
+                                      ToolbarButtons="@SnippetButtons"
+                                      Height="520px"
+                                      Placeholder="Add snippet rules, one per line..." />
+                </div>
+            }
+        </ChildContent>
+    </Cards>
+}
+
+@if (showHelp)
+{
+    <div class="ignore-help-backdrop" @onclick="() => showHelp = false">
+        <section class="ignore-help-panel" role="dialog" aria-modal="true" aria-labelledby="ignore-help-title" @onclick:stopPropagation="true">
+            <div class="ignore-help-header">
+                <h2 id="ignore-help-title">Ignore Rules</h2>
+                <button type="button" class="btn" @onclick="() => showHelp = false">Close</button>
+            </div>
+
+            <div class="ignore-help-grid">
+                <div>
+                    <h3>Files, folders, extensions</h3>
+                    <p>These rules run during project scans. Matching files are not indexed for the new scan, so they are left out of generated context, snapshots, branch compare data, scan diff markdown, TODO detection, technology detection, and provider context.</p>
+                    <pre><code>enabled: true
+logs/
+*.tmp
+*.cs
+!src/Program.cs
+generated-*.json
+generated-*
+!generated-keep.json</code></pre>
+                    <p>Use one pattern per line. A trailing slash means folder. `*` matches part of a file or folder name. `!` creates an exception; later matching rules win.</p>
+                </div>
+
+                <div>
+                    <h3>Snippets</h3>
+                    <p>Snippet rules do not remove files from scans. They only hide noisy matching lines in compare previews, `10-scan-diff.md`, and provider prompt snippets.</p>
+                    <pre><code>enabled: true
+contains: &lt;!-- SourceWorker:Generated
+contains: Completed at:
+starts-with: Started:
+regex: ^\s*(Started|Completed)( at)?:\s*</code></pre>
+                    <p>Use `contains:`, `starts-with:`, or `regex:`. Invalid regex rules are ignored instead of breaking a scan.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private LwXLab.MarkDown? fileEditor;
+    private LwXLab.MarkDown? snippetEditor;
+    private IgnoreTab activeTab = IgnoreTab.Files;
+    private string fileRules = "";
+    private string snippetRules = "";
+    private string? fileHash;
+    private string? snippetHash;
+    private bool fileRulesEnabled = true;
+    private bool snippetRulesEnabled = true;
+    private bool loading = true;
+    private bool busy;
+    private bool showHelp;
+    private string? error;
+
+    private static readonly IReadOnlyList<LwXLab.Markdown.Models.LwMarkdownButton> FileButtons =
+    [
+        new() { Name = "folder", Text = "Dir", Title = "Ignore folder", Before = "\nfolder-name/\n" },
+        new() { Name = "extension", Text = "Ext", Title = "Ignore extension", Before = "\n*.log\n" },
+        new() { Name = "file", Text = "File", Title = "Ignore file", Before = "\npath/to/file.ext\n" },
+        new() { Name = "glob", Text = "Glob", Title = "Ignore generated files by pattern", Before = "\ngenerated-*.json\n" },
+        new() { Name = "negate", Text = "Except", Title = "Add exception rule", Before = "\n!src/KeepThis.cs\n" }
+    ];
+
+    private static readonly IReadOnlyList<LwXLab.Markdown.Models.LwMarkdownButton> SnippetButtons =
+    [
+        new() { Name = "contains", Text = "Contains", Title = "Ignore lines containing text", Before = "\ncontains: Completed at:\n" },
+        new() { Name = "starts", Text = "Starts", Title = "Ignore lines starting with text", Before = "\nstarts-with: Started:\n" },
+        new() { Name = "regex", Text = "Regex", Title = "Ignore lines matching regex", Before = "\nregex: ^\\s*Completed:\n" },
+        new() { Name = "metadata", Text = "Meta", Title = "Ignore SourceWorker metadata", Before = "\ncontains: <!-- SourceWorker:Generated\n" }
+    ];
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        busy = true;
+        try
+        {
+            var file = await ReadOrCreateAsync(".ai-context/ai-ignore.md", DefaultFileIgnore());
+            fileRules = file.Markdown;
+            fileHash = file.ContentHash;
+            fileRulesEnabled = ReadEnabled(fileRules);
+
+            var snippet = await ReadOrCreateAsync(".ai-context/ai-snippet-ignore.md", DefaultSnippetIgnore());
+            snippetRules = snippet.Markdown;
+            snippetHash = snippet.ContentHash;
+            snippetRulesEnabled = ReadEnabled(snippetRules);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+            busy = false;
+        }
+    }
+
+    private async Task<MarkdownFileContentDto> ReadOrCreateAsync(string relativePath, string markdown)
+    {
+        try
+        {
+            return await Api.GetMarkdownFileAsync(ProjectId, relativePath);
+        }
+        catch
+        {
+            await Api.SaveMarkdownFileAsync(ProjectId, relativePath, new MarkdownFileSaveRequestDto(relativePath, markdown, null));
+            return await Api.GetMarkdownFileAsync(ProjectId, relativePath);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        try
+        {
+            fileRules = SetEnabled(fileEditor is null ? fileRules : await fileEditor.GetValueAsync(), fileRulesEnabled);
+            var fileResult = await Api.SaveMarkdownFileAsync(ProjectId, ".ai-context/ai-ignore.md", new MarkdownFileSaveRequestDto(".ai-context/ai-ignore.md", fileRules, fileHash));
+            fileHash = fileResult.NewContentHash;
+
+            snippetRules = SetEnabled(snippetEditor is null ? snippetRules : await snippetEditor.GetValueAsync(), snippetRulesEnabled);
+            var snippetResult = await Api.SaveMarkdownFileAsync(ProjectId, ".ai-context/ai-snippet-ignore.md", new MarkdownFileSaveRequestDto(".ai-context/ai-snippet-ignore.md", snippetRules, snippetHash));
+            snippetHash = snippetResult.NewContentHash;
+
+            Toast.ShowSuccess("Ignore rules saved.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static bool ReadEnabled(string markdown)
+        => markdown.Replace("\r\n", "\n").Split('\n').LastOrDefault(line => line.Trim().StartsWith("enabled:", StringComparison.OrdinalIgnoreCase))?.Contains("false", StringComparison.OrdinalIgnoreCase) != true;
+
+    private static string SetEnabled(string markdown, bool enabled)
+    {
+        var lines = markdown.Replace("\r\n", "\n").Split('\n').ToList();
+        var index = lines.FindIndex(line => line.Trim().StartsWith("enabled:", StringComparison.OrdinalIgnoreCase));
+        if (index >= 0) lines[index] = $"enabled: {enabled.ToString().ToLowerInvariant()}";
+        else lines.Insert(Math.Min(2, lines.Count), $"enabled: {enabled.ToString().ToLowerInvariant()}");
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string DefaultFileIgnore() =>
+        """
+        # SourceWorker AI Ignore
+
+        enabled: true
+
+        # One pattern per line. The syntax follows the useful subset of .gitignore:
+        # - folders: temp/
+        # - extensions: *.log
+        # - files: path/to/file.generated.cs
+        # - globs: generated-*.json or generated-*
+        # - exceptions: !src/KeepThis.cs
+        #
+        # Later matching rules win, so put exceptions after the ignore rule they undo.
+
+        # Examples
+        # logs/
+        # *.tmp
+        # *.cs
+        # !src/Program.cs
+        # generated-*.json
+        # generated-*
+        # !generated-keep.json
+        """;
+
+    private static string DefaultSnippetIgnore() =>
+        """
+        # SourceWorker AI Snippet Ignore
+
+        enabled: true
+
+        # These rules do not remove files from scans. They only remove noisy lines from
+        # snapshot compare previews, scan diff markdown, and provider prompt snippets.
+        #
+        # Rule syntax:
+        # - contains: text
+        # - starts-with: text
+        # - regex: pattern
+
+        contains: <!-- SourceWorker:Generated
+        contains: Completed at:
+        contains: Started:
+        contains: Completed:
+        regex: ^\s*(Started|Completed)( at)?:\s*
+        """;
+
+    private enum IgnoreTab { Files, Snippets }
+}

@@ -24,6 +24,7 @@ public sealed class MarkdownContextWriter(IProjectInstructionRepository? instruc
         Directory.CreateDirectory(Path.Combine(output, "packs"));
         Directory.CreateDirectory(Path.Combine(output, "exports"));
         Directory.CreateDirectory(Path.Combine(output, "diagrams"));
+        AiIgnoreRules.EnsureDefaultFiles(scanResult.Project.RootPath);
 
         var freshness = freshnessService is null
             ? new ContextFreshnessReport(scanResult.Project.Id, false, [], [], [], [], 100, [])

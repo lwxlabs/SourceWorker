@@ -315,6 +315,7 @@ public interface ITextDiffService
 {
     string CreateUnifiedDiff(string? leftText, string? rightText, string path);
     SourceTextDiff CreateSideBySideDiff(string? leftText, string? rightText, string path);
+    SourceTextDiff CreateSideBySideDiff(string? leftText, string? rightText, string path, string? projectRoot);
     string CreateMarkdownDiff(string? leftText, string? rightText, string path);
 }
 
