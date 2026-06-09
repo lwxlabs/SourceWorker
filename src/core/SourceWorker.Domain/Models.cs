@@ -31,6 +31,42 @@ public sealed record IndexedFile(
 public sealed record DetectedTechnology(Guid Id, Guid ProjectId, Guid ScanRunId, TechnologyKind Kind, string Evidence);
 public sealed record GitSnapshot(Guid Id, Guid ProjectId, string? Branch, string? CommitSha, bool IsDirty, DateTimeOffset CapturedAt);
 public sealed record TodoItem(Guid Id, Guid ProjectId, Guid ScanRunId, string RelativePath, int LineNumber, TodoKind Kind, string Text);
+public sealed record ProjectTaskScanRequest(
+    string? Tags = null,
+    string? Prefixes = null,
+    bool CaseSensitive = false,
+    bool UppercaseTags = true,
+    bool RequireSeparator = true);
+public sealed record ProjectTaskReport(
+    Guid ProjectId,
+    DateTimeOffset ScannedUtc,
+    int FileCount,
+    int TaskCount,
+    IReadOnlyList<ProjectTaskGroup> Groups,
+    ProjectTaskScanRequest Options);
+public sealed record ProjectTaskGroup(string Name, string Color, int Count, IReadOnlyList<ProjectTaskItem> Items);
+public sealed record ProjectTaskItem(
+    string Id,
+    string Tag,
+    string MainTag,
+    string RelativePath,
+    string FileName,
+    int LineNumber,
+    int ColumnNumber,
+    string Text,
+    string LineText,
+    string Color);
+public sealed record ProjectTaskFileContent(string RelativePath, string FileName, string Markdown, string RawText, int? FocusLine);
+public sealed record ProjectTaskDeleteRequest(string RelativePath, int LineNumber, string Tag, string LineText);
+public sealed record ProjectTaskDeleteResult(bool Deleted, string RelativePath, int LineNumber, string? Warning, string? Markdown);
+public sealed record ProjectTaskOpenRequest(string RelativePath, bool Folder = false);
+public sealed record ProjectWorkspaceFileNode(string Id, string Name, string Path, bool IsFolder, string? Extension, string? Language, IReadOnlyList<ProjectWorkspaceFileNode> Children);
+public sealed record ProjectWorkspaceFileContent(string Path, string Name, string Content, string? Language, bool IsReadonly = false);
+public sealed record ProjectWorkspaceCreateFileRequest(string FolderPath, string Name, string? Content = null);
+public sealed record ProjectWorkspaceCreateFolderRequest(string ParentPath, string Name);
+public sealed record ProjectWorkspaceRenameRequest(string Path, string NewName);
+public sealed record ProjectWorkspaceSaveFileRequest(string Path, string Content);
+public sealed record ProjectWorkspaceDuplicateFileRequest(string Path);
 public sealed record ContextFile(Guid Id, Guid ProjectId, string RelativePath, string Purpose, DateTimeOffset GeneratedAt);
 public sealed record PromptRecipe(Guid Id, string Name, string Slug, string Description, bool IsBuiltIn);
 public sealed record WorkerJob(

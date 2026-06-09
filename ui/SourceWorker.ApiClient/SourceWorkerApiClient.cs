@@ -263,6 +263,87 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
         return await response.Content.ReadFromJsonAsync<MarkdownValidationResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Markdown validation response was empty.");
     }
 
+    public async Task<ProjectTaskReportDto> ScanProjectTasksAsync(Guid projectId, ProjectTaskScanRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/tasks/scan", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProjectTaskReportDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Task scan response was empty.");
+    }
+
+    public Task<ProjectTaskFileContentDto> GetProjectTaskFileAsync(Guid projectId, string relativePath, int? focusLine = null, CancellationToken cancellationToken = default)
+        => Required<ProjectTaskFileContentDto>($"/api/projects/{projectId}/tasks/file/{EscapeRelativePath(relativePath)}{(focusLine is int line ? $"?focusLine={line}" : "")}", cancellationToken);
+
+    public async Task<ProjectTaskDeleteResultDto> DeleteProjectTaskAsync(Guid projectId, ProjectTaskDeleteRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/tasks/delete", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProjectTaskDeleteResultDto>(JsonOptions, cancellationToken) ?? throw new InvalidOperationException("Task delete response was empty.");
+    }
+
+    public async Task<bool> OpenProjectTaskPathAsync(Guid projectId, ProjectTaskOpenRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/tasks/open", request, JsonOptions, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<IReadOnlyList<ProjectWorkspaceFileNodeDto>> GetProjectFileTreeAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<ProjectWorkspaceFileNodeDto[]>($"/api/projects/{projectId}/files/tree", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<string>> GetProjectFilePathsAsync(Guid projectId, CancellationToken cancellationToken = default)
+        => await GetAsync<string[]>($"/api/projects/{projectId}/files/paths", cancellationToken) ?? [];
+
+    public Task<ProjectWorkspaceFileContentDto> GetProjectFileContentAsync(Guid projectId, string path, CancellationToken cancellationToken = default)
+        => Required<ProjectWorkspaceFileContentDto>($"/api/projects/{projectId}/files/content/{EscapeRelativePath(path)}", cancellationToken);
+
+    public async Task SaveProjectFileContentAsync(Guid projectId, ProjectWorkspaceSaveFileRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PutAsJsonAsync($"/api/projects/{projectId}/files/content/{EscapeRelativePath(request.Path)}", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<string> CreateProjectFileAsync(Guid projectId, ProjectWorkspaceCreateFileRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/files/create-file", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await ReadPathResponseAsync(response, cancellationToken);
+    }
+
+    public async Task<string> CreateProjectFolderAsync(Guid projectId, ProjectWorkspaceCreateFolderRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/files/create-folder", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await ReadPathResponseAsync(response, cancellationToken);
+    }
+
+    public async Task<string> RenameProjectFilePathAsync(Guid projectId, ProjectWorkspaceRenameRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/files/rename", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await ReadPathResponseAsync(response, cancellationToken);
+    }
+
+    public async Task DeleteProjectFilePathAsync(Guid projectId, string path, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.DeleteAsync($"/api/projects/{projectId}/files/content/{EscapeRelativePath(path)}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<string> DuplicateProjectFileAsync(Guid projectId, ProjectWorkspaceDuplicateFileRequestDto request, CancellationToken cancellationToken = default)
+    {
+        await ApplyTokenAsync();
+        using var response = await httpClient.PostAsJsonAsync($"/api/projects/{projectId}/files/duplicate", request, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await ReadPathResponseAsync(response, cancellationToken);
+    }
+
     public Task<GeneratedOutputSet> GetOutputsAsync(Guid projectId, CancellationToken cancellationToken = default)
         => Required<GeneratedOutputSet>($"/api/projects/{projectId}/outputs", cancellationToken);
 
@@ -644,6 +725,12 @@ public sealed class SourceWorkerApiClient(HttpClient httpClient, SourceWorkerApi
 
     private static string EscapeRelativePath(string relativePath)
         => string.Join("/", relativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+
+    private static async Task<string> ReadPathResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions, cancellationToken);
+        return json.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "";
+    }
 
     private static JsonSerializerOptions CreateJsonOptions()
     {

@@ -34,6 +34,7 @@ public static class SourceWorkerNavigation
     public static IReadOnlyList<ProjectNavigationItem> ProjectPrimary { get; } =
     [
         new("overview", "Overview", "", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
+        new("files", "Files", "files", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("handoff", "Handoff", "handoff", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("explanation", "Explanation", "explanation", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("ask", "Ask", "ai", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
@@ -41,7 +42,8 @@ public static class SourceWorkerNavigation
         new("packs", "Packs", "packs", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("markdown", "Markdown", "markdown", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
         new("branches", "Branches", "branches", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
-        new("ignore", "Ignore", "ignore", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
+        new("ignore", "Ignore", "ignore", NavigationScope.Project, NavigationVisibility.WhenProjectSelected),
+        new("tasks", "Tasks", "tasks", NavigationScope.Project, NavigationVisibility.WhenProjectSelected)
     ];
 
     public static IReadOnlyList<ProjectNavigationItem> ProjectAdvanced { get; } =

@@ -1,0 +1,259 @@
+@inject ISourceWorkerApiClient Api
+@inject ToastService Toast
+
+<section class="handoff-hero">
+    <div>
+        <p class="eyebrow">Tasks</p>
+        <h2>Project task finder</h2>
+        <p>Find source task markers in project files while respecting .gitignore and project AI ignore rules.</p>
+    </div>
+    <div class="project-actions">
+        <button class="btn btn-primary" @onclick="ScanAsync" disabled="@busy">Scan / Find</button>
+        <button class="btn" @onclick="ResetOptions" disabled="@busy">Defaults</button>
+    </div>
+</section>
+
+<Cards Title="Task Selection">
+    <div class="task-options">
+        <label>
+            <span>Task names</span>
+            <textarea class="form-control task-tags-input" @bind="tags"></textarea>
+        </label>
+        <label>
+            <span>Markers</span>
+            <input class="form-control" @bind="prefixes" />
+        </label>
+        <label class="form-check">
+            <input class="form-check-input" type="checkbox" @bind="uppercaseTags" />
+            <span>Uppercase task names</span>
+        </label>
+        <label class="form-check">
+            <input class="form-check-input" type="checkbox" @bind="caseSensitive" />
+            <span>Case sensitive</span>
+        </label>
+        <label class="form-check">
+            <input class="form-check-input" type="checkbox" @bind="requireSeparator" />
+            <span>Require :, -, -&gt;, or =&gt;</span>
+        </label>
+    </div>
+</Cards>
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else
+{
+    <div class="tasks-workspace">
+        <aside class="tasks-sidebar">
+            @if (report is null)
+            {
+                <EmptyState Message="Run Scan / Find to list project tasks." />
+            }
+            else if (report.TaskCount == 0)
+            {
+                <EmptyState Message="No task markers were found." />
+            }
+            else
+            {
+                <div class="tasks-summary">
+                    <strong>@report.TaskCount tasks</strong>
+                    <span>@report.FileCount files scanned</span>
+                </div>
+                @foreach (var group in report.Groups)
+                {
+                    <button class="task-group-button @(activeGroup == group.Name ? "active" : null)" @onclick="() => ToggleGroup(group.Name)">
+                        <span class="task-color" style="background:@group.Color"></span>
+                        <span>@group.Name</span>
+                        <strong>@group.Count</strong>
+                    </button>
+                    @if (activeGroup == group.Name)
+                    {
+                        <div class="task-items">
+                            @foreach (var item in group.Items)
+                            {
+                                <button class="task-item @(selected?.Id == item.Id ? "active" : null)" @onclick="() => SelectAsync(item)">
+                                    <strong>@item.FileName</strong>
+                                    <span>@item.RelativePath:@item.LineNumber</span>
+                                    <small>@item.LineText</small>
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+            }
+        </aside>
+
+        <main class="tasks-preview">
+            @if (selected is null || fileContent is null)
+            {
+                <EmptyState Message="Choose a task to preview its file." />
+            }
+            else
+            {
+                <div class="editor-header">
+                    <div>
+                        <h3>@selected.Tag <span class="muted">@selected.RelativePath:@selected.LineNumber</span></h3>
+                        <p class="muted">@selected.Text</p>
+                    </div>
+                    <div class="project-actions">
+                        <button class="btn icon-task-button" title="Open file" @onclick="OpenFileAsync" disabled="@busy">Open</button>
+                        <button class="btn icon-task-button" title="Open containing folder" @onclick="OpenFolderAsync" disabled="@busy">Folder</button>
+                        <button class="btn btn-outline-danger icon-task-button" title="Delete task from source file" @onclick="() => confirmDelete = true" disabled="@busy">Delete</button>
+                    </div>
+                </div>
+                <LwXLab.MarkDown @key="editorInstanceKey"
+                                  Value="@fileContent.Markdown"
+                                  ReadOnly="true"
+                                  EnableHighlight="true"
+                                  Preview="false"
+                                  SplitView="false"
+                                  AllowPreviewToggle="true"
+                                  ShowStatusBar="false"
+                                  Height="620px" />
+            }
+        </main>
+    </div>
+}
+
+@if (confirmDelete)
+{
+    <div class="task-delete-backdrop" @onclick="() => confirmDelete = false">
+        <section class="task-delete-panel" role="dialog" aria-modal="true" aria-labelledby="task-delete-title" @onclick:stopPropagation="true">
+            <div class="task-delete-header">
+                <h2 id="task-delete-title">Delete task?</h2>
+                <button type="button" class="btn" @onclick="() => confirmDelete = false">Close</button>
+            </div>
+            <p class="muted">This edits the real source file. A full-line task comment is removed as a line; an inline task is removed from the task marker to the end of the line.</p>
+            @if (selected is not null)
+            {
+                <pre class="task-delete-preview">@selected.RelativePath:@selected.LineNumber
+@selected.LineText</pre>
+            }
+            <div class="task-delete-actions">
+                <button type="button" class="btn" @onclick="() => confirmDelete = false" disabled="@busy">Cancel</button>
+                <button type="button" class="btn btn-outline-danger" @onclick="DeleteSelectedAsync" disabled="@busy">Delete task</button>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private ProjectTaskReportDto? report;
+    private ProjectTaskItemDto? selected;
+    private ProjectTaskFileContentDto? fileContent;
+    private string? activeGroup;
+    private bool loading;
+    private bool busy;
+    private bool confirmDelete;
+    private string? error;
+    private int editorInstanceKey;
+    private string tags = DefaultTags;
+    private string prefixes = "//, #, <!--, ;, /*, {#";
+    private bool uppercaseTags = true;
+    private bool caseSensitive;
+    private bool requireSeparator = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (report is null) await ScanAsync();
+    }
+
+    private async Task ScanAsync()
+    {
+        loading = report is null;
+        busy = true;
+        try
+        {
+            report = await Api.ScanProjectTasksAsync(ProjectId, new ProjectTaskScanRequestDto(tags, prefixes, caseSensitive, uppercaseTags, requireSeparator));
+            activeGroup = report.Groups.FirstOrDefault()?.Name;
+            selected = report.Groups.FirstOrDefault()?.Items.FirstOrDefault();
+            if (selected is not null) await LoadFileAsync(selected);
+            else fileContent = null;
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            loading = false;
+            busy = false;
+        }
+    }
+
+    private void ResetOptions()
+    {
+        tags = DefaultTags;
+        prefixes = "//, #, <!--, ;, /*, {#";
+        uppercaseTags = true;
+        caseSensitive = false;
+        requireSeparator = true;
+    }
+
+    private void ToggleGroup(string group)
+    {
+        activeGroup = activeGroup == group ? null : group;
+    }
+
+    private async Task SelectAsync(ProjectTaskItemDto item)
+    {
+        selected = item;
+        await LoadFileAsync(item);
+    }
+
+    private async Task LoadFileAsync(ProjectTaskItemDto item)
+    {
+        fileContent = await Api.GetProjectTaskFileAsync(ProjectId, item.RelativePath, item.LineNumber);
+        editorInstanceKey++;
+    }
+
+    private async Task OpenFileAsync()
+    {
+        if (selected is null) return;
+        if (!await Api.OpenProjectTaskPathAsync(ProjectId, new ProjectTaskOpenRequestDto(selected.RelativePath))) Toast.ShowError("File could not be opened.");
+    }
+
+    private async Task OpenFolderAsync()
+    {
+        if (selected is null) return;
+        if (!await Api.OpenProjectTaskPathAsync(ProjectId, new ProjectTaskOpenRequestDto(selected.RelativePath, Folder: true))) Toast.ShowError("Folder could not be opened.");
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (selected is null) return;
+        busy = true;
+        try
+        {
+            var result = await Api.DeleteProjectTaskAsync(ProjectId, new ProjectTaskDeleteRequestDto(selected.RelativePath, selected.LineNumber, selected.Tag, selected.LineText));
+            if (!result.Deleted)
+            {
+                Toast.ShowError(result.Warning ?? "Task was not deleted.");
+                return;
+            }
+
+            confirmDelete = false;
+            Toast.ShowSuccess("Task deleted.");
+            await ScanAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private const string DefaultTags = "TODO, FIXME, FIXIT, FIX, HOTFIX, NOTE, INFO, README, DOCS, BUG, OPTIMIZE, PERF, HACK, REVIEW, QUESTION, FUTURE, WAIT, LEGACY, CHANGED, MODIFIED, REFACTOR, DEPRECATED, OBSOLETE, UNDONE, REVERT, NOCOMMIT, NOSHIP, TEST, DEBUG, TEMP, WIP, CLEANUP, SECURITY, BLOCKED, BREAKING, MIGRATE, IDEA, EXPERIMENTAL, EXP, POC";
+}

@@ -7,6 +7,9 @@
         case "":
             <ProjectDashboard ProjectId="@ProjectId" />
             break;
+        case "files":
+            <FilesPage ProjectId="@ProjectId" />
+            break;
         case "handoff":
             <AgentHandoffPage ProjectId="@ProjectId" />
             break;
@@ -33,6 +36,9 @@
             break;
         case "ignore":
             <IgnorePage ProjectId="@ProjectId" />
+            break;
+        case "tasks":
+            <TasksPage ProjectId="@ProjectId" />
             break;
         case "scan-health":
             <ScanHealthPage ProjectId="@ProjectId" />

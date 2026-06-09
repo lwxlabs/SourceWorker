@@ -123,6 +123,8 @@ public static class DependencyInjection
         services.AddScoped<IRequestHandler<RunQuickAskCommand, SourceWorker.Domain.QuickAskResult>, RunQuickAskCommandHandler>();
         services.AddScoped<IRequestHandler<GetLogsQuery, IReadOnlyList<SourceWorker.Domain.LogEntry>>, GetLogsQueryHandler>();
         services.AddScoped<IProjectInstructionImporter, ProjectInstructionImporter>();
+        services.AddScoped<IProjectTaskService, ProjectTaskService>();
+        services.AddScoped<IProjectWorkspaceFileService, ProjectWorkspaceFileService>();
         return services;
     }
 }

@@ -108,76 +108,7 @@ public sealed partial class BasicProjectScanner(IGitInspector gitInspector) : IP
     }
 
     private static bool IsIgnored(string relativePath, bool isDirectory, IReadOnlyList<string> patterns)
-    {
-        var ignored = false;
-        foreach (var pattern in patterns)
-        {
-            var isNegated = pattern.StartsWith('!');
-            var normalized = (isNegated ? pattern[1..] : pattern).Trim('/').Replace('\\', '/');
-            if (normalized.Length == 0) continue;
-            if (MatchesIgnorePattern(relativePath, isDirectory, normalized, pattern.EndsWith('/')))
-            {
-                ignored = !isNegated;
-            }
-        }
-
-        return ignored;
-    }
-
-    private static bool MatchesIgnorePattern(string relativePath, bool isDirectory, string normalized, bool directoryOnly)
-    {
-        if (directoryOnly && !isDirectory) return false;
-        if (directoryOnly && relativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase)) return true;
-        if (relativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase) || relativePath.StartsWith(normalized + '/', StringComparison.OrdinalIgnoreCase) || System.IO.Path.GetFileName(relativePath).Equals(normalized, StringComparison.OrdinalIgnoreCase)) return true;
-        if (normalized.StartsWith("*.") && relativePath.EndsWith(normalized[1..], StringComparison.OrdinalIgnoreCase)) return true;
-        if (normalized.IndexOfAny(['*', '?']) >= 0 && MatchesGlob(relativePath, normalized)) return true;
-        if (normalized.Contains("**/*.", StringComparison.Ordinal))
-        {
-            var prefix = normalized[..normalized.IndexOf("**/*.", StringComparison.Ordinal)].TrimEnd('/');
-            var suffix = normalized[(normalized.IndexOf("**/*.", StringComparison.Ordinal) + 4)..];
-            return relativePath.StartsWith(prefix + '/', StringComparison.OrdinalIgnoreCase) && relativePath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return false;
-    }
-
-    private static bool MatchesGlob(string relativePath, string normalized)
-    {
-        var target = normalized.Contains('/', StringComparison.Ordinal) ? relativePath : System.IO.Path.GetFileName(relativePath);
-        var regex = "^" + GlobToRegex(normalized) + "$";
-        return Regex.IsMatch(target, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
-    }
-
-    private static string GlobToRegex(string pattern)
-    {
-        var builder = new System.Text.StringBuilder();
-        for (var i = 0; i < pattern.Length; i++)
-        {
-            var character = pattern[i];
-            if (character == '*')
-            {
-                if (i + 1 < pattern.Length && pattern[i + 1] == '*')
-                {
-                    builder.Append(".*");
-                    i++;
-                }
-                else
-                {
-                    builder.Append("[^/]*");
-                }
-            }
-            else if (character == '?')
-            {
-                builder.Append("[^/]");
-            }
-            else
-            {
-                builder.Append(Regex.Escape(character.ToString()));
-            }
-        }
-
-        return builder.ToString();
-    }
+        => AiIgnoreRules.IsFileIgnored(relativePath, isDirectory, patterns);
 
     private static IndexedFileKind ClassifyFile(string relativePath)
     {

@@ -1,0 +1,49 @@
+@using LwXLab.FileEditor.Components
+@using LwXLab.FileEditor.Models
+@using LwXLab.FileEditor.Options
+@inject ProjectFileEditorContext FileEditorContext
+
+<FileEditor Title="Project Files"
+            Theme="LwFileEditorTheme.Dark"
+            ViewMode="LwFileEditorViewMode.Split"
+            Options="options"
+            OnFormatDocument="FormatDocumentAsync"
+            OnValidateDocument="ValidateDocumentAsync" />
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private readonly LwFileEditorOptions options = new()
+    {
+        EnableMenuBar = true,
+        EnableActivityBar = true,
+        EnableCommandPalette = true,
+        EnableFind = true,
+        EnableReplace = true,
+        EnableWorkspaceSearch = true,
+        EnableProblemsPanel = true,
+        EnableEditorSplitting = true,
+        EnableDraggableSplitPanes = true,
+        EnableLocalDraftBackup = true,
+        EnableUnsavedChangesGuard = true,
+        EnableSourceControlPanel = false,
+        EnableTerminalPanel = false,
+        EnableAiActions = false,
+        AutoSaveMode = LwAutoSaveMode.Off,
+        Height = "calc(100vh - 190px)",
+        SidebarWidth = "300px",
+        LayoutStorageKey = "sourceworker-project-file-editor"
+    };
+
+    protected override void OnParametersSet()
+    {
+        FileEditorContext.SetProject(ProjectId);
+        options.LayoutStorageKey = $"sourceworker-project-file-editor-{ProjectId:N}";
+    }
+
+    private static Task<string> FormatDocumentAsync(LwFileEditorTab tab)
+        => Task.FromResult(tab.Content);
+
+    private static Task<IReadOnlyList<LwDiagnostic>> ValidateDocumentAsync(LwFileEditorTab tab)
+        => Task.FromResult<IReadOnlyList<LwDiagnostic>>([]);
+}

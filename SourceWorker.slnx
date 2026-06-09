@@ -23,20 +23,21 @@
     <Project Path="src/libs/SourceWorker.Scanner/SourceWorker.Scanner.csproj" />
   </Folder>
   <Folder Name="/src/services/">
+    <Project Path="src/services/SourceWorker.AppHost/SourceWorker.AppHost.csproj" />
     <Project Path="src/services/SourceWorker.Cli/SourceWorker.Cli.csproj" />
     <Project Path="src/services/SourceWorker.LocalApi/SourceWorker.LocalApi.csproj" />
     <Project Path="src/services/SourceWorker.Worker/SourceWorker.Worker.csproj" />
-    <Project Path="src/services/SourceWorker.AppHost/SourceWorker.AppHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/SourceWorker.Tests.AppHost/SourceWorker.Tests.AppHost.csproj" />
     <Project Path="tests/SourceWorker.Tests.Application/SourceWorker.Tests.Application.csproj" />
     <Project Path="tests/SourceWorker.Tests.LocalApi/SourceWorker.Tests.LocalApi.csproj" />
     <Project Path="tests/SourceWorker.Tests.Scanner/SourceWorker.Tests.Scanner.csproj" />
-    <Project Path="tests/SourceWorker.Tests.AppHost/SourceWorker.Tests.AppHost.csproj" />
   </Folder>
   <Folder Name="/ui/">
     <Project Path="ui/SourceWorker.ApiClient/SourceWorker.ApiClient.csproj" />
     <Project Path="ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj" />
     <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
   </Folder>
+  <Project Path="../../../libs/LwXLab.FileEditor/LwXLab.FileEditor.csproj" />
 </Solution>

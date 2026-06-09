@@ -245,6 +245,38 @@ app.MapPut("/api/projects/{id:guid}/markdown/files/{*relativePath}", async (Guid
     => Results.Ok(await flow.Send(new SaveMarkdownFileCommand(id, request with { RelativePath = relativePath }), cancellationToken)));
 app.MapPost("/api/projects/{id:guid}/markdown/validate", async (Guid id, MarkdownValidateApiRequest request, IRequestFlow flow, CancellationToken cancellationToken)
     => Results.Ok(await flow.Send(new ValidateMarkdownCommand(id, request.Markdown), cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/tasks/scan", async (Guid id, ProjectTaskScanRequest request, IProjectTaskService tasks, CancellationToken cancellationToken)
+    => Results.Ok(await tasks.ScanAsync(id, request, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/tasks/file/{*relativePath}", async (Guid id, string relativePath, [FromQuery] int? focusLine, IProjectTaskService tasks, CancellationToken cancellationToken)
+    => Results.Ok(await tasks.ReadFileAsync(id, relativePath, focusLine, cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/tasks/delete", async (Guid id, ProjectTaskDeleteRequest request, IProjectTaskService tasks, CancellationToken cancellationToken)
+    => Results.Ok(await tasks.DeleteAsync(id, request, cancellationToken)));
+app.MapPost("/api/projects/{id:guid}/tasks/open", async (Guid id, ProjectTaskOpenRequest request, IProjectTaskService tasks, CancellationToken cancellationToken)
+    => await tasks.OpenPathAsync(id, request, cancellationToken) ? Results.Ok() : Results.NotFound());
+app.MapGet("/api/projects/{id:guid}/files/tree", async (Guid id, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(await files.GetTreeAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/files/paths", async (Guid id, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(await files.GetFilePathsAsync(id, cancellationToken)));
+app.MapGet("/api/projects/{id:guid}/files/content/{*path}", async (Guid id, string path, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(await files.ReadFileAsync(id, path, cancellationToken)));
+app.MapPut("/api/projects/{id:guid}/files/content/{*path}", async (Guid id, string path, ProjectWorkspaceSaveFileRequest request, IProjectWorkspaceFileService files, CancellationToken cancellationToken) =>
+{
+    await files.SaveFileAsync(id, request with { Path = path }, cancellationToken);
+    return Results.NoContent();
+});
+app.MapPost("/api/projects/{id:guid}/files/create-file", async (Guid id, ProjectWorkspaceCreateFileRequest request, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(new { path = await files.CreateFileAsync(id, request, cancellationToken) }));
+app.MapPost("/api/projects/{id:guid}/files/create-folder", async (Guid id, ProjectWorkspaceCreateFolderRequest request, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(new { path = await files.CreateFolderAsync(id, request, cancellationToken) }));
+app.MapPost("/api/projects/{id:guid}/files/rename", async (Guid id, ProjectWorkspaceRenameRequest request, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(new { path = await files.RenameAsync(id, request, cancellationToken) }));
+app.MapPost("/api/projects/{id:guid}/files/duplicate", async (Guid id, ProjectWorkspaceDuplicateFileRequest request, IProjectWorkspaceFileService files, CancellationToken cancellationToken)
+    => Results.Ok(new { path = await files.DuplicateFileAsync(id, request, cancellationToken) }));
+app.MapDelete("/api/projects/{id:guid}/files/content/{*path}", async (Guid id, string path, IProjectWorkspaceFileService files, CancellationToken cancellationToken) =>
+{
+    await files.DeleteAsync(id, path, cancellationToken);
+    return Results.NoContent();
+});
 app.MapGet("/api/projects/{id:guid}/outputs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetOutputsQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/packs", async (Guid id, IRequestFlow flow, CancellationToken cancellationToken) => Results.Ok(await flow.Send(new GetPacksQuery(id), cancellationToken)));
 app.MapGet("/api/projects/{id:guid}/packs/{packId}", async (Guid id, string packId, IRequestFlow flow, CancellationToken cancellationToken) =>

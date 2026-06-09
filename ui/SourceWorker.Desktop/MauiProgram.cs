@@ -3,6 +3,8 @@ using SourceWorker.ApiClient;
 using SourceWorker.Desktop.Services;
 using SourceWorker.Hosting;
 using SourceWorker.UI.Services;
+using LwXLab.FileEditor.Extensions;
+using LwXLab.FileEditor.Services;
 using LwXLab.Markdown.Extensions;
 
 namespace SourceWorker.Desktop;
@@ -29,6 +31,22 @@ public static class MauiProgram
         builder.Services.AddScoped<DashboardActionService>();
         builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
         builder.Services.AddLwXLabMarkdown();
+        builder.Services.AddLwXLabFileEditor(options =>
+        {
+            options.EnableMenuBar = true;
+            options.EnableCommandPalette = true;
+            options.EnableFind = true;
+            options.EnableReplace = true;
+            options.EnableWorkspaceSearch = true;
+            options.EnableProblemsPanel = true;
+            options.EnableEditorSplitting = true;
+            options.EnableLocalDraftBackup = true;
+            options.EnableUnsavedChangesGuard = true;
+            options.AutoSaveMode = LwXLab.FileEditor.Models.LwAutoSaveMode.Off;
+            options.SidebarWidth = "300px";
+        });
+        builder.Services.AddScoped<ProjectFileEditorContext>();
+        builder.Services.AddScoped<ILwFileEditorStorage, SourceWorkerFileEditorStorage>();
         builder.Services.AddSingleton<IDesktopLocalApiLifecycleService, DesktopLocalApiLifecycleService>();
         builder.Services.AddSingleton<IDesktopRuntimeStateService>(provider => (DesktopLocalApiLifecycleService)provider.GetRequiredService<IDesktopLocalApiLifecycleService>());
         builder.Services.AddSingleton<IDesktopStartupService, DesktopStartupService>();

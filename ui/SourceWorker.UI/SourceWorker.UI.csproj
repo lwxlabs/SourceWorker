@@ -17,7 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
-    <ProjectReference Include="..\..\src\LwXLab.Markdown\LwXLab.Markdown.csproj" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.Markdown\LwXLab.Markdown.csproj" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.FileEditor\LwXLab.FileEditor.csproj" />
   </ItemGroup>
 
 </Project>

@@ -248,6 +248,25 @@ public interface IMarkdownFileReader { Task<MarkdownFileContent> ReadAsync(Proje
 public interface IMarkdownFileWriter { Task<MarkdownFileSaveResult> SaveAsync(Project project, MarkdownFileSaveRequest request, CancellationToken cancellationToken); }
 public interface IMarkdownSavePolicyService { MarkdownValidationResult ValidatePath(Project project, string relativePath, bool allowTechnical); }
 public interface IMermaidMarkdownValidator { MarkdownValidationResult Validate(string markdown); }
+public interface IProjectTaskService
+{
+    Task<ProjectTaskReport> ScanAsync(Guid projectId, ProjectTaskScanRequest request, CancellationToken cancellationToken);
+    Task<ProjectTaskFileContent> ReadFileAsync(Guid projectId, string relativePath, int? focusLine, CancellationToken cancellationToken);
+    Task<ProjectTaskDeleteResult> DeleteAsync(Guid projectId, ProjectTaskDeleteRequest request, CancellationToken cancellationToken);
+    Task<bool> OpenPathAsync(Guid projectId, ProjectTaskOpenRequest request, CancellationToken cancellationToken);
+}
+public interface IProjectWorkspaceFileService
+{
+    Task<IReadOnlyList<ProjectWorkspaceFileNode>> GetTreeAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<ProjectWorkspaceFileContent> ReadFileAsync(Guid projectId, string path, CancellationToken cancellationToken);
+    Task SaveFileAsync(Guid projectId, ProjectWorkspaceSaveFileRequest request, CancellationToken cancellationToken);
+    Task<string> CreateFileAsync(Guid projectId, ProjectWorkspaceCreateFileRequest request, CancellationToken cancellationToken);
+    Task<string> CreateFolderAsync(Guid projectId, ProjectWorkspaceCreateFolderRequest request, CancellationToken cancellationToken);
+    Task<string> RenameAsync(Guid projectId, ProjectWorkspaceRenameRequest request, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid projectId, string path, CancellationToken cancellationToken);
+    Task<string> DuplicateFileAsync(Guid projectId, ProjectWorkspaceDuplicateFileRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> GetFilePathsAsync(Guid projectId, CancellationToken cancellationToken);
+}
 
 public interface ISourceContextBranchRepository
 {
