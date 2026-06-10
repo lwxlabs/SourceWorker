@@ -37,7 +37,7 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
 
         var files = new Dictionary<string, string>
         {
-            ["00-project-index.md"] = ProjectIndex(scan, doc),
+            ["00-project-index.md"] = await ProjectIndexAsync(scan, cancellationToken),
             ["README.md"] = Readme(scan, doc),
             ["01-project-structure.md"] = ProjectStructure(scan),
             ["02-architecture.md"] = Architecture(scan),
@@ -192,49 +192,52 @@ public sealed class BasicRecipeRunner(IProjectScanner scanner, IContextWriter co
         Use these compact notes as developer handoff material. They are scanner and instruction derived, not AI-authored.
         """;
 
-    private static string ProjectIndex(ProjectScanResult scan, ProjectInstructionDocument? doc)
-        => $"""
+    private static async Task<string> ProjectIndexAsync(ProjectScanResult scan, CancellationToken cancellationToken)
+    {
+        var indexPath = Path.Combine(scan.Project.RootPath, ".ai-context", "index.yaml");
+        var yaml = File.Exists(indexPath)
+            ? await File.ReadAllTextAsync(indexPath, cancellationToken)
+            : ProjectIndexYaml(scan);
+
+        return $"""
         # Project Index
 
-        This file is a docs-side project index for the generated backend documentation set. It intentionally does not replace or move any existing `index.md` file.
+        SourceWorker project index, mirrored from `.ai-context/index.yaml`.
 
-        ## Project
-
-        - Name: {scan.Project.Name}
-        - Root: `{scan.Project.RootPath}`
-        - Solution: {scan.SolutionPath ?? "none detected"}
-        - Technologies: {TechnologySummary(scan)}
-        - Projects: {scan.Projects.Count}
-        - Test projects: {scan.Projects.Count(p => p.IsTestProject)}
-        - Files indexed: {scan.Files.Count}
-        - Imported instructions: {(doc is null ? "none" : doc.Title)}
-
-        ## Backend Docs
-
-        - `00-project-index.md`: this generated project index.
-        - `README.md`: backend docs overview and commands.
-        - `01-project-structure.md`: folders, projects, and tests.
-        - `02-architecture.md`: detected architecture shape and references.
-        - `03-important-files-and-flows.md`: entrypoints, routes, services, workers, and flows.
-        - `04-configuration-and-secrets.md`: config files, Docker files, secret-handling notes, and config usages.
-        - `05-tasks-and-risks.md`: source TODO/FIXME/REVIEW items and imported tasks.
-        - `06-verification-checklist.md`: build/test/scan verification notes.
-        - `07-ai-explanation.md`: optional AI-generated explanation after explicit user action.
-        - `08-code-snippets.md`: practical code references and copyable snippets.
-        - `09-reading-guide.md`: recommended reading order for humans and AI agents.
-
-        ## Context Packs
-
-        - Quick agent handoff: `.ai-context/packs/ai-handoff.pack.yaml`
-        - Backend docs pack: `.ai-context/packs/backend-docs.pack.yaml`
-        - AI explanation pack: `.ai-context/packs/ai-explanation.pack.yaml`
-
-        ## Export
-
-        - Canonical internal docs: `.ai-context/docs/backend`
-        - External mirror: `instructions/Result/Backend`
-        - Export profile: `.ai-context/exports/backend-docs-compact.yaml`
+        ```yaml
+        {yaml.Trim()}
+        ```
         """;
+    }
+
+    private static string ProjectIndexYaml(ProjectScanResult scan)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("project:");
+        builder.AppendLine($"  name: \"{Escape(scan.Project.Name)}\"");
+        builder.AppendLine($"  root: \"{Escape(scan.Project.RootPath)}\"");
+        builder.AppendLine($"  solution: \"{Escape(scan.SolutionPath ?? "")}\"");
+        builder.AppendLine("scan:");
+        builder.AppendLine($"  completedAt: \"{scan.ScanRun.CompletedAt:O}\"");
+        builder.AppendLine($"  filesIndexed: {scan.Files.Count}");
+        builder.AppendLine($"  technologies: [{string.Join(", ", scan.Technologies.Select(t => t.Kind).Distinct())}]");
+        builder.AppendLine("files:");
+        foreach (var file in scan.Files.OrderBy(f => f.RelativePath))
+        {
+            builder.AppendLine($"  - path: \"{Escape(file.RelativePath)}\"");
+            builder.AppendLine($"    absolutePath: \"{Escape(file.Path)}\"");
+            builder.AppendLine($"    kind: {file.Kind}");
+            builder.AppendLine($"    extension: \"{Escape(file.Extension)}\"");
+            builder.AppendLine($"    sizeBytes: {file.SizeBytes}");
+            builder.AppendLine($"    lastModifiedUtc: \"{file.LastModifiedUtc:O}\"");
+            builder.AppendLine($"    sha256: \"{file.Sha256}\"");
+            builder.AppendLine($"    changeKind: {file.ChangeKind}");
+        }
+        return builder.ToString();
+    }
+
+    private static string Escape(string value)
+        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private static string ProjectStructure(ProjectScanResult scan)
         => $"""

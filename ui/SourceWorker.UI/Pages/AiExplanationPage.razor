@@ -2,211 +2,270 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject ToastService Toast
 
-    <section class="handoff-hero">
-        <div>
-            <p class="eyebrow">AI Explanation</p>
-            <h2>Generate a project explanation</h2>
-            <p>Generate a human-readable explanation from scanned context. This does not edit source code. A successful generation is saved as a generated docs file, and you can edit and save it again afterward.</p>
-            @if (!busy && !string.IsNullOrWhiteSpace(operationMessage))
-            {
-                <p class="callout @operationTone">@operationMessage</p>
-            }
-        </div>
-        <div class="project-actions">
-            <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Preview Prompt</button>
-            <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Generate Explanation</button>
-            <button class="btn btn-outline-danger" @onclick="CancelRunAsync" disabled="@(activeJobId is null)">Cancel</button>
-            <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(editedMarkdown) || busy || activeJobId is not null)">Save edited explanation</button>
-            <a class="btn" href="@($"/projects/{ProjectId}/markdown?file=.ai-context/docs/backend/07-ai-explanation.md")">Open in Markdown Workspace</a>
-            <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(editedMarkdown)">Copy Explanation</button>
-        </div>
-    </section>
-
-    @if (loading)
-    {
-        <LoadingState />
-    }
-    else if (!string.IsNullOrWhiteSpace(error))
-    {
-        <ErrorState Message="@error" />
-    }
-    else
-    {
-        <Cards Title="Provider and Profile">
-            @if (activeJobId is not null)
-            {
-                <p class="callout info">Working on the explanation request. Local models can take a while; LM Studio Developer Logs will show token/context details while this runs.</p>
-            }
-            <div class="grid two">
-                <label>
-                    Provider
-                    <select class="form-select" @bind="providerId" @bind:after="ProviderChangedAsync">
-                        @foreach (var provider in options?.Providers ?? [])
-                        {
-                            <option value="@provider.ProviderId">@ProviderDisplay(provider)</option>
-                        }
-                    </select>
-                </label>
-                <label>
-                    Model
-                    @if (modelOptions.Count > 0)
-                    {
-                        <select class="form-select" value="@model" @onchange="ModelChangedAsync">
-                            @foreach (var availableModel in modelOptions)
-                            {
-                                <option value="@availableModel">@availableModel</option>
-                            }
-                        </select>
-                    }
-                    else
-                    {
-                        <input class="form-control" @bind="model" @bind:after="SaveSettingsAsync" placeholder="model name" />
-                    }
-                    <div class="field-actions">
-                        <button type="button" class="btn btn-sm" @onclick="RefreshModelsAsync" disabled="@busy">Refresh models</button>
-                        @if (!string.IsNullOrWhiteSpace(modelListWarning))
-                        {
-                            <span class="muted">@modelListWarning</span>
-                        }
-                    </div>
-                </label>
-                <label>
-                    Explanation profile
-                    <select class="form-select" @bind="profile" @bind:after="SaveSettingsAsync">
-                        @foreach (var item in options?.Profiles ?? Enum.GetValues<ExplanationProfile>())
-                        {
-                            <option value="@item">@item</option>
-                        }
-                    </select>
-                </label>
-                <label>
-                    Context pack
-                    <select class="form-select" @bind="packId" @bind:after="SaveSettingsAsync">
-                        @foreach (var pack in options?.Packs ?? [])
-                        {
-                            <option value="@pack.Pack.Id">@pack.Pack.Name</option>
-                        }
-                    </select>
-                </label>
-            </div>
-            <div class="checkbox-row">
-                <label><input type="checkbox" @bind="includeSourceSnippets" @bind:after="SaveSettingsAsync" /> Include source snippets</label>
-                <label><input type="checkbox" @bind="includeTests" @bind:after="SaveSettingsAsync" /> Include tests</label>
-                <label><input type="checkbox" @bind="includeGeneratedDocs" @bind:after="SaveSettingsAsync" /> Include generated docs</label>
-                <label><input type="checkbox" @bind="includePublicApi" @bind:after="SaveSettingsAsync" /> Include public API</label>
-                <label><input type="checkbox" @bind="includeFlows" @bind:after="SaveSettingsAsync" /> Include flows</label>
-                <label><input type="checkbox" @bind="includeArchitecture" @bind:after="SaveSettingsAsync" /> Include architecture</label>
-                <label><input type="checkbox" @bind="includeScanDiff" @bind:after="SaveSettingsAsync" /> Include scan diff</label>
-            </div>
-            @if (includeScanDiff)
-            {
-                <label>
-                    Scan diff scope
-                    <select class="form-select" @bind="scanDiffScope" @bind:after="SaveSettingsAsync">
-                        <option value="@SourceBranchScanDiffScope.LatestScan">Latest scan change</option>
-                        <option value="@SourceBranchScanDiffScope.AllBranchScans">All branch scans</option>
-                    </select>
-                </label>
-            }
-            <label>
-                Optional instruction
-                <textarea class="form-control" rows="3" @bind="instruction" @bind:after="SaveSettingsAsync" placeholder="Example: Explain this for a senior developer joining the project tomorrow."></textarea>
-            </label>
-            <div class="grid two">
-                <label>
-                    Max input tokens
-                    <input class="form-control" type="number" @bind="maxInputTokens" @bind:after="SaveSettingsAsync" />
-                </label>
-                <label>
-                    Max output tokens
-                    <input class="form-control" type="number" @bind="maxOutputTokens" @bind:after="SaveSettingsAsync" />
-                </label>
-            </div>
-        </Cards>
-
-        @if (preview is not null)
+<section class="handoff-hero">
+    <div>
+        <p class="eyebrow">AI Explanation</p>
+        <h2>Generate a project explanation</h2>
+        <p>Generate a human-readable explanation from scanned context. This does not edit source code. A successful generation is saved as a generated docs file, and you can edit and save it again afterward.</p>
+        @if (!busy && !string.IsNullOrWhiteSpace(operationMessage))
         {
-            <Cards Title="Prompt Preview">
-                <div class="metric-grid">
-                    <MetricCard Label="Prompt tokens" Value="@preview.TokenEstimate.PromptTokens.ToString()" />
-                    <MetricCard Label="Output tokens" Value="@preview.TokenEstimate.MaxOutputTokens.ToString()" />
-                    <MetricCard Label="Total tokens" Value="@preview.TokenEstimate.TotalTokens.ToString()" />
-                    <MetricCard Label="Prompt hash" Value="@preview.PromptHash[..Math.Min(10, preview.PromptHash.Length)]" />
-                </div>
-                @if (preview.ProviderKind != AiProviderKind.Ollama)
-                {
-                    <p class="callout warn">This provider is online or external. Selected project context will be sent to the configured AI provider.</p>
-                }
-                @foreach (var warning in preview.SafetyWarnings)
-                {
-                    <div class="list-row"><strong>@warning.Severity</strong><span>@warning.Message</span></div>
-                }
-                <details>
-                    <summary>Included files (@preview.IncludedFiles.Count(f => f.Included))</summary>
-                    @foreach (var file in preview.IncludedFiles)
-                    {
-                        <div class="list-row"><strong>@file.RelativePath</strong><span>@(file.Included ? $"{file.TokenEstimate} tokens" : file.Warning)</span></div>
-                    }
-                </details>
-                <details>
-                    <summary>Prompt text</summary>
-                    <pre>@preview.PromptText</pre>
-                </details>
-            </Cards>
+            <p class="callout @operationTone">@operationMessage</p>
         }
+    </div>
+    <div class="project-actions">
+        <button class="btn" @onclick="PreviewAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Preview Prompt</button>
+        <button class="btn btn-primary" @onclick="RunAsync" disabled="@(!CanPreview || busy || activeJobId is not null)">Generate Explanation</button>
+        <button class="btn btn-outline-danger" @onclick="CancelRunAsync" disabled="@(activeJobId is null)">Cancel</button>
+        <button class="btn" @onclick="@(() => SaveAsync())" disabled="@(result?.Status != AiRunStatus.Completed || string.IsNullOrWhiteSpace(editedMarkdown) || busy || activeJobId is not null)">Save edited explanation</button>
+        <a class="btn" href="@($"/projects/{ProjectId}/markdown?file=.ai-context/docs/backend/07-ai-explanation.md")">Open in Markdown Workspace</a>
+        <button class="btn" @onclick="CopyAsync" disabled="@string.IsNullOrWhiteSpace(editedMarkdown)">Copy Explanation</button>
+    </div>
+</section>
 
+@if (loading)
+{
+    <LoadingState />
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <ErrorState Message="@error" />
+}
+else
+{
+    <Cards Title="Provider and Profile">
         @if (activeJobId is not null)
         {
-            <Cards Title="Generated Explanation">
-                <AiExplanationJobPanel ProjectId="@ProjectId" JobId="@activeJobId.Value" OnFinished="HandleJobFinishedAsync" />
-            </Cards>
+            <p class="callout info">Working on the explanation request. Local models can take a while; LM Studio Developer Logs will show token/context details while this runs.</p>
         }
-        else if (result is not null || !string.IsNullOrWhiteSpace(editedMarkdown))
-        {
-            <Cards Title="Generated Explanation">
-                <div class="d-flex gap-2 flex-wrap">
-                    <span class="pill">@(result?.Status.ToString() ?? "Receiving")</span>
-                    @if (result?.Quality is not null)
+        <div class="grid two">
+            <label>
+                Provider
+                <select class="form-select" @bind="providerId" @bind:after="ProviderChangedAsync">
+                    @foreach (var provider in options?.Providers ?? [])
                     {
-                        <span class="pill @(result.Quality.Status == AiExplanationQualityStatus.Good ? "ok" : "warn")">Quality: @result.Quality.Status</span>
+                        <option value="@provider.ProviderId">@ProviderDisplay(provider)</option>
                     }
-                    <span class="pill">Path: @(result?.SuggestedFilePath ?? ".ai-context/docs/backend/07-ai-explanation.md")</span>
+                </select>
+            </label>
+            <label>
+                Model
+                @if (modelOptions.Count > 0)
+                {
+                    <select class="form-select" value="@model" @onchange="ModelChangedAsync">
+                        @foreach (var availableModel in modelOptions)
+                        {
+                            <option value="@availableModel">@availableModel</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input class="form-control" @bind="model" @bind:after="SaveSettingsAsync" placeholder="model name" />
+                }
+                <div class="field-actions">
+                    <button type="button" class="btn btn-sm" @onclick="RefreshModelsAsync" disabled="@busy">Refresh models</button>
+                    @if (!string.IsNullOrWhiteSpace(modelListWarning))
+                    {
+                        <span class="muted">@modelListWarning</span>
+                    }
                 </div>
-                @if (!string.IsNullOrWhiteSpace(result?.Error))
-                {
-                    <p class="callout bad">@result.Error</p>
-                }
-                @if (result?.Status == AiRunStatus.Completed && string.IsNullOrWhiteSpace(editedMarkdown))
-                {
-                    <p class="callout warn">The provider finished but returned no explanation text. Try a smaller context pack, reduce included files, or increase the local model context length.</p>
-                }
-                @if (result?.Quality?.Warnings.Count > 0)
-                {
-                    @foreach (var warning in result.Quality.Warnings)
+            </label>
+            <label>
+                Explanation profile
+                <select class="form-select" @bind="profile" @bind:after="SaveSettingsAsync">
+                    @foreach (var item in options?.Profiles ?? Enum.GetValues<ExplanationProfile>())
                     {
-                        <div class="list-row"><strong>Quality</strong><span>@warning</span></div>
+                        <option value="@item">@item</option>
                     }
+                </select>
+            </label>
+            <label>
+                Context pack
+                <select class="form-select" @bind="packId" @bind:after="SaveSettingsAsync">
+                    @foreach (var pack in options?.Packs ?? [])
+                    {
+                        <option value="@pack.Pack.Id">@pack.Pack.Name</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="checkbox-row">
+            <label class="checkbox-with-action">
+                <span><input type="checkbox" @bind="includeSourceSnippets" @bind:after="SaveSettingsAsync" /> Include source snippets</span>
+                @if (includeSourceSnippets)
+                {
+                    <button type="button" class="mini-icon-button" title="Choose source snippet types and files" @onclick="OpenSourceSnippetPickerAsync">⚙</button>
                 }
-                <LwXLab.MarkDown @key="editorInstanceKey" @ref="explanationEditor" Value="@editedMarkdown"
+            </label>
+            <label><input type="checkbox" @bind="includeTests" @bind:after="SaveSettingsAsync" /> Include tests</label>
+            <label><input type="checkbox" @bind="includeGeneratedDocs" @bind:after="SaveSettingsAsync" /> Include generated docs</label>
+            <label><input type="checkbox" @bind="includeProjectIndex" @bind:after="SaveSettingsAsync" /> Include project index</label>
+            <label><input type="checkbox" @bind="includePublicApi" @bind:after="SaveSettingsAsync" /> Include public API</label>
+            <label><input type="checkbox" @bind="includeFlows" @bind:after="SaveSettingsAsync" /> Include flows</label>
+            <label><input type="checkbox" @bind="includeArchitecture" @bind:after="SaveSettingsAsync" /> Include architecture</label>
+            <label><input type="checkbox" @bind="includeScanDiff" @bind:after="SaveSettingsAsync" /> Include scan diff</label>
+        </div>
+        @if (includeScanDiff)
+        {
+            <label>
+                Scan diff scope
+                <select class="form-select" @bind="scanDiffScope" @bind:after="SaveSettingsAsync">
+                    <option value="@SourceBranchScanDiffScope.LatestScan">Latest scan change</option>
+                    <option value="@SourceBranchScanDiffScope.AllBranchScans">All branch scans</option>
+                </select>
+            </label>
+        }
+        <div class="markdown-field">
+            <div class="markdown-field-label">Optional instruction</div>
+            <LwXLab.MarkDown @bind-Value="instruction" @bind-Value:after="OnInstructionChanged"
+                             SplitView="true" Preview="false" EnableMenu="true" MinHeight="100px" Height="150px" EnableEdit="true" 
+                             AutoSaveDelay="1000" AutoSaveEnabled="true" 
+                             ShowStatusBar="true" ShowToolBarButtons="true" AllowPreviewToggle="true" 
+                             ShowThemeSelector="false" AllowFullScreen="true" />
+
+        </div>
+        <div class="grid two">
+            <label>
+                Max input tokens
+                <input class="form-control" type="number" @bind="maxInputTokens" @bind:after="SaveSettingsAsync" />
+            </label>
+            <label>
+                Max output tokens
+                <input class="form-control" type="number" @bind="maxOutputTokens" @bind:after="SaveSettingsAsync" />
+            </label>
+        </div>
+    </Cards>
+
+    @if (preview is not null)
+    {
+        <Cards Title="Prompt Preview">
+            <div class="metric-grid">
+                <MetricCard Label="Prompt tokens" Value="@preview.TokenEstimate.PromptTokens.ToString()" />
+                <MetricCard Label="Output tokens" Value="@preview.TokenEstimate.MaxOutputTokens.ToString()" />
+                <MetricCard Label="Total tokens" Value="@preview.TokenEstimate.TotalTokens.ToString()" />
+                <MetricCard Label="Prompt hash" Value="@preview.PromptHash[..Math.Min(10, preview.PromptHash.Length)]" />
+            </div>
+            @if (preview.ProviderKind != AiProviderKind.Ollama)
+            {
+                <p class="callout warn">This provider is online or external. Selected project context will be sent to the configured AI provider.</p>
+            }
+            @foreach (var warning in preview.SafetyWarnings)
+            {
+                <div class="list-row"><strong>@warning.Severity</strong><span>@warning.Message</span></div>
+            }
+            <details>
+                <summary>Included files (@preview.IncludedFiles.Count(f => f.Included))</summary>
+                @foreach (var file in preview.IncludedFiles)
+                {
+                    <div class="list-row"><strong>@file.RelativePath</strong><span>@(file.Included ? $"{file.TokenEstimate} tokens" : file.Warning)</span></div>
+                }
+            </details>
+            <div>
+                <LwXLab.MarkDown @key="editorInstanceKey" Value="@preview.PromptText" EnableEdit="false"
+                                 SplitView="false" Preview="true" EnableMenu="true" ShowStatusBar="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
+            </div>
+        </Cards>
+    }
+
+    @if (activeJobId is not null)
+    {
+        <Cards Title="Generated Explanation">
+            <AiExplanationJobPanel ProjectId="@ProjectId" JobId="@activeJobId.Value" OnFinished="HandleJobFinishedAsync" />
+        </Cards>
+    }
+    else if (result is not null || !string.IsNullOrWhiteSpace(editedMarkdown))
+    {
+        <Cards Title="Generated Explanation">
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="pill">@(result?.Status.ToString() ?? "Receiving")</span>
+                @if (result?.Quality is not null)
+                {
+                    <span class="pill @(result.Quality.Status == AiExplanationQualityStatus.Good ? "ok" : "warn")">Quality: @result.Quality.Status</span>
+                }
+                <span class="pill">Path: @(result?.SuggestedFilePath ?? ".ai-context/docs/backend/07-ai-explanation.md")</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(result?.Error))
+            {
+                <p class="callout bad">@result.Error</p>
+            }
+            @if (result?.Status == AiRunStatus.Completed && string.IsNullOrWhiteSpace(editedMarkdown))
+            {
+                <p class="callout warn">The provider finished but returned no explanation text. Try a smaller context pack, reduce included files, or increase the local model context length.</p>
+            }
+            @if (result?.Quality?.Warnings.Count > 0)
+            {
+                @foreach (var warning in result.Quality.Warnings)
+                {
+                    <div class="list-row"><strong>Quality</strong><span>@warning</span></div>
+                }
+            }
+            <LwXLab.MarkDown @key="editorInstanceKey" @ref="explanationEditor" Value="@editedMarkdown" 
                              SplitView="true" Preview="true" EnableMenu="true" ShowStatusBar="true" ShowToolBarButtons="false" ShowThemeSelector="false" AllowFullScreen="true" />
 
-            </Cards>
-        }
-        @if (saveResult is not null)
-        {
-            <Cards Title="Save Result">
-                <p>@(saveResult.Saved ? $"Saved to {saveResult.SavedFilePath}" : "Not saved")</p>
-                @foreach (var warning in saveResult.Warnings)
-                {
-                    <div class="list-row"><strong>Warning</strong><span>@warning</span></div>
-                }
-                @if (!saveResult.Saved && saveResult.Warnings.Any(w => w.Contains("manually modified", StringComparison.OrdinalIgnoreCase)))
-                {
-                    <button class="btn btn-outline-danger" @onclick="ForceSaveAsync">Confirm overwrite generated explanation</button>
-                }
-            </Cards>
-        }
+        </Cards>
     }
+    @if (saveResult is not null)
+    {
+        <Cards Title="Save Result">
+            <p>@(saveResult.Saved ? $"Saved to {saveResult.SavedFilePath}" : "Not saved")</p>
+            @foreach (var warning in saveResult.Warnings)
+            {
+                <div class="list-row"><strong>Warning</strong><span>@warning</span></div>
+            }
+            @if (!saveResult.Saved && saveResult.Warnings.Any(w => w.Contains("manually modified", StringComparison.OrdinalIgnoreCase)))
+            {
+                <button class="btn btn-outline-danger" @onclick="ForceSaveAsync">Confirm overwrite generated explanation</button>
+            }
+        </Cards>
+    }
+}
+
+@if (showSourceSnippetPicker)
+{
+    <div class="snippet-picker-backdrop" @onclick="CloseSourceSnippetPickerAsync">
+        <section class="snippet-picker-panel" role="dialog" aria-modal="true" aria-labelledby="snippet-picker-title" @onclick:stopPropagation="true">
+            <div class="snippet-picker-header">
+                <h2 id="snippet-picker-title">Source snippets</h2>
+                <button type="button" class="btn" @onclick="CloseSourceSnippetPickerAsync">Close</button>
+            </div>
+
+            <div class="snippet-type-grid">
+                @foreach (var option in SourceSnippetTypeOptions)
+                {
+                    <label class="form-check">
+                        <input class="form-check-input" type="checkbox" checked="@IsSourceSnippetTypeSelected(option.Extension)" @onchange="args => ToggleSourceSnippetType(option.Extension, args)" />
+                        <span>@option.Label</span>
+                    </label>
+                }
+            </div>
+
+            <div class="snippet-picker-tools">
+                <input class="form-control" placeholder="Filter files..." @bind="sourceSnippetFileFilter" @bind:event="oninput" />
+                <button type="button" class="btn btn-sm" @onclick="SelectVisibleSourceSnippetFiles">Select visible</button>
+                <button type="button" class="btn btn-sm" @onclick="ClearSourceSnippetFiles">Clear files</button>
+            </div>
+
+            <div class="snippet-file-list">
+                @foreach (var file in FilteredSourceSnippetFiles.Take(250))
+                {
+                    <label class="snippet-file-row">
+                        <input type="checkbox" checked="@selectedSourceSnippetFiles.Contains(file.Path)" @onchange="args => ToggleSourceSnippetFile(file.Path, args)" />
+                        <span>@file.Path</span>
+                        <small>@file.Language</small>
+                    </label>
+                }
+                @if (sourceSnippetFilesLoaded && !FilteredSourceSnippetFiles.Any())
+                {
+                    <div class="state">No source files matched the current filter.</div>
+                }
+                else if (!sourceSnippetFilesLoaded)
+                {
+                    <div class="state">Loading project files...</div>
+                }
+            </div>
+        </section>
+    </div>
+}
 
 @code {
     [Parameter] public Guid ProjectId { get; set; }
@@ -222,10 +281,11 @@
     private string model = "";
     private string packId = "backend-docs";
     private ExplanationProfile profile = ExplanationProfile.FullProjectExplanation;
-    private string? instruction;
+    private string? instruction = "Explain this for a senior developer joining the project tomorrow.";
     private bool includeSourceSnippets = true;
     private bool includeTests = true;
     private bool includeGeneratedDocs = true;
+    private bool includeProjectIndex;
     private bool includePublicApi = true;
     private bool includeFlows = true;
     private bool includeArchitecture = true;
@@ -243,6 +303,23 @@
     private string? modelListWarning;
     private Guid? activeJobId;
     private Guid? lastFinishedJobId;
+    private bool showSourceSnippetPicker;
+    private bool sourceSnippetFilesLoaded;
+    private string sourceSnippetFileFilter = "";
+    private readonly HashSet<string> selectedSourceSnippetTypes = new(StringComparer.OrdinalIgnoreCase) { "all" };
+    private readonly HashSet<string> selectedSourceSnippetFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<SourceSnippetFileOption> sourceSnippetFiles = [];
+    private static readonly IReadOnlyList<SourceSnippetTypeOption> SourceSnippetTypeOptions =
+    [
+        new("All", "all"),
+        new("C#", ".cs"),
+        new("Razor", ".razor"),
+        new("CSS", ".css"),
+        new("JavaScript", ".js"),
+        new("TypeScript", ".ts"),
+        new("JSON", ".json"),
+        new("YAML", ".yaml")
+    ];
 
     private bool CanPreview => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(packId);
     private string SettingsKey => $"sourceworker:explanation-settings:{ProjectId}";
@@ -280,7 +357,7 @@
     }
 
     private AiExplanationRequestDto Request()
-        => new(ProjectId, providerId ?? "", model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens, false, true, includeScanDiff, scanDiffScope);
+        => new(ProjectId, providerId ?? "", model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, maxInputTokens, maxOutputTokens, false, true, includeScanDiff, scanDiffScope, includeProjectIndex, selectedSourceSnippetTypes.ToArray(), selectedSourceSnippetFiles.ToArray());
 
     private async Task PreviewAsync()
     {
@@ -533,6 +610,7 @@
             includeSourceSnippets = saved.IncludeSourceSnippets;
             includeTests = saved.IncludeTests;
             includeGeneratedDocs = saved.IncludeGeneratedDocs;
+            includeProjectIndex = saved.IncludeProjectIndex;
             includePublicApi = saved.IncludePublicApi;
             includeFlows = saved.IncludeFlows;
             includeArchitecture = saved.IncludeArchitecture;
@@ -540,6 +618,12 @@
             scanDiffScope = saved.ScanDiffScope;
             maxInputTokens = saved.MaxInputTokens;
             maxOutputTokens = saved.MaxOutputTokens;
+            selectedSourceSnippetTypes.Clear();
+            foreach (var type in saved.SourceSnippetExtensions is { Count: > 0 } ? saved.SourceSnippetExtensions : ["all"])
+                selectedSourceSnippetTypes.Add(type);
+            selectedSourceSnippetFiles.Clear();
+            foreach (var file in saved.SourceSnippetFiles ?? [])
+                selectedSourceSnippetFiles.Add(file);
         }
         catch
         {
@@ -550,10 +634,93 @@
     private async Task SaveSettingsAsync()
     {
         if (!settingsLoaded) return;
-        var settings = new ExplanationPageSettings(providerId, model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includePublicApi, includeFlows, includeArchitecture, includeScanDiff, scanDiffScope, maxInputTokens, maxOutputTokens);
+        var settings = new ExplanationPageSettings(providerId, model, packId, profile, instruction, includeSourceSnippets, includeTests, includeGeneratedDocs, includeProjectIndex, includePublicApi, includeFlows, includeArchitecture, includeScanDiff, scanDiffScope, maxInputTokens, maxOutputTokens, selectedSourceSnippetTypes.ToArray(), selectedSourceSnippetFiles.ToArray());
         var json = System.Text.Json.JsonSerializer.Serialize(settings);
         await JS.InvokeAsync<object>("localStorage.setItem", [SettingsKey, json]);
     }
+
+    private IEnumerable<SourceSnippetFileOption> FilteredSourceSnippetFiles
+        => sourceSnippetFiles.Where(file =>
+            IsCandidateSourceSnippet(file.Path) &&
+            (string.IsNullOrWhiteSpace(sourceSnippetFileFilter) || file.Path.Contains(sourceSnippetFileFilter, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task OpenSourceSnippetPickerAsync()
+    {
+        showSourceSnippetPicker = true;
+        if (!sourceSnippetFilesLoaded)
+        {
+            sourceSnippetFiles.Clear();
+            sourceSnippetFiles.AddRange(FlattenSourceFiles(await Api.GetProjectFileTreeAsync(ProjectId)));
+            sourceSnippetFilesLoaded = true;
+        }
+    }
+
+    private async Task CloseSourceSnippetPickerAsync()
+    {
+        showSourceSnippetPicker = false;
+        await SaveSettingsAsync();
+    }
+
+    private static IEnumerable<SourceSnippetFileOption> FlattenSourceFiles(IEnumerable<ProjectWorkspaceFileNodeDto> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.IsFolder)
+            {
+                foreach (var child in FlattenSourceFiles(node.Children))
+                    yield return child;
+            }
+            else if (IsSourceLikePath(node.Path))
+            {
+                yield return new SourceSnippetFileOption(node.Path.Replace('\\', '/'), node.Language ?? node.Extension ?? "");
+            }
+        }
+    }
+
+    private bool IsCandidateSourceSnippet(string path)
+        => selectedSourceSnippetTypes.Contains("all") || selectedSourceSnippetTypes.Contains(System.IO.Path.GetExtension(path));
+
+    private static bool IsSourceLikePath(string path)
+    {
+        var extension = System.IO.Path.GetExtension(path);
+        return SourceSnippetTypeOptions.Any(option => option.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase)) &&
+               !path.Contains("/bin/", StringComparison.OrdinalIgnoreCase) &&
+               !path.Contains("/obj/", StringComparison.OrdinalIgnoreCase) &&
+               !path.StartsWith(".ai-context/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsSourceSnippetTypeSelected(string extension) => selectedSourceSnippetTypes.Contains(extension);
+
+    private void ToggleSourceSnippetType(string extension, ChangeEventArgs args)
+    {
+        var enabled = args.Value is bool b && b;
+        if (extension.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            selectedSourceSnippetTypes.Clear();
+            if (enabled) selectedSourceSnippetTypes.Add("all");
+            return;
+        }
+
+        selectedSourceSnippetTypes.Remove("all");
+        if (enabled) selectedSourceSnippetTypes.Add(extension);
+        else selectedSourceSnippetTypes.Remove(extension);
+        if (selectedSourceSnippetTypes.Count == 0) selectedSourceSnippetTypes.Add("all");
+    }
+
+    private void ToggleSourceSnippetFile(string path, ChangeEventArgs args)
+    {
+        var enabled = args.Value is bool b && b;
+        if (enabled) selectedSourceSnippetFiles.Add(path);
+        else selectedSourceSnippetFiles.Remove(path);
+    }
+
+    private void SelectVisibleSourceSnippetFiles()
+    {
+        foreach (var file in FilteredSourceSnippetFiles.Take(250))
+            selectedSourceSnippetFiles.Add(file.Path);
+    }
+
+    private void ClearSourceSnippetFiles() => selectedSourceSnippetFiles.Clear();
 
     private async Task SaveAsync(bool force = false)
     {
@@ -600,11 +767,24 @@
         bool IncludeSourceSnippets,
         bool IncludeTests,
         bool IncludeGeneratedDocs,
+        bool IncludeProjectIndex,
         bool IncludePublicApi,
         bool IncludeFlows,
         bool IncludeArchitecture,
         bool IncludeScanDiff,
         SourceBranchScanDiffScope ScanDiffScope,
         int MaxInputTokens,
-        int MaxOutputTokens);
+        int MaxOutputTokens,
+        IReadOnlyList<string>? SourceSnippetExtensions,
+        IReadOnlyList<string>? SourceSnippetFiles);
+
+    private sealed record SourceSnippetTypeOption(string Label, string Extension);
+    private sealed record SourceSnippetFileOption(string Path, string Language);
+
+
+
+    private async Task OnInstructionChanged()
+    {
+        await SaveSettingsAsync();
+    }
 }

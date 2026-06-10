@@ -18,10 +18,14 @@ else
 
     @if (!string.IsNullOrWhiteSpace(status.MarkdownPreview))
     {
-        <p class="callout info">Receiving answer text. This preview updates from the backend job status and will become editable after completion.</p>
-        <div class="markdown-live-preview">
+        @* <p class="callout info">Receiving answer text. This preview updates from the backend job status and will become editable after completion.</p> *@
+       @*  <div class="markdown-live-preview">
             <pre>@status.MarkdownPreview</pre>
-        </div>
+        </div> *@
+        <LwXLab.MarkDown @key="editorInstanceKey" Value="@status.MarkdownPreview" EnableEdit="false" Height="400px"
+                         SplitView="false" Preview="true" EnableMenu="true" ShowStatusBar="true" ShowToolBarButtons="false"
+                         ShowThemeSelector="false" AllowFullScreen="true" />
+
     }
     else if (!status.IsCompleted && !status.IsFailed && !status.IsCancelled)
     {
@@ -33,6 +37,8 @@ else
     [Parameter] public Guid ProjectId { get; set; }
     [Parameter] public Guid JobId { get; set; }
     [Parameter] public EventCallback<AiExplanationJobStatusDto> OnFinished { get; set; }
+    private int editorInstanceKey;
+
 
     private AiExplanationJobStatusDto? status;
     private CancellationTokenSource? pollingCancellation;

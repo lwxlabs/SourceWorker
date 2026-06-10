@@ -1,7 +1,5 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/LwXLab.Markdown/LwXLab.Markdown.csproj" />
-  </Folder>
+  <Folder Name="/src/" />
   <Folder Name="/src/core/">
     <Project Path="src/core/SourceWorker.Application/SourceWorker.Application.csproj" />
     <Project Path="src/core/SourceWorker.Contracts/SourceWorker.Contracts.csproj" />
@@ -40,4 +38,5 @@
     <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
   </Folder>
   <Project Path="../../../libs/LwXLab.FileEditor/LwXLab.FileEditor.csproj" />
+  <Project Path="../../../libs/LwXLab.Markdown/LwXLab.Markdown.csproj" />
 </Solution>

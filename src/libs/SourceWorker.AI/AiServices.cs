@@ -547,6 +547,11 @@ public sealed class AiExplanationPromptBuilder(
         builder.AppendLine();
 
         var coreFiles = new List<string> { ".ai-context/agent-handoff.md" };
+        if (request.IncludeProjectIndex)
+        {
+            coreFiles.Add(".ai-context/docs/backend/00-project-index.md");
+        }
+
         if (request.IncludeGeneratedDocs)
         {
             coreFiles.AddRange([
@@ -588,14 +593,14 @@ public sealed class AiExplanationPromptBuilder(
 
         if (request.IncludeSourceSnippets || request.IncludePublicApi)
         {
-            var symbolFiles = (await symbols.GetByProjectAsync(project.Id, cancellationToken))
-                .Where(s => !IsGeneratedOrForbidden(s.RelativePath) && !IsTestPath(s.RelativePath))
-                .OrderByDescending(s => s.Accessibility.Equals("public", StringComparison.OrdinalIgnoreCase))
-                .ThenBy(s => s.RelativePath.Count(c => c is '/' or '\\'))
-                .Select(s => s.RelativePath)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(20)
-                .ToArray();
+            var selectedFiles = NormalizeList(request.SourceSnippetFiles);
+            var selectedExtensions = NormalizeExtensions(request.SourceSnippetExtensions);
+            var symbolFiles = selectedFiles.Count > 0
+                ? selectedFiles
+                    .Where(relative => IsAllowedSourceSnippet(relative, selectedExtensions))
+                    .Take(40)
+                    .ToArray()
+                : BuildSourceSnippetFiles(project, await symbols.GetByProjectAsync(project.Id, cancellationToken), selectedExtensions);
 
             foreach (var relative in symbolFiles)
             {
@@ -718,6 +723,93 @@ public sealed class AiExplanationPromptBuilder(
     }
 
     private static bool IsTestPath(string relativePath) => relativePath.Contains(".Tests", StringComparison.OrdinalIgnoreCase) || relativePath.Contains("/tests/", StringComparison.OrdinalIgnoreCase) || relativePath.Contains("\\tests\\", StringComparison.OrdinalIgnoreCase);
+    private static IReadOnlyList<string> NormalizeList(IReadOnlyList<string>? values)
+        => (values ?? [])
+            .Select(value => value.Trim().Replace('\\', '/'))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static IReadOnlySet<string> NormalizeExtensions(IReadOnlyList<string>? values)
+    {
+        var normalized = NormalizeList(values)
+            .Where(value => !value.Equals("all", StringComparison.OrdinalIgnoreCase))
+            .Select(value => value.StartsWith('.') ? value : $".{value}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return normalized;
+    }
+
+    private static bool IsAllowedSourceSnippet(string relativePath, IReadOnlySet<string> extensions)
+        => extensions.Count == 0 || extensions.Contains(Path.GetExtension(relativePath));
+
+    private static IReadOnlyList<string> BuildSourceSnippetFiles(Project project, IReadOnlyList<CodeSymbol> codeSymbols, IReadOnlySet<string> extensions)
+    {
+        var fromSymbols = codeSymbols
+            .Where(s => !IsGeneratedOrForbidden(s.RelativePath) && !IsTestPath(s.RelativePath))
+            .Where(s => IsAllowedSourceSnippet(s.RelativePath, extensions))
+            .OrderByDescending(s => s.Accessibility.Equals("public", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(s => s.RelativePath.Count(c => c is '/' or '\\'))
+            .Select(s => s.RelativePath);
+
+        var root = Path.GetFullPath(project.RootPath);
+        var ignorePatterns = AiIgnoreRules.LoadFileIgnorePatterns(root);
+        var fromFiles = EnumerateSourceCandidateFiles(root)
+            .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
+            .Where(relative => !AiIgnoreRules.IsFileIgnored(relative, false, ignorePatterns))
+            .Where(relative => !IsGeneratedOrForbidden(relative) && !IsTestPath(relative))
+            .Where(relative => IsAllowedSourceSnippet(relative, extensions))
+            .Where(relative => IsSourceSnippetExtension(Path.GetExtension(relative)));
+
+        return fromSymbols.Concat(fromFiles)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(40)
+            .ToArray();
+    }
+
+    private static bool IsSourceSnippetExtension(string extension)
+        => extension.Equals(".cs", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".razor", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".css", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".js", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".ts", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".json", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".yaml", StringComparison.OrdinalIgnoreCase) ||
+           extension.Equals(".yml", StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> EnumerateSourceCandidateFiles(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            IEnumerable<string> children;
+            try
+            {
+                children = Directory.EnumerateFileSystemEntries(directory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var child in children)
+            {
+                if (Directory.Exists(child))
+                {
+                    var name = Path.GetFileName(child);
+                    if (name is "bin" or "obj" or ".git" or ".vs" or ".idea" or "node_modules" or ".ai-context")
+                        continue;
+                    pending.Push(child);
+                }
+                else
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+
     private static bool IsGeneratedOrForbidden(string relativePath)
     {
         var path = relativePath.Replace('\\', '/');

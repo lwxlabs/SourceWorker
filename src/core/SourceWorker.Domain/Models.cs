@@ -548,7 +548,10 @@ public sealed record AiExplanationRequest(
     bool StorePrompt,
     bool StoreOutput,
     bool IncludeScanDiff = false,
-    SourceBranchScanDiffScope ScanDiffScope = SourceBranchScanDiffScope.LatestScan);
+    SourceBranchScanDiffScope ScanDiffScope = SourceBranchScanDiffScope.LatestScan,
+    bool IncludeProjectIndex = false,
+    IReadOnlyList<string>? SourceSnippetExtensions = null,
+    IReadOnlyList<string>? SourceSnippetFiles = null);
 
 public sealed record AiExplanationPreview(
     Guid ProjectId,

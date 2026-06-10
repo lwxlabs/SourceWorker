@@ -12,7 +12,6 @@
             <button class="btn" @onclick="LoadFilesAsync" disabled="@busy">Reload</button>
             <button class="btn btn-primary" @onclick="@(() => SaveAsync())" disabled="@(content is null || busy)">Save</button>
             <button class="btn" @onclick="CopyAsync" disabled="@(content is null)">Copy markdown</button>
-            <button class="btn" @onclick="InsertMermaid" disabled="@(content is null)">Insert Mermaid flow</button>
         </div>
     </section>
 
@@ -80,7 +79,9 @@
                             <button class="btn" @onclick="ForceSaveAsync">Confirm save</button>
                         </div>
                     }
-                    <LwXLab.MarkDown @key="editorInstanceKey" @ref="markdownEditor" Value="@markdown" EnableMermaid="true" EnableHighlight="true" Preview="false" AllowPreviewToggle="true" ShowStatusBar="false" />
+                    <LwXLab.MarkDown @key="editorInstanceKey" @ref="markdownEditor" Value="@markdown" 
+                    EnableSearch ShowSearchIcon EnableScrollPreview
+                    Preview="false" AllowPreviewToggle="true" ShowStatusBar="false" />
                 }
             </main>
         </div>
@@ -183,29 +184,6 @@
         Toast.ShowSuccess("Markdown copied.");
     }
 
-    private async Task InsertMermaid()
-    {
-        var snippet = """
-
-```mermaid
-flowchart LR
-    A[Write Markdown] --> B{Preview?}
-    B -- yes --> C[Render Mermaid]
-    B -- no --> D[Keep editing]
-```
-""";
-        if (markdownEditor is not null)
-        {
-            await markdownEditor.InsertTextAsync(snippet);
-        }
-        else
-        {
-            markdown += snippet;
-            editorInstanceKey++;
-        }
-
-        dirty = true;
-    }
 
     private static string GroupLabel(MarkdownWorkspaceScope scope) => scope switch
     {

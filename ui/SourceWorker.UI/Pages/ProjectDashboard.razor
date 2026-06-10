@@ -40,8 +40,11 @@
         </Cards>
 
         <Cards Title="Quick Ask">
-            <p>SourceWorker prepares context. It does not edit files or apply AI output.</p>
-            <textarea rows="3" @bind="quickAsk" placeholder="Ask about this project..."></textarea>
+        <LwXLab.MarkDown @bind-Value="quickAsk"
+                         SplitView="true" Preview="false" EnableMenu="true" MinHeight="100px" Height="150px" EnableEdit="true"
+                         AutoSaveDelay="1000" AutoSaveEnabled="true" ShowToolbar="false"
+                         ShowStatusBar="true" ShowToolBarButtons="false" AllowPreviewToggle="false"
+                         ShowThemeSelector="false" AllowFullScreen="false" />
             <div class="d-flex gap-2">
                 <button class="btn" @onclick="PreviewQuickAsk">Preview</button>
                 <button class="btn btn-primary" @onclick="RunQuickAsk" disabled="@(quickPreview is null)">Ask</button>
