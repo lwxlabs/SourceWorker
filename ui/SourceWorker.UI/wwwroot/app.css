@@ -1,11 +1,18 @@
 html, body {
     margin: 0;
     width: 100%;
+    min-width: 0;
     height: 100%;
+    min-height: 100%;
     overflow: hidden;
     background: #f8fafc;
     color: #172033;
     font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+    position: fixed;
+    inset: 0;
 }
 
 body.sourceworker-desktop {
@@ -13,8 +20,10 @@ body.sourceworker-desktop {
 }
 
 #app {
-    height: 100%;
-    width: 100%;
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    width: 100vw;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -124,13 +133,14 @@ a { color: inherit; text-decoration: none; }
     display: flex;
     flex: 1 1 auto;
     width: 100%;
-    height: 100%;
+    height: calc(100dvh - var(--sw-statusbar-height, 0px));
     overflow: hidden; 
     min-width: 0;
+    min-height: 0;
 }
 
 
-.sw-sidebar { width: 240px; border-right: 1px solid var(--line); background: #101820; color: #fff; padding: 18px; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+.sw-sidebar { flex: 0 0 240px; width: 240px; border-right: 1px solid var(--line); background: #101820; color: #fff; padding: 18px; min-height: 0; max-height: 100%; overflow: auto; }
 .sw-brand { display: block; font-weight: 700; font-size: 20px; margin-bottom: 24px; }
 .sw-sidebar nav { display: grid; gap: 8px; }
 .sw-sidebar nav a { padding: 10px 12px; border-radius: 6px; color: #e7eef8; }
@@ -151,10 +161,11 @@ a { color: inherit; text-decoration: none; }
     width: 100%;
     max-width: none;
     padding: 24px;
+    min-width: 0;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     position: relative;
 }
 .sw-content-inner {
@@ -301,9 +312,36 @@ code { overflow-wrap: anywhere; color: #334155; }
 .w-100 { width: 100% !important; }
 .h-100 { height: 100% !important; }
 @media (max-width: 900px) {
-    .sw-shell { flex-direction: column; height: auto; overflow: auto; }
+    .sw-shell {
+        flex-direction: column;
+        height: calc(100dvh - var(--sw-statusbar-height, 0px));
+        overflow: hidden;
+    }
+
+    .sw-sidebar {
+        flex: 0 0 auto;
+        width: 100%;
+        max-height: 220px;
+    }
+
     .split, .grid.two, .ignore-help-grid, .tasks-workspace, .task-options { grid-template-columns: 1fr; }
     .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .project-row-manage { grid-template-columns: 1fr; }
     .project-row-meta { justify-content: flex-start; }
+}
+
+select,
+.form-select,
+.form-control,
+input,
+textarea,
+button {
+    max-width: 100%;
+    min-width: 0;
+}
+
+select,
+.form-select {
+    position: relative;
+    z-index: 1;
 }

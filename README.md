@@ -153,6 +153,14 @@ Create shortcut:
 .\tools\publish\Create-DesktopShortcut.ps1
 ```
 
+Create a clean source ZIP:
+
+```powershell
+.\tools\Export-SourceArchive.ps1
+```
+
+The source archive excludes generated and local-only folders such as `bin/`, `obj/`, `.git/`, `.vs/`, `.idea/`, `node_modules/`, `artifacts/`, and `SourceWorker.Desktop.exe.WebView2/`.
+
 The desktop app starts the Local API internally, waits for health, configures the API client with the local token, and hosts the reusable UI through `BlazorWebView`. After publishing and creating the shortcut, no command is needed for normal use. Windows is first; macOS comes later.
 
 ## Development Startup

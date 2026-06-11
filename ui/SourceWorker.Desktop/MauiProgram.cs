@@ -3,6 +3,7 @@ using SourceWorker.ApiClient;
 using SourceWorker.Desktop.Services;
 using SourceWorker.Hosting;
 using SourceWorker.UI.Services;
+using LwXLab.AI.Engine.Extensions;
 using LwXLab.FileEditor.Extensions;
 using LwXLab.FileEditor.Services;
 using LwXLab.Markdown.Extensions;
@@ -31,6 +32,15 @@ public static class MauiProgram
         builder.Services.AddScoped<DashboardActionService>();
         builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
         builder.Services.AddLwXLabMarkdown();
+        builder.Services.AddLwXLabAiEngine();
+        builder.Services.AddLwOpenAiCompatibleProvider(options =>
+        {
+            options.Id = "lm-studio-local";
+            options.DisplayName = "LM Studio";
+            options.BaseUrl = "http://localhost:1234/v1";
+            options.Model = "gs/qwen3.5-9b";
+            options.IsLocal = true;
+        });
         builder.Services.AddLwXLabFileEditor(options =>
         {
             options.EnableMenuBar = true;
@@ -42,6 +52,10 @@ public static class MauiProgram
             options.EnableEditorSplitting = true;
             options.EnableLocalDraftBackup = true;
             options.EnableUnsavedChangesGuard = true;
+            options.EnableAiActions = true;
+            options.EnableAiPanel = true;
+            options.EnableAiContextMenus = true;
+            options.EnableAiApply = true;
             options.AutoSaveMode = LwXLab.FileEditor.Models.LwAutoSaveMode.Off;
             options.SidebarWidth = "300px";
         });

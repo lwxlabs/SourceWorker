@@ -37,6 +37,9 @@
     <Project Path="ui/SourceWorker.Desktop/SourceWorker.Desktop.csproj" />
     <Project Path="ui/SourceWorker.UI/SourceWorker.UI.csproj" />
   </Folder>
+  <Project Path="../../../libs/LwXLab.AI.Engine.IntegrationTests/LwXLab.AI.Engine.IntegrationTests.csproj" />
+  <Project Path="../../../libs/LwXLab.AI.Engine.Tests/LwXLab.AI.Engine.Tests.csproj" />
+  <Project Path="../../../libs/LwXLab.AI.Engine/LwXLab.AI.Engine.csproj" />
   <Project Path="../../../libs/LwXLab.FileEditor/LwXLab.FileEditor.csproj" />
   <Project Path="../../../libs/LwXLab.Markdown/LwXLab.Markdown.csproj" />
 </Solution>
