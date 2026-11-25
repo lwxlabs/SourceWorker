@@ -45,3 +45,7 @@ dotnet test SourceWorker.Public.slnx -c Release -p:SourceWorkerPrivateExtensions
 SourceWorker runs locally. Keep the API on loopback with token authentication enabled. AI providers are optional; remote providers receive only the context submitted to them.
 
 See [architecture and development notes](docs/Current.md).
+
+## License
+
+Licensed under the [MIT License](LICENSE).
