@@ -409,3 +409,13 @@ TEST*.xml
 *.war
 
 
+
+# Public dependency checkouts and local project context
+.dependencies/
+.ai-context/
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+!SECURITY.md

@@ -7,7 +7,7 @@ using SourceWorker.Worker;
 
 var services = new ServiceCollection()
     .AddSourceWorkerApplication()
-    .AddSourceWorkerInfrastructure()
+    .AddSourceWorkerInfrastructure(options => options.DatabasePath = Environment.GetEnvironmentVariable("SOURCEWORKER_STORAGE_PATH"))
     .AddSourceWorkerJobs(addHostedWorker: false)
     .BuildServiceProvider();
 

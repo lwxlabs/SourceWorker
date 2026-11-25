@@ -1,0 +1,92 @@
+@inject ISourceWorkerApiClient Api
+
+<h3>Project files</h3>
+<div class="d-flex gap-2 align-items-center">
+    <input type="search" class="form-control" placeholder="Filter files" @bind="filter" @bind:event="oninput" />
+    <button class="btn btn-outline-secondary" @onclick="RefreshAsync" disabled="@busy">Refresh</button>
+</div>
+@if (!string.IsNullOrEmpty(error))
+{
+    <p role="alert">@error</p>
+}
+<div style="display:grid;grid-template-columns:minmax(180px,30%) minmax(0,1fr);gap:12px;margin-top:12px">
+    <div style="max-height:65vh;overflow:auto">
+        @foreach (var path in paths.Where(p => p.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+        {
+            <button class="btn btn-sm btn-outline-secondary d-block text-start w-100 mb-1" @onclick="() => OpenAsync(path)" disabled="@(busy || Dirty)">@path</button>
+        }
+    </div>
+    <div>
+        @if (file is not null)
+        {
+            <p>@file.Path</p>
+            <textarea class="form-control" style="min-height:50vh;font-family:monospace" @bind="content" @bind:event="oninput" readonly="@file.IsReadonly" disabled="@busy"></textarea>
+            <button class="btn btn-primary mt-2" @onclick="SaveAsync" disabled="@(busy || file.IsReadonly || !Dirty)">Save</button>
+            <button class="btn btn-outline-secondary mt-2" @onclick="Discard" disabled="@(busy || !Dirty)">Discard changes</button>
+        }
+        else
+        {
+            <p>Select a file to view its contents.</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    private Guid loadedProject;
+    private IReadOnlyList<string> paths = [];
+    private ProjectWorkspaceFileContentDto? file;
+    private string content = "";
+    private string filter = "";
+    private string? error;
+    private bool busy;
+    private bool Dirty => file is not null && content != file.Content;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedProject == ProjectId) return;
+        loadedProject = ProjectId;
+        file = null;
+        content = "";
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        busy = true;
+        error = null;
+        try { paths = await Api.GetProjectFilePathsAsync(ProjectId); }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task OpenAsync(string path)
+    {
+        if (Dirty || busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            file = await Api.GetProjectFileContentAsync(ProjectId, path);
+            content = file.Content;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (file is null || file.IsReadonly || !Dirty || busy) return;
+        busy = true;
+        error = null;
+        try
+        {
+            await Api.SaveProjectFileContentAsync(ProjectId, new ProjectWorkspaceSaveFileRequestDto(file.Path, content));
+            file = file with { Content = content };
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private void Discard() => content = file?.Content ?? "";
+}

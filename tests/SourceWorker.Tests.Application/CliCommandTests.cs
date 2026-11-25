@@ -4,6 +4,8 @@ namespace SourceWorker.Tests.Application;
 
 public sealed class CliCommandTests
 {
+    private readonly string storagePath = Path.Combine(Path.GetTempPath(), "sourceworker-cli-test-" + Guid.NewGuid() + ".db");
+
     [Fact]
     public async Task Cli_instruction_recipe_and_doctor_commands_work()
     {
@@ -56,7 +58,9 @@ public sealed class CliCommandTests
         Assert.Contains("SafeDeleteFiles", cleanupPreview);
         Assert.Contains("Dry run: True", cleanupDryRun);
         Assert.Contains("Program", symbols);
-        Assert.Contains("Scan Project", flows);
+        using var flowJson = System.Text.Json.JsonDocument.Parse(flows);
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, flowJson.RootElement.ValueKind);
+        Assert.DoesNotContain("Scan Project", flows);
         Assert.Contains("[", routes);
         Assert.Contains("ai-handoff.md", contextFiles);
         Assert.Contains("AI Handoff", handoff);
@@ -74,20 +78,30 @@ public sealed class CliCommandTests
         Assert.True(File.Exists(Path.Combine(projectRoot, "instructions", "Result", "Backend", "06-verification-checklist.md")));
     }
 
-    private static async Task<string> Dotnet(string workingDirectory, string arguments)
+    private async Task<string> Dotnet(string workingDirectory, string arguments)
     {
-        using var process = Process.Start(new ProcessStartInfo("dotnet", arguments)
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name ?? "Debug";
+        var cli = Path.Combine(workingDirectory, "src", "services", "SourceWorker.Cli", "bin", configuration, "net10.0", "SourceWorker.Cli.dll");
+        Assert.True(File.Exists(cli), $"Build the CLI before running tests: {cli}");
+        const string prefix = "run --no-build --project src/services/SourceWorker.Cli -- ";
+        Assert.StartsWith(prefix, arguments);
+        arguments = $"\"{cli}\" {arguments[prefix.Length..]}";
+        var startInfo = new ProcessStartInfo("dotnet", arguments)
         {
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
-        })!;
+        };
+        startInfo.Environment["SOURCEWORKER_STORAGE_PATH"] = storagePath;
+        using var process = Process.Start(startInfo)!;
 
-        var output = await process.StandardOutput.ReadToEndAsync();
-        var error = await process.StandardError.ReadToEndAsync();
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
+        var output = await outputTask;
+        var error = await errorTask;
         Assert.True(process.ExitCode == 0, output + Environment.NewLine + error);
         return output + error;
     }

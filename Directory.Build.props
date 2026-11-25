@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <SourceWorkerLocalLibraries>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../../libs'))</SourceWorkerLocalLibraries>
+    <SourceWorkerPrivateExtensions Condition="'$(SourceWorkerPrivateExtensions)' == '' and Exists('$(SourceWorkerLocalLibraries)/LwXLab.AI.Engine/LwXLab.AI.Engine.csproj') and Exists('$(SourceWorkerLocalLibraries)/LwXLab.FileEditor/LwXLab.FileEditor.csproj')">true</SourceWorkerPrivateExtensions>
+    <SourceWorkerPrivateExtensions Condition="'$(SourceWorkerPrivateExtensions)' == ''">false</SourceWorkerPrivateExtensions>
+    <SourceWorkerDependencyRoot Condition="'$(SourceWorkerDependencyRoot)' == ''">$(MSBuildThisFileDirectory).dependencies</SourceWorkerDependencyRoot>
+    <DefineConstants Condition="'$(SourceWorkerPrivateExtensions)' == 'true'">$(DefineConstants);SOURCEWORKER_PRIVATE_EXTENSIONS</DefineConstants>
+  </PropertyGroup>
+</Project>

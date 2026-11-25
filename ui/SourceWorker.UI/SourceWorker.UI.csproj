@@ -17,9 +17,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.AI.Engine\LwXLab.AI.Engine.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.Markdown\LwXLab.Markdown.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.FileEditor\LwXLab.FileEditor.csproj" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.AI.Engine\LwXLab.AI.Engine.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.Markdown\LwXLab.Markdown.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.FileEditor\LwXLab.FileEditor.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(SourceWorkerPrivateExtensions)' != 'true'">
+    <ProjectReference Include="$(SourceWorkerDependencyRoot)/LwXLab.Markdown/LwXLab.Markdown.csproj" />
+    <RazorComponent Remove="Pages/AdvancedFilesPage.razor" />
+    <Content Remove="Pages/AdvancedFilesPage.razor" />
+    <Compile Remove="Services/ProjectFileEditorServices.cs" />
+  </ItemGroup>
 </Project>

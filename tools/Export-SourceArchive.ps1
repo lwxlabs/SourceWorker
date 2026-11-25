@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Force -Path $resolvedOutputDirectory | Out-Null
 
 $excludeSegments = @(
     ".git",
+    ".dependencies",
     ".vs",
     ".idea",
     "bin",
@@ -38,14 +39,26 @@ $excludeFiles = @(
     "*.db-shm",
     "*.db-wal",
     "*.log",
-    "*.tmp"
+    "*.tmp",
+    ".env",
+    ".env.*",
+    "secrets.json",
+    "appsettings.Local.json",
+    "appsettings.Development.local.json",
+    "*.pfx",
+    "*.pem",
+    "*.key"
 )
 
 $repoRootPath = $repoRoot.Path.TrimEnd('\')
+$tracked = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+git -C $repoRootPath ls-files | ForEach-Object { [void]$tracked.Add($_) }
+if ($LASTEXITCODE -ne 0) { throw "Unable to list tracked source files." }
 $files = Get-ChildItem -LiteralPath $repoRootPath -Recurse -File -Force |
     Where-Object {
         $relativePath = $_.FullName.Substring($repoRootPath.Length).TrimStart('\')
         $normalized = $relativePath -replace '\\', '/'
+        if (-not $tracked.Contains($normalized) -and -not ($IncludeArtifacts -and $normalized.StartsWith("artifacts/"))) { return $false }
         $segments = $normalized.Split('/', [StringSplitOptions]::RemoveEmptyEntries)
 
         foreach ($segment in $excludeSegments) {

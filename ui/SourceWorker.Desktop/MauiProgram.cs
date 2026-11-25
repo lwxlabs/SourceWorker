@@ -3,9 +3,11 @@ using SourceWorker.ApiClient;
 using SourceWorker.Desktop.Services;
 using SourceWorker.Hosting;
 using SourceWorker.UI.Services;
+#if SOURCEWORKER_PRIVATE_EXTENSIONS
 using LwXLab.AI.Engine.Extensions;
 using LwXLab.FileEditor.Extensions;
 using LwXLab.FileEditor.Services;
+#endif
 using LwXLab.Markdown.Extensions;
 
 namespace SourceWorker.Desktop;
@@ -32,13 +34,14 @@ public static class MauiProgram
         builder.Services.AddScoped<DashboardActionService>();
         builder.Services.AddScoped<ISelectedProjectState, SelectedProjectState>();
         builder.Services.AddLwXLabMarkdown();
+#if SOURCEWORKER_PRIVATE_EXTENSIONS
         builder.Services.AddLwXLabAiEngine();
         builder.Services.AddLwOpenAiCompatibleProvider(options =>
         {
             options.Id = "lm-studio-local";
             options.DisplayName = "LM Studio";
-            options.BaseUrl = "http://localhost:1234/v1";
-            options.Model = "gs/qwen3.5-9b";
+            options.BaseUrl = Environment.GetEnvironmentVariable("SOURCEWORKER_AI_BASE_URL") ?? "http://localhost:1234/v1";
+            options.Model = Environment.GetEnvironmentVariable("SOURCEWORKER_AI_MODEL") ?? string.Empty;
             options.IsLocal = true;
         });
         builder.Services.AddLwXLabFileEditor(options =>
@@ -61,6 +64,7 @@ public static class MauiProgram
         });
         builder.Services.AddScoped<ProjectFileEditorContext>();
         builder.Services.AddScoped<ILwFileEditorStorage, SourceWorkerFileEditorStorage>();
+#endif
         builder.Services.AddSingleton<IDesktopLocalApiLifecycleService, DesktopLocalApiLifecycleService>();
         builder.Services.AddSingleton<IDesktopRuntimeStateService>(provider => (DesktopLocalApiLifecycleService)provider.GetRequiredService<IDesktopLocalApiLifecycleService>());
         builder.Services.AddSingleton<IDesktopStartupService, DesktopStartupService>();

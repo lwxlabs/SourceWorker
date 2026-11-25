@@ -1,0 +1,22 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: pwsh -NoProfile -File tools/Restore-PublicDependencies.ps1
+      - run: dotnet restore SourceWorker.Public.slnx --configfile NuGet.Public.config -p:SourceWorkerPrivateExtensions=false
+      - run: dotnet build SourceWorker.Public.slnx -c Release --no-restore -p:SourceWorkerPrivateExtensions=false
+      - run: dotnet test SourceWorker.Public.slnx -c Release --no-build --no-restore -p:SourceWorkerPrivateExtensions=false

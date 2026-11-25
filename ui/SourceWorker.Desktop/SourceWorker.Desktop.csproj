@@ -25,9 +25,9 @@
   <ItemGroup>
     <ProjectReference Include="..\SourceWorker.ApiClient\SourceWorker.ApiClient.csproj" />
     <ProjectReference Include="..\SourceWorker.UI\SourceWorker.UI.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.AI.Engine\LwXLab.AI.Engine.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.Markdown\LwXLab.Markdown.csproj" />
-    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.FileEditor\LwXLab.FileEditor.csproj" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.AI.Engine\LwXLab.AI.Engine.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.Markdown\LwXLab.Markdown.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
+    <ProjectReference Include="..\..\..\..\..\libs\LwXLab.FileEditor\LwXLab.FileEditor.csproj" Condition="'$(SourceWorkerPrivateExtensions)' == 'true'" />
     <ProjectReference Include="..\..\src\libs\SourceWorker.Hosting\SourceWorker.Hosting.csproj" />
   </ItemGroup>
 
